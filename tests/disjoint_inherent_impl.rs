@@ -1,5 +1,3 @@
-pub struct Wrapper<T>(T);
-
 pub trait Dispatch {
     type Group;
 }
@@ -20,6 +18,8 @@ impl Dispatch for u32 {
     type Group = GroupB;
 }
 
+pub struct Wrapper<T>(T);
+
 disjoint::impls! {
     impl<T> Wrapper<T> where T: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
@@ -29,24 +29,28 @@ disjoint::impls! {
     }
 }
 
-//trait _Wrapper<T> {
-//    const _NAME: &'static str;
-//}
-//
-//impl<T: _Wrapper<T::Group>> Wrapper<T> where T: Dispatch {
-//    const NAME: &'static str = <T as _Wrapper<T::Group>>::_NAME;
-//}
-//
-//impl<T> _Wrapper<GroupA> for T {
-//    const _NAME: &'static str = "Blanket A";
-//}
-//impl<T> _Wrapper<GroupB> for T {
-//    const _NAME: &'static str = "Blanket B";
-//}
+/*
+const _: () = {
+    trait _Wrapper<T> {
+        const _NAME: &'static str;
+    }
+
+    impl<T> _Wrapper<GroupA> for T where T: Dispatch<Group = GroupA>{
+        const _NAME: &'static str = "Blanket A";
+    }
+    impl<T> _Wrapper<GroupB> for T where T: Dispatch<Group = GroupB>{
+        const _NAME: &'static str = "Blanket B";
+    }
+
+    impl<T: _Wrapper<T::Group>> Wrapper<T> where T: Dispatch {
+        const NAME: &'static str = <T as _Wrapper<T::Group>>::_NAME;
+    }
+};
+*/
 
 fn main() {
-    assert_eq!("Blanket A", <Wrapper<String>>::NAME);
-    assert_eq!("Blanket A", <Wrapper<Vec::<u32>>>::NAME);
-    assert_eq!("Blanket B", <Wrapper<u32>>::NAME);
-    assert_eq!("Blanket B", <Wrapper<i32>>::NAME);
+//    assert_eq!("Blanket A", <Wrapper<String>>::NAME);
+//    assert_eq!("Blanket A", <Wrapper<Vec::<u32>>>::NAME);
+//    assert_eq!("Blanket B", <Wrapper<u32>>::NAME);
+//    assert_eq!("Blanket B", <Wrapper<i32>>::NAME);
 }

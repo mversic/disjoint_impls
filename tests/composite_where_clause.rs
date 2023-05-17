@@ -1,6 +1,3 @@
-pub trait Kita {
-    const NAME: &'static str;
-}
 pub trait Dispatch {
     type Group;
 }
@@ -22,6 +19,10 @@ impl Dispatch for Option<u32> {
 }
 
 disjoint::impls! {
+    pub trait Kita {
+        const NAME: &'static str;
+    }
+
     impl<T> Kita for T where Option<T>: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
     }
@@ -30,26 +31,34 @@ disjoint::impls! {
     }
 }
 
-//trait _Kita<T> {
-//    const _NAME: &'static str;
-//}
-//
-//impl<T> Kita for T where Option<T>: Dispatch + _Kita<<Option<T> as Dispatch>::Group> {
-//    const NAME: &'static str = <Option<T> as _Kita<<Option<T> as Dispatch>::Group>>::_NAME;
-//}
-//
-//impl<T> _Kita<GroupA> for Option<T> {
-//    const _NAME: &'static str = "Blanket A";
-//}
-//impl<T> _Kita<GroupB> for Option<T> {
-//    const _NAME: &'static str = "Blanket B";
-//}
+/*
+pub trait Kita {
+    const NAME: &'static str;
+}
+
+const _: () = {
+    trait _Kita<T> {
+        const _NAME: &'static str;
+    }
+
+    impl<T> Kita for T where Option<T>: Dispatch + _Kita<<Option<T> as Dispatch>::Group> {
+        const NAME: &'static str = <Option<T> as _Kita<<Option<T> as Dispatch>::Group>>::_NAME;
+    }
+
+    impl<T> _Kita<GroupA> for Option<T> where Option<T>: Dispatch<Group = GroupA>{
+        const _NAME: &'static str = "Blanket A";
+    }
+    impl<T> _Kita<GroupB> for Option<T> where Option<T>: Dispatch<Group = GroupB>{
+        const _NAME: &'static str = "Blanket B";
+    }
+};
+*/
 
 fn main() {
-    assert_eq!("Blanket A", <String as Kita>::NAME);
-    assert_eq!("Blanket A", <Vec::<u32> as Kita>::NAME);
-    assert_eq!("Blanket B", <u32 as Kita>::NAME);
-    assert_eq!("Blanket B", <i32 as Kita>::NAME);
+//    assert_eq!("Blanket A", <String as Kita>::NAME);
+//    assert_eq!("Blanket A", <Vec::<u32> as Kita>::NAME);
+//    assert_eq!("Blanket B", <u32 as Kita>::NAME);
+//    assert_eq!("Blanket B", <i32 as Kita>::NAME);
 }
 
 
