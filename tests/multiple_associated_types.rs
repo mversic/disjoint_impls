@@ -46,7 +46,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T> {
+    trait _Kita<T0, T1> {
         const _NAME: &'static str;
     }
 
@@ -60,15 +60,15 @@ const _: () = {
     impl<T: Dispatch<Group1 = GroupA, Group2 = GroupB>> _Kita<GroupA, GroupB> for T {
         const _NAME: &'static str = "Blanket AB";
     }
-    impl<T: Dispatch<Group1 = GroupB>, F> _Kita<GroupB, F> for T {
+    impl<T: Dispatch<Group1 = GroupB>, T1> _Kita<GroupB, T1> for T {
         const _NAME: &'static str = "Blanket B*";
     }
 };
 */
 
 fn main() {
-//    assert_eq!("Blanket AA", String::NAME);
-//    assert_eq!("Blanket AB", Vec::<u32>::NAME);
-//    assert_eq!("Blanket B*", u32::NAME);
-//    assert_eq!("Blanket B*", i32::NAME);
+    assert_eq!("Blanket AA", String::NAME);
+    assert_eq!("Blanket AB", Vec::<u32>::NAME);
+    assert_eq!("Blanket B*", u32::NAME);
+    assert_eq!("Blanket B*", i32::NAME);
 }

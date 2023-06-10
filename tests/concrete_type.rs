@@ -23,10 +23,10 @@ disjoint::impls! {
         const NAME: &'static str;
     }
 
-    impl<T, U> Kita<U> for T where U: Dispatch<Group = GroupA> {
+    impl<T: Dispatch<Group = GroupA>> Kita<()> for T {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T, U: Dispatch<Group = GroupB>> Kita<U> for T {
+    impl<U, T: Dispatch<Group = GroupB>> Kita<U> for T {
         const NAME: &'static str = "Blanket B";
     }
 }
@@ -41,22 +41,24 @@ const _: () = {
         const _NAME: &'static str;
     }
 
-    impl<T, U> Kita<U> for T where U: Dispatch + _Kita<U, <U as Dispatch>::Group> {
-        const NAME: &'static str = <U as _Kita<U, <U as Dispatch>::Group>>::_NAME;
+    impl<U, T: Dispatch + _Kita<U, T::Group>> Kita<U> for T {
+        const NAME: &'static str = <T as _Kita<U, T::Group>>::_NAME;
     }
 
-    impl<T, U> _Kita<U, GroupA> for T where U: Dispatch<Group = GroupA> {
+    impl<T: Dispatch<Group = GroupA>> _Kita<(), GroupA> for T {
         const _NAME: &'static str = "Blanket A";
     }
-    impl<T, U: Dispatch<Group = GroupB>> _Kita<U, GroupB> for T {
+    impl<U, T: Dispatch<Group = GroupB>> _Kita<U, GroupB> for T {
         const _NAME: &'static str = "Blanket B";
     }
 };
 */
 
 fn main() {
-    assert_eq!("Blanket A", <String as Kita<String>>::NAME);
-    assert_eq!("Blanket B", <Vec::<u32> as Kita<u32>>::NAME);
-    assert_eq!("Blanket B", <u32 as Kita<u32>>::NAME);
-    assert_eq!("Blanket B", <i32 as Kita<u32>>::NAME);
+    assert_eq!("Blanket A", String::NAME);
+    assert_eq!("Blanket A", Vec::<u32>::NAME);
+    assert_eq!("Blanket B", <u32 as Kita<String>>::NAME);
+    assert_eq!("Blanket B", <i32 as Kita<i32>>::NAME);
 }
+
+

@@ -37,7 +37,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T> {
+    trait _Kita<T0> {
         const NAME: &'static str;
     }
 
@@ -51,6 +51,7 @@ const _: () = {
     impl<T: Dispatch<Group = GroupB>> _Kita<GroupB> for T {
         const NAME: &'static str = "Blanket B";
     }
+};
 */
 
 fn main() {

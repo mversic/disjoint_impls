@@ -22,6 +22,7 @@ disjoint::impls! {
     pub trait Kita {
         const NAME: &'static str;
     }
+
     impl<T: Dispatch<Group = GroupA>> Kita for Option<T> {
         const NAME: &'static str = "Blanket A";
     }
@@ -36,7 +37,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T> {
+    trait _Kita<T0> {
         const _NAME: &'static str;
     }
 
@@ -54,8 +55,8 @@ const _: () = {
 */
 
 fn main() {
-//    assert_eq!("Blanket A", Option<String>::NAME);
-//    assert_eq!("Blanket A", Option<Vec::<u32>>::NAME);
-//    assert_eq!("Blanket B", Option<u32>::NAME);
-//    assert_eq!("Blanket B", Option<i32>::NAME);
+    assert_eq!("Blanket A", Option::<String>::NAME);
+    assert_eq!("Blanket A", Option::<Vec::<u32>>::NAME);
+    assert_eq!("Blanket B", Option::<u32>::NAME);
+    assert_eq!("Blanket B", Option::<i32>::NAME);
 }

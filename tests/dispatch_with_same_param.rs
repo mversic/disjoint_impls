@@ -42,15 +42,15 @@ const _: () = {
         const _NAME: &'static str;
     }
 
+    impl<T: Dispatch<()> + _Kita<T::Group>> Kita for T {
+        const NAME: &'static str = <T as _Kita<T::Group>>::_NAME;
+    }
+
     impl<T: Dispatch<(), Group = GroupA>> _Kita<GroupA> for T {
         const _NAME: &'static str = "Blanket A";
     }
     impl<T: Dispatch<(), Group = GroupB>> _Kita<GroupB> for T {
         const _NAME: &'static str = "Blanket B";
-    }
-
-    impl<T: Dispatch<()> + _Kita<T::Group>> Kita for T {
-        const NAME: &'static str = <T as _Kita<T::Group>>::_NAME;
     }
 };
 */

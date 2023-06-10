@@ -37,7 +37,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T> {
+    trait _Kita<T0> {
         const _NAME: &'static str;
     }
 
@@ -55,10 +55,8 @@ const _: () = {
 */
 
 fn main() {
-//    assert_eq!("Blanket A", <String as Kita>::NAME);
-//    assert_eq!("Blanket A", <Vec::<u32> as Kita>::NAME);
-//    assert_eq!("Blanket B", <u32 as Kita>::NAME);
-//    assert_eq!("Blanket B", <i32 as Kita>::NAME);
+    assert_eq!("Blanket A", <String as Kita>::NAME);
+    assert_eq!("Blanket A", <Vec::<u32> as Kita>::NAME);
+    assert_eq!("Blanket B", <u32 as Kita>::NAME);
+    assert_eq!("Blanket B", <i32 as Kita>::NAME);
 }
-
-
