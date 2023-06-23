@@ -29,5 +29,6 @@ disjoint::impls! {
 }
 
 fn main() {
-    unimplemented!("This test must not compile")
+    unimplemented!("This test must not compile");
+    // Look at `TraitBound` type in src/lib.rs
 }

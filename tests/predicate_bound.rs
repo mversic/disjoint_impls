@@ -23,10 +23,10 @@ disjoint::impls! {
         const NAME: &'static str;
     }
 
-    impl<T: Dispatch<Group = GroupA>> Kita for T {
+    impl<T: IntoIterator<Item = U>, U: Dispatch<Group = GroupA>> Kita for T {
         const NAME: &'static str = "Blanket A";
     }
-    impl<U: Dispatch<Group = GroupB>> Kita for U {
+    impl<T: IntoIterator<Item = U>, U: Dispatch<Group = GroupB>> Kita for T {
         const NAME: &'static str = "Blanket B";
     }
 }
@@ -41,11 +41,11 @@ const _: () = {
         const NAME: &'static str;
     }
 
-    impl<_T1: Dispatch + _Kita<_T1::Group>> Kita for _T1 {
-        const NAME: &'static str = <_T1 as _Kita<_T1::Group>>::NAME;
+    impl<U: Dispatch + _Kita<U::Group>> Kita for U {
+        const NAME: &'static str = <U as _Kita<U::Group>>::NAME;
     }
 
-    impl<T: Dispatch<Group = GroupA>> _Kita<GroupA> for T {
+    impl<U: Dispatch<Group = GroupA>> _Kita<GroupA> for U {
         const NAME: &'static str = "Blanket A";
     }
     impl<U: Dispatch<Group = GroupB>> _Kita<GroupB> for U {

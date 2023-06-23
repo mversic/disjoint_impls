@@ -1,55 +1,64 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use proc_macro::TokenStream;
+use proc_macro_error::abort;
 use quote::{format_ident, quote};
-use syn::visit::{
-    visit_assoc_const, visit_assoc_type, visit_const_param, visit_generic_argument, visit_path,
-    visit_trait_bound, visit_type_param, Visit,
-};
-use syn::visit_mut::VisitMut;
+use syn::visit::{visit_trait_bound, visit_type_param, Visit};
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, ItemTrait,
 };
 
-/// A collection of {Option<ItemTrait>, [`syn::ItemImpl`]}.
-/// Trait definition can be absent if dealing with inherent impls.
-#[derive(Debug, PartialEq, Eq)]
-struct ItemImpls(
-    Option<ItemTrait>,
-    /// impls map as in: (self type -> ItemImpl)
-    // TODO: Check that all impls refer to main trait
-    HashMap<syn::Type, Vec<syn::ItemImpl>>,
-);
+/// AST node type of self type such as `u32` in `impl Clone for u32`
+type SelfType = syn::Type;
 
-trait AssocParam {
+/// AST node type of associated (type or const) bound such as:
+///
+/// 1. `Target` in `impl<T: Deref<Target = bool>> for Clone for T`
+/// 2. `ConstParam` in `impl<T: WithAssocConst<ConstParam = true>> for T`
+trait AssocBound {
+    /// AST node type of the associated bound constraint such as:
+    ///
+    /// 1. `bool` in `impl<T: Deref<Target = bool>> for Clone for T`
+    /// 2. `true` in `impl<T: WithAssocConst<ConstParam = true>> for T`
     type Payload;
 }
-impl AssocParam for syn::ConstParam {
+impl AssocBound for syn::ConstParam {
     type Payload = syn::Expr;
 }
-impl AssocParam for syn::TypeParam {
+impl AssocBound for syn::TypeParam {
     type Payload = syn::Type;
 }
 
-/// Position of the parameter in the impl block as used (i.e. not the declaration order)
-///
-/// `impl<V, T, U> Kita<U> for Result<T, V>`
-///            |        0             1  2
-type ParamIdx = usize;
+/// A collection of {Option<ItemTrait>, [`syn::ItemImpl`]}.
+/// Trait definition can be absent if dealing with inherent impls.
+#[derive(Debug, PartialEq, Eq)]
+struct ItemImpls {
+    /// Definition of the main trait
+    trait_: Option<ItemTrait>,
+    /// impls map as in: (self type -> ItemImpl)
+    item_impls: HashMap<SelfType, Vec<syn::ItemImpl>>,
+}
 
+/// Parameter identifier such as `T` in `impl<T> Clone for T`
+type ParamIdent = syn::Ident;
+
+/// AST node type of the trait identifier such as 'Deref<Target = u32>' in `impl<T: Deref<Target = u32>> Clone for T`.
+/// Equality of this type doesn't compare associated bounds. Therefore `Deref<Target = u32>` == `Deref<Target = u64>`.
 #[derive(Clone, Copy)]
-struct TraitIdent<'ast>(&'ast syn::Path);
+struct TraitBound<'ast>(&'ast syn::Path);
 
-type ParamIdent<'ast> = &'ast syn::Ident;
-type AssocParamIdent<'ast> = (ParamIdent<'ast>, TraitIdent<'ast>, &'ast syn::Ident);
-type AssocParamId<'ast> = (ParamIdx, TraitIdent<'ast>, &'ast syn::Ident);
+/// Unique name based identifier of the associated type bound such as:
+///
+/// 1. `(T, Deref, Deref::Target)` in `impl<T: Deref<Target = bool>> for Clone for T`
+/// 2. `(T, WitAssocConst, ConstBound)` in `impl<T: WithAssocConst<ConstBound = true>> for T`
+type AssocBoundIdent<'ast> = (&'ast ParamIdent, TraitBound<'ast>, &'ast syn::Ident);
 
 // TODO: Is this needed? how to support GATs? make a test
 //&'ast Option<syn::AngleBracketedGenericArguments>,
-type AssocParamPayload<'ast, T> = &'ast <T as AssocParam>::Payload;
+type AssocBoundPayload<T> = <T as AssocBound>::Payload;
 
-impl PartialEq for TraitIdent<'_> {
+impl PartialEq for TraitBound<'_> {
     fn eq(&self, other: &Self) -> bool {
         if self.0.leading_colon != other.0.leading_colon {
             return false;
@@ -61,11 +70,26 @@ impl PartialEq for TraitIdent<'_> {
         let first_elem = first_iter.next().unwrap();
         let second_elem = second_iter.next().unwrap();
 
-        first_elem.ident == second_elem.ident && first_iter.eq(second_iter)
+        if first_elem.ident != second_elem.ident || !first_iter.eq(second_iter) {
+            return false;
+        }
+
+        // TODO: Also compare non associated bounds
+        //match (first_elem.arguments, second_elem.arguments) {
+        //    (syn::PathArguments::AngleBracketed(first_args), syn::PathArguments::AngleBracketed(second_args)) => {
+        //        if first_args.colon2_token != second_args.colon2_token {
+        //            return false;
+        //        }
+
+        //        first_args.args
+        //    }
+        //    _ => false
+        //}
+        true
     }
 }
-impl Eq for TraitIdent<'_> {}
-impl core::hash::Hash for TraitIdent<'_> {
+impl Eq for TraitBound<'_> {}
+impl core::hash::Hash for TraitBound<'_> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.0.leading_colon.hash(state);
 
@@ -74,212 +98,160 @@ impl core::hash::Hash for TraitIdent<'_> {
 
         first_elem.ident.hash(state);
         iter.for_each(|elem| elem.hash(state));
+        // TODO: Apply the same TODO suggestion as in eq
     }
 }
 
 struct AssocBounds<'ast> {
-    /// Globally unique set of type param idents in the order as they occur in the impls
-    type_param_idents: Vec<AssocParamId<'ast>>,
-    /// Globally unique set of const param idents in the order as they occur in the impls
-    const_param_idents: Vec<AssocParamId<'ast>>,
+    /// Ordered set of associated bound idents
+    type_param_idents: Vec<AssocBoundIdent<'ast>>,
+    /// Ordered set of associated bound idents
+    const_param_idents: Vec<AssocBoundIdent<'ast>>,
 
     /// Assoc types params for every implementation
-    type_params: Vec<HashMap<AssocParamId<'ast>, AssocParamPayload<'ast, syn::TypeParam>>>,
+    type_params: Vec<HashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload<syn::TypeParam>>>,
     /// Assoc const params for every implementation
-    const_params: Vec<HashMap<AssocParamId<'ast>, AssocParamPayload<'ast, syn::ConstParam>>>,
+    const_params: Vec<HashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload<syn::ConstParam>>>,
 }
 
 impl<'ast> AssocBounds<'ast> {
     fn find(impls: &'ast [syn::ItemImpl]) -> Self {
-        let mut all_param_idents = HashSet::new();
-
-        let mut type_param_idents = Vec::new();
-        let mut const_param_idents = Vec::new();
         let mut type_params = Vec::new();
         let mut const_params = Vec::new();
 
+        let mut type_param_idents = Vec::new();
+        let mut const_param_idents = Vec::new();
+
         for impl_ in impls {
-            let mut visitor = AssocIdentVisitor::new();
-            visitor.visit_item_impl(&impl_);
+            let mut visitor = AssocBoundsVisitor::new();
+            visitor.visit_generics(&impl_.generics);
 
-            for (&type_param_ident, _) in &visitor.idx_type_params {
-                if all_param_idents.insert(type_param_ident) {
-                    type_param_idents.push(type_param_ident);
-                }
-            }
-            for (&const_param_ident, _) in &visitor.idx_const_params {
-                if all_param_idents.insert(const_param_ident) {
-                    const_param_idents.push(const_param_ident);
-                }
-            }
+            type_params.push(visitor.type_params);
+            const_params.push(visitor.const_params);
 
-            type_params.push(visitor.idx_type_params);
-            const_params.push(visitor.idx_const_params);
+            // NOTE: All impls have the same param sets
+            type_param_idents = visitor.type_param_idents;
+            const_param_idents = visitor.const_param_idents;
         }
 
         AssocBounds {
             type_param_idents,
             const_param_idents,
+
             type_params,
             const_params,
         }
     }
 }
 
-struct AssocIdentVisitor<'ast> {
-    visiting_generics: bool,
+struct AssocBoundsVisitor<'ast> {
+    /// Type parameter identifier currently being visited
+    curr_type_param: Option<&'ast syn::Ident>,
+    /// Trait bound currently being visited
+    curr_trait_bound: Option<TraitBound<'ast>>,
 
-    local_type_param_idents: HashSet<AssocParamIdent<'ast>>,
-    local_const_param_idents: HashSet<AssocParamIdent<'ast>>,
+    /// Collection of all associated type param bounds
+    type_params: HashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload<syn::TypeParam>>,
+    /// Collection of all associated const param bounds
+    const_params: HashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload<syn::ConstParam>>,
 
-    current_param_idx: usize,
-    current_type_param_ident: Option<&'ast syn::Ident>,
-    current_trait_bound: Option<TraitIdent<'ast>>,
-
-    ident_type_params: HashMap<
-        ParamIdent<'ast>,
-        (
-            TraitIdent<'ast>,
-            &'ast syn::Ident,
-            AssocParamPayload<'ast, syn::TypeParam>,
-        ),
-    >,
-    ident_const_params: HashMap<
-        ParamIdent<'ast>,
-        (
-            TraitIdent<'ast>,
-            &'ast syn::Ident,
-            AssocParamPayload<'ast, syn::ConstParam>,
-        ),
-    >,
-
-    idx_type_params: HashMap<AssocParamId<'ast>, AssocParamPayload<'ast, syn::TypeParam>>,
-    idx_const_params: HashMap<AssocParamId<'ast>, AssocParamPayload<'ast, syn::ConstParam>>,
+    /// Ordered set of associated bound idents
+    type_param_idents: Vec<AssocBoundIdent<'ast>>,
+    /// Ordered set of associated bound idents
+    const_param_idents: Vec<AssocBoundIdent<'ast>>,
 }
 
-impl<'ast> AssocIdentVisitor<'ast> {
+impl<'ast> AssocBoundsVisitor<'ast> {
     fn new() -> Self {
         Self {
-            visiting_generics: false,
+            curr_type_param: None,
+            curr_trait_bound: None,
 
-            local_type_param_idents: HashSet::new(),
-            local_const_param_idents: HashSet::new(),
+            type_params: HashMap::new(),
+            const_params: HashMap::new(),
 
-            current_param_idx: 0,
-            current_trait_bound: None,
-            current_type_param_ident: None,
-
-            ident_type_params: HashMap::new(),
-            ident_const_params: HashMap::new(),
-
-            idx_type_params: HashMap::new(),
-            idx_const_params: HashMap::new(),
+            type_param_idents: Vec::new(),
+            const_param_idents: Vec::new(),
         }
     }
 
-    fn make_assoc_param_ident(&self, assoc_param_name: &'ast syn::Ident) -> AssocParamIdent<'ast> {
+    fn make_assoc_param_ident(&self, assoc_param_name: &'ast syn::Ident) -> AssocBoundIdent<'ast> {
         (
-            self.current_type_param_ident.unwrap(),
-            self.current_trait_bound.unwrap(),
+            self.curr_type_param.unwrap(),
+            self.curr_trait_bound.unwrap(),
             assoc_param_name,
         )
     }
-
-    fn make_assoc_param_id(
-        &mut self,
-        trait_ident: TraitIdent<'ast>,
-        assoc_param_name: &'ast syn::Ident,
-    ) -> AssocParamId<'ast> {
-        let id = (self.current_param_idx, trait_ident, assoc_param_name);
-        self.current_param_idx += 1;
-        id
-    }
 }
 
-impl<'ast> Visit<'ast> for AssocIdentVisitor<'ast> {
+impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
     fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
-        for it in &node.attrs {
-            self.visit_attribute(it);
-        }
-
-        self.visiting_generics = true;
         self.visit_generics(&node.generics);
-        self.visiting_generics = false;
-
-        if let Some(it) = &node.trait_ {
-            self.visit_path(&(it).1);
-        }
-        self.visit_type(&*node.self_ty);
-        //for it in &node.items {
-        //    self.visit_impl_item(it);
-        //}
     }
 
     fn visit_type_param(&mut self, node: &'ast syn::TypeParam) {
-        self.current_type_param_ident = Some(&node.ident);
+        self.curr_type_param = Some(&node.ident);
         visit_type_param(self, node);
     }
 
     fn visit_trait_bound(&mut self, node: &'ast syn::TraitBound) {
-        self.current_trait_bound = Some(TraitIdent(&node.path));
+        self.curr_trait_bound = Some(TraitBound(&node.path));
         visit_trait_bound(self, node);
     }
 
     fn visit_assoc_type(&mut self, node: &'ast syn::AssocType) {
-        let assoc_param_ident = self.make_assoc_param_ident(&node.ident);
-
-        if self.local_type_param_idents.insert(assoc_param_ident) {
-            self.ident_type_params.insert(
-                self.current_type_param_ident.unwrap(),
-                (self.current_trait_bound.unwrap(), &node.ident, &node.ty),
-            );
-        }
+        let assoc_bound_ident = self.make_assoc_param_ident(&node.ident);
+        self.type_params.insert(assoc_bound_ident, &node.ty);
+        self.type_param_idents.push(assoc_bound_ident);
     }
 
     fn visit_assoc_const(&mut self, node: &'ast syn::AssocConst) {
-        let assoc_param_ident = self.make_assoc_param_ident(&node.ident);
-
-        if self.local_const_param_idents.insert(assoc_param_ident) {
-            self.ident_const_params.insert(
-                self.current_type_param_ident.unwrap(),
-                (self.current_trait_bound.unwrap(), &node.ident, &node.value),
-            );
-        }
-    }
-
-    fn visit_path(&mut self, node: &'ast syn::Path) {
-        if self.visiting_generics {
-            visit_path(self, node);
-        } else if let Some(param_ident) = node.get_ident() {
-            if let Some(&(trait_ident, assoc_param_name, type_param_payload)) =
-                self.ident_type_params.get(param_ident)
-            {
-                let param_id = self.make_assoc_param_id(trait_ident, assoc_param_name);
-                self.idx_type_params.insert(param_id, type_param_payload);
-            }
-            if let Some(&(trait_ident, assoc_param_name, const_param_payload)) =
-                self.ident_const_params.get(param_ident)
-            {
-                let param_id = self.make_assoc_param_id(trait_ident, assoc_param_name);
-                self.idx_const_params.insert(param_id, const_param_payload);
-            }
-        }
+        let assoc_bound_ident = self.make_assoc_param_ident(&node.ident);
+        self.const_params.insert(assoc_bound_ident, &node.value);
+        self.const_param_idents.push(assoc_bound_ident);
     }
 }
 
 impl Parse for ItemImpls {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
         let trait_ = input.parse::<ItemTrait>().ok();
-        let mut disjoint_impls = HashMap::new();
+        let mut item_impls = HashMap::new();
 
-        while let Ok(item) = input.parse::<syn::ItemImpl>() {
-            disjoint_impls
+        // TODO: What if parsing fails? Will this happily continue?
+        let trait_ident = trait_.as_ref().map(|trait_| &trait_.ident);
+        let mut prev_trait = None;
+        while let Ok(mut item) = input.parse::<syn::ItemImpl>() {
+            param::resolve_non_predicate_param_idents_for_item(&mut item);
+            // TODO: Resolve predicate param idents
+
+            // TODO: check that all have unsafe default and the same set of attributes
+            // TODO: Improve this trait checking. We have to make sure that all traits
+            // have the same signature which is consistent with trait definition
+            // Maybe we don't have to check they are consistent
+            let kita = item.trait_.as_ref().map(|trait_| &trait_.1);
+            if let Some(prev_trait) = &prev_trait {
+                if Some(prev_trait) != kita {
+                    abort!(kita, "Differing traits");
+                }
+            } else {
+                prev_trait = kita.cloned();
+            }
+
+            let item_trait_ident = kita
+                .and_then(|trait_| trait_.segments.last())
+                .map(|seg| &seg.ident);
+
+            if trait_ident != item_trait_ident {
+                abort!(item_trait_ident, "Doesn't match trait definition");
+            }
+
+            item_impls
                 .entry((*item.self_ty).clone())
                 .or_insert_with(Vec::new)
                 .push(item.into());
         }
 
-        Ok(ItemImpls(trait_, disjoint_impls))
+        Ok(ItemImpls { trait_, item_impls })
     }
 }
 
@@ -288,14 +260,12 @@ pub fn impls(input: TokenStream) -> TokenStream {
     let impls: ItemImpls = parse_macro_input!(input);
 
     let mut helper_traits = Vec::new();
-    //let mut main_trait_impls = Vec::new();
-    let mut disjoint_impls = Vec::new();
+    let mut item_impls = Vec::new();
 
-    let main_trait = impls.0;
-    for (_, per_self_ty_impls) in impls.1 {
+    let main_trait = impls.trait_;
+    for (_, per_self_ty_impls) in impls.item_impls {
         helper_traits.push(gen_helper_trait(&main_trait, &per_self_ty_impls));
-        //main_trait_impls.push(gen_main_trait_impls(&per_self_ty_impls));
-        disjoint_impls.extend(gen_disjoint_impls(per_self_ty_impls));
+        item_impls.extend(gen_disjoint_impls(per_self_ty_impls));
     }
 
     let k = quote! {
@@ -303,8 +273,7 @@ pub fn impls(input: TokenStream) -> TokenStream {
 
         const _: () = {
             #( #helper_traits )*
-            //#( #main_trait_impls )*
-            #( #disjoint_impls )*
+            #( #item_impls )*
         };
     };
 
@@ -312,32 +281,12 @@ pub fn impls(input: TokenStream) -> TokenStream {
     k.into()
 }
 
-//fn gen_main_trait_impls(impls: &[syn::ItemImpl]) -> TokenStream {
-//    let AssocBounds {
-//        type_params,
-//        const_params,
-//        type_param_idents,
-//        const_param_idents,
-//    } = AssocBounds::find(&impls);
-//
-//    let items = impls[0].items.iter().map(|item| match item {
-//        let mut impl_item_resolver = MainTraitImplItemResolver(k);
-//        impl_item_resolver.visit_impl_item(item);
-//        item
-//    });
-//
-//    quote! {
-//        impl X for #self_ty {
-//            #(#items)*
-//        }
-//    }
-//}
-
 // TODO: Make a macro to dedup this?
 fn gen_disjoint_impls(mut impls: Vec<syn::ItemImpl>) -> Vec<syn::ItemImpl> {
     let AssocBounds {
         type_params,
         const_params,
+
         type_param_idents,
         const_param_idents,
     } = AssocBounds::find(&impls);
@@ -439,40 +388,35 @@ fn gen_disjoint_impls(mut impls: Vec<syn::ItemImpl>) -> Vec<syn::ItemImpl> {
     impls
 }
 
-fn gen_helper_trait(main_trait: &Option<ItemTrait>, impls: &[syn::ItemImpl]) -> ItemTrait {
+fn gen_helper_trait(main_trait: &Option<ItemTrait>, impls: &[syn::ItemImpl]) -> Option<ItemTrait> {
     let (assoc_type_param_count, assoc_const_param_count) = count_assoc_in_bounds(impls);
 
-    let helper_trait = main_trait.clone().map_or_else(
-        || {
-            syn::parse_quote! {}
-        },
-        |mut helper_trait| {
-            helper_trait.ident = gen_helper_trait_ident(&helper_trait.ident);
+    let Some(mut helper_trait) = main_trait.clone() else {
+        return None;
+    };
 
-            for i in 0..assoc_type_param_count {
-                let type_param_ident = format_ident!("_T{i}");
+    helper_trait.ident = gen_helper_trait_ident(&helper_trait.ident);
 
-                helper_trait
-                    .generics
-                    .params
-                    .push(syn::parse_quote!(#type_param_ident));
-            }
-            // TODO: Do I have to watch the order so that const params are last?
-            for _ in 0..assoc_const_param_count {
-                unimplemented!("Const generics not yet supported")
-                //let const_param_ident = format_ident!("_C{i}");
-                //let const_param_ty = const_param.ty;
-                //helper_trait
-                //    .generics
-                //    .params
-                //    .push(syn::parse_quote!(const #const_param_ident: #const_param_ty));
-            }
+    for i in 0..assoc_type_param_count {
+        let type_param_ident = format_ident!("_T{i}");
 
-            helper_trait
-        },
-    );
+        helper_trait
+            .generics
+            .params
+            .push(syn::parse_quote!(#type_param_ident));
+    }
+    // TODO: Do I have to watch the order so that const params are last?
+    for _ in 0..assoc_const_param_count {
+        unimplemented!("Const generics not yet supported")
+        //let const_param_ident = format_ident!("_C{i}");
+        //let const_param_ty = const_param.ty;
+        //helper_trait
+        //    .generics
+        //    .params
+        //    .push(syn::parse_quote!(const #const_param_ident: #const_param_ty));
+    }
 
-    helper_trait
+    Some(helper_trait)
 }
 
 fn count_assoc_in_bounds(impls: &[syn::ItemImpl]) -> (usize, usize) {
@@ -484,24 +428,150 @@ fn count_assoc_in_bounds(impls: &[syn::ItemImpl]) -> (usize, usize) {
     )
 }
 
-//struct MainTraitImplItemResolver<'a>(&'a syn::Ident, &'a syn::Type);
-//impl VisitMut for MainTraitImplItemResolver<'_> {
-//    fn visit_impl_item_macro_mut(&mut self, _node: &mut syn::ImplItemMacro) {
-//        unimplemented!()
-//    }
-//    fn visit_impl_item_mut(&mut self, node: &mut syn::ImplItem) {
-//    }
-//    fn visit_impl_item_const_mut(&mut self, node: &mut syn::ImplItemConst) {
-//        let self_ty = self.1;
-//        let associated_const_ident = node.ident;
-//        let helper_trait_ident = gen_helper_trait_ident(self.0);
-//
-//        node.expr = syn::parse_quote! {
-//            <#self_ty as #helper_trait_ident<#self_ty::Group>>::#associated_const_ident
-//        };
-//    }
-//}
-
 fn gen_helper_trait_ident(ident: &syn::Ident) -> syn::Ident {
     format_ident!("_{}", &ident)
+}
+
+mod param {
+    use std::collections::HashMap;
+
+    use quote::format_ident;
+    use syn::{
+        visit::Visit,
+        visit_mut::{visit_path_mut, visit_type_param_mut, VisitMut},
+    };
+
+    /// Replaces all parameter identifiers with a position based identifier. This makes easier
+    /// to compare type params across different impls.
+    ///
+    /// For:
+    ///     `impl<U, T: IntoIterator<Item = V>, V> Trait<T> for U`
+    /// resolved impl signature would be:
+    ///     `impl<_T1, _T0: IntoIterator<Item = V>, V> Trait<_T0> for _T1`
+    pub fn resolve_non_predicate_param_idents_for_item(item: &mut syn::ItemImpl) {
+        let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(item);
+        non_predicate_param_indexer.visit_item_impl(&item);
+
+        NonPredicateParamResolver(
+            non_predicate_param_indexer
+                .type_params
+                .into_iter()
+                .filter_map(|(param_ident, idx)| idx.map(|idx| (param_ident.clone(), idx)))
+                .collect(),
+        )
+        .visit_item_impl_mut(item);
+    }
+
+    struct NonPredicateParamResolver(HashMap<syn::Ident, usize>);
+    impl VisitMut for NonPredicateParamResolver {
+        fn visit_type_param_mut(&mut self, node: &mut syn::TypeParam) {
+            if let Some(&idx) = self.0.get(&node.ident) {
+                node.ident = gen_indexed_param_name(idx);
+            }
+
+            visit_type_param_mut(self, node);
+        }
+        fn visit_path_mut(&mut self, node: &mut syn::Path) {
+            if let Some(first_segment) = node.segments.first_mut() {
+                if let Some(&idx) = self.0.get(&first_segment.ident) {
+                    first_segment.ident = gen_indexed_param_name(idx);
+                }
+            }
+
+            visit_path_mut(self, node);
+        }
+    }
+
+    fn gen_indexed_param_name(idx: usize) -> syn::Ident {
+        format_ident!("_T{idx}")
+    }
+
+    /// Indexer for params used in impl trait and self type, but not predicates. This indexer
+    /// finds indices of params used only in impl trait and self type.
+    ///
+    /// For `impl<U, T: IntoIterator<Item = V>, V> Trait<T> for U` resolved indices would be:
+    /// `T` = 0,
+    /// `U` = 1,
+    /// `V` = unknown at this stage
+    struct NonPredicateParamIndexer<'ast> {
+        type_params: HashMap<&'ast syn::Ident, Option<usize>>,
+        curr_pos_idx: usize,
+    }
+    impl<'ast> NonPredicateParamIndexer<'ast> {
+        fn new(item: &'ast syn::ItemImpl) -> Self {
+            let type_params = item
+                .generics
+                .type_params()
+                .map(|param| (&param.ident, None))
+                .collect();
+
+            Self {
+                type_params,
+                curr_pos_idx: 0,
+            }
+        }
+    }
+    impl<'ast> Visit<'ast> for NonPredicateParamIndexer<'ast> {
+        fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+            if let Some((_, trait_, _)) = &node.trait_ {
+                self.visit_path(trait_);
+            }
+            self.visit_type(&*node.self_ty);
+        }
+
+        fn visit_path(&mut self, node: &'ast syn::Path) {
+            if let Some(first_segment) = node.segments.first() {
+                self.type_params
+                    .entry(&first_segment.ident)
+                    .and_modify(|param_idx| {
+                        if param_idx.is_none() {
+                            // Param encountered for the first time
+                            *param_idx = Some(self.curr_pos_idx);
+
+                            if let Some(curr_pos_idx) = self.curr_pos_idx.checked_add(1) {
+                                self.curr_pos_idx = curr_pos_idx;
+                            }
+                        }
+                    });
+            }
+
+            //visit_path(self, node);
+        }
+    }
+    //struct PredicateIndexer<'ast> {
+    //    type_params: HashMap<&'ast syn::Ident, Option<usize>>,
+    //    curr_pos_idx: usize,
+    //}
+    //impl<'ast> PredicateIndexer<'ast> {
+    //    fn new(type_params: HashMap<&'ast syn::Ident, Option<usize>>) -> Self {
+    //        let curr_pos_idx: usize = type_params
+    //            .values()
+    //            .filter_map(|x| *x)
+    //            .reduce(|acc, x| x.max(acc))
+    //            .unwrap_or(0);
+    //
+    //        Self {
+    //            type_params,
+    //            curr_pos_idx,
+    //        }
+    //    }
+    //}
+    //impl<'ast> Visit<'ast> for PredicateIndexer<'ast> {
+    //    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+    //        self.visit_generics(&node.generics);
+    //    }
+    //
+    //    fn visit_path_segment(&mut self, node: &'ast syn::PathSegment) {
+    //        self.type_params.entry(&node.ident).and_modify(|param_idx| {
+    //            if param_idx.is_none() {
+    //                // Param encountered for the first time
+    //                *param_idx = Some(self.curr_pos_idx);
+    //            }
+    //        });
+    //
+    //        if let Some(curr_pos_idx) = self.curr_pos_idx.checked_add(1) {
+    //            self.curr_pos_idx = curr_pos_idx;
+    //        }
+    //    }
+    //}
 }
