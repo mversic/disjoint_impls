@@ -41,15 +41,15 @@ const _: () = {
         const NAME: &'static str;
     }
 
-    impl<U: Dispatch + _Kita<U::Group>> Kita for U {
-        const NAME: &'static str = <U as _Kita<U::Group>>::NAME;
-    }
-
-    impl<U: Dispatch<Group = GroupA>> _Kita<GroupA> for U {
+    impl<T0: Dispatch<Group = GroupA>> _Kita<GroupA> for T0 {
         const NAME: &'static str = "Blanket A";
     }
-    impl<U: Dispatch<Group = GroupB>> _Kita<GroupB> for U {
+    impl<T0: Dispatch<Group = GroupB>> _Kita<GroupB> for T0 {
         const NAME: &'static str = "Blanket B";
+    }
+
+    impl<T0: Dispatch> Kita for T0 where Self: _Kita<<T0 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group>>::NAME;
     }
 };
 */

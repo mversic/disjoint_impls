@@ -32,24 +32,24 @@ disjoint::impls! {
 }
 
 /*
-pub trait Kita<U> {
+pub trait Kita<T0> {
     const NAME: &'static str;
 }
 
 const _: () = {
-    trait _Kita<U, T0> {
+    trait _Kita<T0, T1> {
         const _NAME: &'static str;
     }
 
-    impl<U, T: Dispatch + _Kita<U, T::Group>> Kita<U> for T {
-        const NAME: &'static str = <T as _Kita<U, T::Group>>::_NAME;
-    }
-
-    impl<U, T: Dispatch<Group = GroupA>> _Kita<U, GroupA> for T {
+    impl<T0, T1: Dispatch<Group = GroupA>> _Kita<T0, GroupA> for T1 {
         const _NAME: &'static str = "Blanket A";
     }
-    impl<U, T: Dispatch<Group = GroupB>> _Kita<U, GroupB> for T {
+    impl<T0, T1: Dispatch<Group = GroupB>> _Kita<T0, GroupB> for T1 {
         const _NAME: &'static str = "Blanket B";
+    }
+
+    impl<T0, T1: Dispatch> Kita<T0> for T1 where Self: _Kita<T0, <T1 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<T0, <T1 as Dispatch>::Group>>::_NAME;
     }
 };
 */

@@ -18,6 +18,7 @@ impl Dispatch for u32 {
     type Group = GroupB;
 }
 
+// NOTE: This is the same as multiple_associated_types test
 disjoint::impls! {
     pub trait Kita<U> {
         const NAME: &'static str;
@@ -32,24 +33,24 @@ disjoint::impls! {
 }
 
 /*
-pub trait Kita<U> {
+pub trait Kita<T0> {
     const NAME: &'static str;
 }
 
 const _: () = {
-    trait _Kita<U, T0> {
+    trait _Kita<T0, T1> {
         const _NAME: &'static str;
     }
 
-    impl<U, T: Dispatch + _Kita<U, T::Group>> Kita<U> for T {
-        const NAME: &'static str = <T as _Kita<U, T::Group>>::_NAME;
-    }
-
-    impl<T: Dispatch<Group = GroupA>> _Kita<(), GroupA> for T {
+    impl<T1: Dispatch<Group = GroupA>> _Kita<(), GroupA> for T1 {
         const _NAME: &'static str = "Blanket A";
     }
-    impl<U, T: Dispatch<Group = GroupB>> _Kita<U, GroupB> for T {
+    impl<T0, T1: Dispatch<Group = GroupB>> _Kita<T0, GroupB> for T1 {
         const _NAME: &'static str = "Blanket B";
+    }
+
+    impl<T0, T1: Dispatch> Kita<T0> for T1 where Self: _Kita<T0, <T1 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<T0, <T1 as Dispatch>::Group>>::_NAME;
     }
 };
 */
@@ -60,5 +61,3 @@ fn main() {
     assert_eq!("Blanket B", <u32 as Kita<String>>::NAME);
     assert_eq!("Blanket B", <i32 as Kita<i32>>::NAME);
 }
-
-

@@ -32,24 +32,25 @@ disjoint::impls! {
 }
 
 /*
-pub trait Kita<U> {
+pub trait Kita<T0> {
     const NAME: &'static str;
 }
 
+// TODO: T1 can be removed because it doesn't have any associated bound
 const _: () = {
-    trait _Kita<U, T0> {
+    trait _Kita<T0, T1> {
         const _NAME: &'static str;
     }
 
-    impl<T, U> Kita<U> for T where U: Dispatch + _Kita<U, <U as Dispatch>::Group> {
-        const NAME: &'static str = <U as _Kita<U, <U as Dispatch>::Group>>::_NAME;
-    }
-
-    impl<T, U> _Kita<U, GroupA> for T where U: Dispatch<Group = GroupA> {
+    impl<T1> _Kita<GroupA, T1> for T1 {
         const _NAME: &'static str = "Blanket A";
     }
-    impl<T, U: Dispatch<Group = GroupB>> _Kita<U, GroupB> for T {
+    impl<T1> _Kita<GroupB, T1> for T1 {
         const _NAME: &'static str = "Blanket B";
+    }
+
+    impl<T1, T0> Kita<T0> for T1 where T0: Dispatch, Self: _Kita<<T0 as Dispatch>::Group, T1> {
+        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group, T1>>::_NAME;
     }
 };
 */

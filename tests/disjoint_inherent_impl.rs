@@ -35,16 +35,16 @@ const _: () = {
         const _NAME: &'static str;
     }
 
-    impl<T: _Wrapper<T::Group>> Wrapper<T> where T: Dispatch {
-        const NAME: &'static str = <T as _Wrapper<T::Group>>::_NAME;
-    }
-    impl<T> _Wrapper<GroupA> for T where T: Dispatch<Group = GroupA>{
+    impl<T0> _Wrapper<GroupA> for Wrapper<T0> where T0: Dispatch<Group = GroupA>{
         const _NAME: &'static str = "Blanket A";
     }
-    impl<T> _Wrapper<GroupB> for T where T: Dispatch<Group = GroupB>{
+    impl<T0> _Wrapper<GroupB> for Wrapper<T0> where T0: Dispatch<Group = GroupB>{
         const _NAME: &'static str = "Blanket B";
     }
 
+    impl<T0> Wrapper<T0> where T0: Dispatch, Self: _Wrapper<<T0 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Wrapper<<T0 as Dispatch>::Group>>::_NAME;
+    }
 };
 */
 

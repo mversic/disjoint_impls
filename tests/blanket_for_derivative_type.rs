@@ -18,19 +18,20 @@ impl Dispatch for u32 {
     type Group = GroupB;
 }
 
-//disjoint::impls! {
-//    pub trait Kita {
-//        const NAME: &'static str;
-//    }
-//
-//    impl<T: Dispatch<Group = GroupA>> Kita for Option<T> {
-//        const NAME: &'static str = "Blanket A";
-//    }
-//    impl<T: Dispatch<Group = GroupB>> Kita for Option<T> {
-//        const NAME: &'static str = "Blanket B";
-//    }
-//}
+disjoint::impls! {
+    pub trait Kita {
+        const NAME: &'static str;
+    }
 
+    impl<T: Dispatch<Group = GroupA>> Kita for Option<T> {
+        const NAME: &'static str = "Blanket A";
+    }
+    impl<T: Dispatch<Group = GroupB>> Kita for Option<T> {
+        const NAME: &'static str = "Blanket B";
+    }
+}
+
+/*
 pub trait Kita {
     const NAME: &'static str;
 }
@@ -40,17 +41,18 @@ const _: () = {
         const _NAME: &'static str;
     }
 
-    impl<T: Dispatch + _Kita<Option<T>::Group>> Kita for Option<T> {
-        const NAME: &'static str = <Option<T> as _Kita<T::Group>>::_NAME;
-    }
-
-    impl<T: Dispatch<Group = GroupA>> _Kita<GroupA> for Option<T> {
+    impl<T0: Dispatch<Group = GroupA>> _Kita<GroupA> for Option<T0> {
         const _NAME: &'static str = "Blanket A";
     }
-    impl<T: Dispatch<Group = GroupB>> _Kita<GroupB> for Option<T> {
+    impl<T0: Dispatch<Group = GroupB>> _Kita<GroupB> for Option<T0> {
         const _NAME: &'static str = "Blanket B";
     }
+
+    impl<T0: Dispatch> Kita for Option<T0> where Self: _Kita<<T0 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group>>::_NAME;
+    }
 };
+*/
 
 fn main() {
     assert_eq!("Blanket A", Option::<String>::NAME);

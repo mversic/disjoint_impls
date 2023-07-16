@@ -1,11 +1,12 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
+use std::hash::Hash;
 
 use param::ParamResolver;
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote};
+use rustc_hash::FxHashMap;
 use syn::visit::{visit_trait_bound, visit_type_param, Visit};
-use syn::visit_mut::VisitMut;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, ItemTrait,
@@ -21,7 +22,7 @@ struct ItemImpls {
     /// Definition of the main trait
     trait_: Option<ItemTrait>,
     /// impls map as in: (self type -> ItemImpl)
-    item_impls: HashMap<SelfType, Vec<syn::ItemImpl>>,
+    item_impls: FxHashMap<SelfType, Vec<syn::ItemImpl>>,
 }
 
 /// Parameter identifier such as `T` in `impl<T> Clone for T`
@@ -30,7 +31,7 @@ type ParamIdent = syn::Ident;
 /// AST node type of the trait identifier such as 'Deref<Target = u32>' in `impl<T: Deref<Target = u32>> Clone for T`.
 /// Equality of this type doesn't compare associated bounds. Therefore `Deref<Target = u32>` == `Deref<Target = u64>`.
 #[derive(Debug, Clone, Copy)]
-struct TraitBound<'ast>(&'ast syn::Path);
+struct TraitBound<'ast>(pub &'ast syn::Path);
 
 /// Unique name based identifier of the associated type bound such as:
 ///     `(T, Deref, Deref::Target)` in `impl<T: Deref<Target = bool>> for Clone for T`
@@ -38,7 +39,7 @@ type AssocBoundIdent<'ast> = (&'ast ParamIdent, TraitBound<'ast>, &'ast syn::Ide
 
 /// AST node type of the associated bound constraint such as:
 ///     `bool` in `impl<T: Deref<Target = bool>> for Clone for T`
-// TODO: Is this needed? how to support GATs? make a test
+// TODO: how to support GATs? make a test
 type AssocBoundPayload = syn::Type;
 
 impl PartialEq for TraitBound<'_> {
@@ -66,22 +67,27 @@ impl PartialEq for TraitBound<'_> {
                     return false;
                 }
 
-                if first_args.args.len() != second_args.args.len() {
+                let first_args = first_args
+                    .args
+                    .iter()
+                    .filter(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
+                    .collect::<Vec<_>>();
+                let second_args = second_args
+                    .args
+                    .iter()
+                    .filter(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
+                    .collect::<Vec<_>>();
+
+                if first_args.len() != second_args.len() {
                     return false;
                 }
 
                 first_args
-                    .args
                     .iter()
-                    .zip(&second_args.args)
+                    .zip(&second_args)
                     .all(|zipped_args| match zipped_args {
-                        (
-                            syn::GenericArgument::AssocType(first_assoc),
-                            syn::GenericArgument::AssocType(second_assoc),
-                        ) => {
-                            first_assoc.ident == second_assoc.ident
-                                && first_assoc.generics == second_assoc.generics
-                        }
+                        (syn::GenericArgument::AssocType(_), _)
+                        | (_, syn::GenericArgument::AssocType(_)) => unreachable!(),
                         _ => zipped_args.0 == zipped_args.1,
                     })
             }
@@ -91,70 +97,6 @@ impl PartialEq for TraitBound<'_> {
 }
 
 impl Eq for TraitBound<'_> {}
-impl PartialOrd for TraitBound<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for TraitBound<'_> {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        match (self.0.leading_colon, other.0.leading_colon) {
-            (Some(_), None) => return core::cmp::Ordering::Greater,
-            (None, Some(_)) => return core::cmp::Ordering::Less,
-            (Some(_), Some(_)) | (None, None) => {}
-        }
-
-        let mut first_iter = self.0.segments.iter().rev();
-        let mut second_iter = other.0.segments.iter().rev();
-
-        let first_elem = first_iter.next().unwrap();
-        let second_elem = second_iter.next().unwrap();
-
-        let res = first_iter
-            .rev()
-            .map(|seg| &seg.ident)
-            .cmp(second_iter.rev().map(|seg| &seg.ident));
-
-        if res != core::cmp::Ordering::Equal {
-            return res;
-        }
-
-        let res = first_elem.ident.cmp(&second_elem.ident);
-        return res;
-
-        // TODO: How to impl Ord?
-        //match (&first_elem.arguments, &second_elem.arguments) {
-        //    (
-        //        syn::PathArguments::AngleBracketed(first_args),
-        //        syn::PathArguments::AngleBracketed(second_args),
-        //    ) => {
-        //        if first_args.colon2_token != second_args.colon2_token {
-        //            return false;
-        //        }
-
-        //        //if first_args.args.len() != second_args.args.len() {
-        //        //    return false;
-        //        //}
-
-        //        //first_args
-        //        //    .args
-        //        //    .iter()
-        //        //    .zip(&second_args.args)
-        //        //    .all(|zipped_args| match zipped_args {
-        //        //        (
-        //        //            syn::GenericArgument::AssocType(first_assoc),
-        //        //            syn::GenericArgument::AssocType(second_assoc),
-        //        //        ) => {
-        //        //            first_assoc.ident == second_assoc.ident
-        //        //                && first_assoc.generics == second_assoc.generics
-        //        //        }
-        //        //        _ => first_args == second_args,
-        //        //    })
-        //    }
-        //    _ => first_elem.cmp(second_elem),
-        //}
-    }
-}
 impl core::hash::Hash for TraitBound<'_> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.0.leading_colon.hash(state);
@@ -170,10 +112,7 @@ impl core::hash::Hash for TraitBound<'_> {
                 first_args.colon2_token.hash(state);
 
                 first_args.args.iter().for_each(|args| match args {
-                    syn::GenericArgument::AssocType(assoc) => {
-                        assoc.ident.hash(state);
-                        assoc.generics.hash(state);
-                    }
+                    syn::GenericArgument::AssocType(_) => {}
                     _ => args.hash(state),
                 })
             }
@@ -182,11 +121,144 @@ impl core::hash::Hash for TraitBound<'_> {
     }
 }
 
+impl quote::ToTokens for TraitBound<'_> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        self.0.leading_colon.to_tokens(tokens);
+
+        let mut iter = self.0.segments.iter().rev();
+        let first_elem = iter.next().unwrap();
+
+        iter.rev().for_each(|elem| elem.to_tokens(tokens));
+        first_elem.ident.to_tokens(tokens);
+
+        match &first_elem.arguments {
+            syn::PathArguments::AngleBracketed(first_args) => {
+                first_args.colon2_token.to_tokens(tokens);
+
+                quote!(<).to_tokens(tokens);
+                first_args.args.iter().for_each(|args| match args {
+                    syn::GenericArgument::AssocType(_) => {}
+                    _ => args.to_tokens(tokens),
+                });
+                quote!(>).to_tokens(tokens);
+            }
+            _ => first_elem.arguments.to_tokens(tokens),
+        }
+    }
+}
+
+mod ord {
+    use core::cmp::Ordering;
+
+    use super::TraitBound;
+
+    fn cmp_colons(first: Option<syn::Token![::]>, second: Option<syn::Token![::]>) -> Ordering {
+        match (first, second) {
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(_), Some(_)) | (None, None) => Ordering::Equal,
+        }
+    }
+
+    fn cmp_angle_bracketed_generic_arguments(
+        _first: &syn::AngleBracketedGenericArguments,
+        _second: &syn::AngleBracketedGenericArguments,
+    ) -> Ordering {
+        //let res = cmp_colons(first.colon2_token, second.colon2_token);
+        //if res != Ordering::Equal {
+        //    return res;
+        //}
+
+        //for zipped_args in first.args.iter().zip(&second.args) {
+        //    match zipped_args {
+        //        (
+        //            syn::GenericArgument::AssocType(first_assoc),
+        //            syn::GenericArgument::AssocType(second_assoc),
+        //        ) => {
+        //            let res = first_assoc.ident.cmp(&second_assoc.ident);
+        //            if res != Ordering::Equal {
+        //                return res;
+        //            }
+
+        //            let res = match (first_assoc.generics, second_assoc.generics) {
+        //                (None, _) => Ordering::Less,
+        //                (_, None) => Ordering::Greater,
+        //                (None, None) => Ordering::Equal,
+        //                (Some(first_args), Some(second_args)) => {
+        //                    cmp_angle_bracketed_generic_arguments(&first_args, &second_args)
+        //                }
+        //            };
+        //            if res != Ordering::Equal {
+        //                return res;
+        //            }
+
+        //            cmp_types(&first_assoc.ty, &second_assoc.ty)
+        //        }
+        //        _ => first_args.cmp(second_args),
+        //    }
+        //}
+
+        // TODO
+        core::cmp::Ordering::Equal
+        //unimplemented!("Ordering of trait bounds not implemented yet")
+    }
+
+    impl PartialOrd for TraitBound<'_> {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for TraitBound<'_> {
+        fn cmp(&self, other: &Self) -> Ordering {
+            let res = cmp_colons(self.0.leading_colon, other.0.leading_colon);
+            if res != Ordering::Equal {
+                return res;
+            }
+
+            let mut first_iter = self.0.segments.iter().rev();
+            let mut second_iter = other.0.segments.iter().rev();
+
+            let first_elem = first_iter.next().unwrap();
+            let second_elem = second_iter.next().unwrap();
+
+            let res = first_iter
+                .rev()
+                .map(|seg| &seg.ident)
+                .cmp(second_iter.rev().map(|seg| &seg.ident));
+            if res != Ordering::Equal {
+                return res;
+            }
+
+            let res = first_elem.ident.cmp(&second_elem.ident);
+            if res != Ordering::Equal {
+                return res;
+            }
+
+            match (&first_elem.arguments, &second_elem.arguments) {
+                (
+                    syn::PathArguments::AngleBracketed(first_args),
+                    syn::PathArguments::AngleBracketed(second_args),
+                ) => cmp_angle_bracketed_generic_arguments(first_args, second_args),
+                (
+                    syn::PathArguments::Parenthesized(_first_args),
+                    syn::PathArguments::Parenthesized(_second_args),
+                ) => {
+                    unimplemented!("Parenthesized args ordering not implemented yet")
+                }
+                (syn::PathArguments::None, _) => Ordering::Less,
+                (_, syn::PathArguments::None) => Ordering::Greater,
+                (syn::PathArguments::AngleBracketed(_), _) => Ordering::Less,
+                (_, syn::PathArguments::AngleBracketed(_)) => Ordering::Greater,
+            }
+        }
+    }
+}
+
 struct AssocBounds<'ast> {
     /// Ordered collection of assoc bound idents
     type_param_idents: Vec<AssocBoundIdent<'ast>>,
     /// Assoc types params for every implementation
-    type_params: Vec<HashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
+    type_params: Vec<FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
 }
 
 impl<'ast> AssocBounds<'ast> {
@@ -219,7 +291,7 @@ struct AssocBoundsVisitor<'ast> {
     /// Ordered set of associated bound idents
     type_param_idents: BTreeSet<AssocBoundIdent<'ast>>,
     /// Collection of all associated type param bounds
-    type_params: HashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>,
+    type_params: FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>,
 }
 
 impl<'ast> AssocBoundsVisitor<'ast> {
@@ -229,7 +301,7 @@ impl<'ast> AssocBoundsVisitor<'ast> {
             curr_trait_bound: None,
 
             type_param_idents: BTreeSet::new(),
-            type_params: HashMap::new(),
+            type_params: FxHashMap::default(),
         }
     }
 
@@ -270,22 +342,15 @@ impl Parse for ItemImpls {
         trait_
             .as_mut()
             .map(ParamResolver::resolve_non_predicate_params);
-        let mut item_impls = HashMap::new();
 
-        let trait_ident = trait_.as_ref().map(|trait_| &trait_.ident);
         let mut prev_trait = None;
+        let mut item_impls = FxHashMap::default();
+        let trait_ident = trait_.as_ref().map(|trait_| &trait_.ident);
         while let Ok(mut item) = input.parse::<syn::ItemImpl>() {
-            //let mut item = match input.parse::<syn::ItemImpl>() {
-            //    Ok(item) => item,
-            //    Er(err) => {
-            //        println!("{}", err);
-            //        break;
-            //    }
-            //};
             item.resolve_non_predicate_params();
             // TODO: Resolve predicate param idents
 
-            // TODO: check that all have unsafe default and the same set of attributes
+            // TODO: check that all have unsafe, default and the same set of attributes
             // TODO: Improve this trait checking. We have to make sure that all traits
             // have the same signature(including generics) which is consistent with trait definition
             // Maybe we don't have to check they are consistent
@@ -322,13 +387,13 @@ pub fn impls(input: TokenStream) -> TokenStream {
     let impls: ItemImpls = parse_macro_input!(input);
 
     let mut helper_traits = Vec::new();
-    //let mut main_trait_impls = Vec::new();
+    let mut main_trait_impl = None;
     let mut item_impls = Vec::new();
 
     let main_trait = impls.trait_;
     for (_, per_self_ty_impls) in impls.item_impls {
         helper_traits.push(gen_helper_trait(&main_trait, &per_self_ty_impls));
-        //main_trait_impls.push(gen_main_trait_impl(&per_self_ty_impls));
+        main_trait_impl = Some(main::gen_main_trait_impl(&main_trait, &per_self_ty_impls));
         item_impls.extend(gen_disjoint_impls(per_self_ty_impls));
     }
 
@@ -337,99 +402,15 @@ pub fn impls(input: TokenStream) -> TokenStream {
 
         const _: () = {
             #( #helper_traits )*
-            //#( #main_trait_impls )*
             #( #item_impls )*
+
+            #main_trait_impl
         };
     };
 
     println!("{}", quote!(#k));
     k.into()
 }
-
-//fn gen_main_trait_impl(impls: &[syn::ItemImpl]) -> Option<syn::ItemImpl> {
-//    let Some(mut example_impl) = impls.get(0).cloned() else {
-//        return None;
-//    };
-//
-//    let mut main_trait_resolver = MainTraitResolver::new(impls);
-//    main_trait_resolver.visit_item_impl_mut(&mut example_impl);
-//
-//    let syn::ItemImpl {
-//        attrs,
-//        defaultness,
-//        unsafety,
-//        generics,
-//        trait_,
-//        self_ty,
-//        ..
-//    } = example_impl;
-//
-//    let trait_ = trait_.map(|trait_| &trait_.1);
-//    let (impl_generics, _, where_clause) = generics.split_for_impl();
-//
-//    Some(syn::parse_quote! {
-//        #[#(#attrs)*]
-//        #defaultness #unsafety impl #impl_generics #trait_ for #self_ty #where_clause {
-//        }
-//    })
-//}
-//
-//struct MainTraitResolver<'ast> {
-//    helper_trait_ident: &'ast syn::Ident,
-//
-//    type_param_idents: Vec<AssocBoundIdent<'ast>>,
-//
-//    curr_assoc_param_name: Option<syn::Ident>,
-//}
-//impl<'ast> MainTraitResolver<'ast> {
-//    fn new(helper_trait_ident: &syn::Ident, impls: &'ast [syn::ItemImpl]) -> Self {
-//        let AssocBounds {
-//            type_param_idents,
-//            ..
-//        } = AssocBounds::find(impls);
-//
-//        Self {
-//            helper_trait_ident,
-//            type_param_idents,
-//            curr_assoc_param_name: None,
-//        }
-//    }
-//}
-//impl VisitMut for MainTraitResolver<'_> {
-//    fn visit_where_clause_mut(&mut self, node: &mut syn::WhereClause) {
-//        // TODO: Handle unwraps
-//        let helper_trait_ident = self.helper_trait_ident;
-//        let kita =
-//            self.type_param_idents
-//                .iter()
-//                .map(|(param_ident, trait_bound, assoc_param_name)| {
-//
-//                    syn::parse_quote! {
-//                        #param_ident as #trait_bound>::#assoc_param_name
-//                    }
-//                });
-//
-//        node.predicates.push(syn::parse_quote! {
-//            #helper_trait_ident<#(#kita),*>
-//        });
-//    }
-//    fn visit_angle_bracketed_generic_arguments_mut(
-//        &mut self,
-//        node: &mut syn::AngleBracketedGenericArguments,
-//    ) {
-//        node.args = core::mem::take(&mut node.args)
-//            .into_iter()
-//            .filter(|arg| {
-//                !matches!(arg, syn::GenericArgument::AssocType(_))
-//                    && !matches!(arg, syn::GenericArgument::AssocConst(_))
-//            })
-//            .collect();
-//    }
-//
-//    //fn visit_impl_item_macro_mut(&mut self, _node: &mut syn::ImplItemMacro) {
-//    //    unimplemented!()
-//    //}
-//}
 
 fn gen_disjoint_impls(mut impls: Vec<syn::ItemImpl>) -> Vec<syn::ItemImpl> {
     let AssocBounds {
@@ -495,12 +476,13 @@ fn gen_disjoint_impls(mut impls: Vec<syn::ItemImpl>) -> Vec<syn::ItemImpl> {
 }
 
 fn gen_helper_trait(main_trait: &Option<ItemTrait>, impls: &[syn::ItemImpl]) -> Option<ItemTrait> {
-    let assoc_type_param_count = count_assoc_in_bounds(impls);
+    let assoc_type_param_count = AssocBounds::find(impls).type_param_idents.len();
 
     let Some(mut helper_trait) = main_trait.clone() else {
         return None;
     };
 
+    helper_trait.vis = syn::Visibility::Inherited;
     helper_trait.ident = gen_helper_trait_ident(&helper_trait.ident);
     let start_idx = helper_trait.generics.type_params().count();
 
@@ -516,17 +498,171 @@ fn gen_helper_trait(main_trait: &Option<ItemTrait>, impls: &[syn::ItemImpl]) -> 
     Some(helper_trait)
 }
 
-fn count_assoc_in_bounds(impls: &[syn::ItemImpl]) -> usize {
-    let assoc_bounds = AssocBounds::find(impls);
-    assoc_bounds.type_param_idents.len()
-}
-
 fn gen_helper_trait_ident(ident: &syn::Ident) -> syn::Ident {
     format_ident!("_{}", &ident)
 }
 
+mod main {
+    //! Contains logic related to generating impl of the main trait
+
+    use rustc_hash::FxHashSet;
+    use syn::visit_mut::VisitMut;
+
+    use super::*;
+
+    struct ImplItemResolver {
+        self_as_helper_trait: proc_macro2::TokenStream,
+    }
+
+    pub fn gen_main_trait_impl(
+        main_trait: &Option<ItemTrait>,
+        impls: &[syn::ItemImpl],
+    ) -> Option<syn::ItemImpl> {
+        let Some(main_trait) = main_trait else {
+            return None;
+        };
+
+        let Some(example_impl) = impls.get(0).cloned() else {
+            return None;
+        };
+
+        let AssocBounds {
+            type_param_idents, ..
+        } = AssocBounds::find(impls);
+
+        let helper_trait_ident = gen_helper_trait_ident(&main_trait.ident);
+        let (impl_generics, where_clause) = make_generics(&helper_trait_ident, &type_param_idents);
+        let mut impl_item_resolver = ImplItemResolver::new(&helper_trait_ident, &type_param_idents);
+
+        let syn::ItemImpl {
+            attrs,
+            defaultness,
+            unsafety,
+            trait_,
+            self_ty,
+            mut items,
+            ..
+        } = example_impl;
+
+        let trait_ = trait_.as_ref().map(|trait_| &trait_.1);
+        items
+            .iter_mut()
+            .for_each(|item| impl_item_resolver.visit_impl_item_mut(item));
+
+        Some(syn::parse_quote! {
+            #(#attrs)*
+            #defaultness #unsafety impl #impl_generics #trait_ for #self_ty #where_clause {
+                #(#items)*
+            }
+        })
+    }
+
+    fn gen_assoc_bounds<'a>(
+        type_param_idents: &'a [AssocBoundIdent],
+    ) -> impl Iterator<Item = proc_macro2::TokenStream> + 'a {
+        type_param_idents
+            .iter()
+            .map(|(param_ident, trait_bound, assoc_param_name)| {
+                quote! { <#param_ident as #trait_bound>::#assoc_param_name }
+            })
+    }
+
+    fn make_generics(
+        helper_trait_ident: &syn::Ident,
+        type_param_idents: &[AssocBoundIdent],
+    ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+        let mut assoc_bounds = FxHashMap::<_, FxHashSet<_>>::default();
+
+        type_param_idents
+            .iter()
+            .for_each(|(param_ident, trait_bound, _)| {
+                assoc_bounds
+                    .entry(param_ident)
+                    .or_default()
+                    .insert(trait_bound);
+            });
+
+        let type_params = type_param_idents
+            .iter()
+            .map(|(param_ident, _, _)| param_ident);
+
+        let where_clause_predicates = assoc_bounds
+            .into_iter()
+            .map(|(param_ident, trait_bounds)| {
+                let trait_bounds = trait_bounds.into_iter();
+                quote! { #param_ident: #(#trait_bounds)+* }
+            })
+            .chain(core::iter::once_with(|| {
+                let assoc_bounds = gen_assoc_bounds(type_param_idents);
+                quote! { Self: #helper_trait_ident<#(#assoc_bounds),*> }
+            }));
+
+        (
+            quote! { <#(#type_params),*> },
+            quote! { where #(#where_clause_predicates),* },
+        )
+    }
+
+    impl ImplItemResolver {
+        fn new(helper_trait_ident: &syn::Ident, type_param_idents: &[AssocBoundIdent]) -> Self {
+            let assoc_bounds = gen_assoc_bounds(type_param_idents);
+
+            Self {
+                self_as_helper_trait: quote! {
+                    <Self as #helper_trait_ident<#(#assoc_bounds),*>>
+                },
+            }
+        }
+    }
+
+    impl VisitMut for ImplItemResolver {
+        fn visit_impl_item_const_mut(&mut self, node: &mut syn::ImplItemConst) {
+            let self_as_helper_trait = &self.self_as_helper_trait;
+
+            let ident = &node.ident;
+            node.expr = syn::parse_quote!(
+                #self_as_helper_trait::#ident
+            );
+        }
+
+        fn visit_impl_item_fn_mut(&mut self, node: &mut syn::ImplItemFn) {
+            let self_as_helper_trait = &self.self_as_helper_trait;
+
+            let syn::Signature {
+                ident,
+                inputs,
+                variadic,
+                ..
+            } = &node.sig;
+
+            let inputs = inputs.iter().map(|input| match input {
+                syn::FnArg::Receiver(_) => syn::parse_quote!(self),
+                syn::FnArg::Typed(arg) => arg.pat.clone(),
+            });
+            node.block = syn::parse_quote!({
+                #self_as_helper_trait::#ident(#(#inputs),*, #variadic)
+            });
+        }
+
+        fn visit_impl_item_type_mut(&mut self, node: &mut syn::ImplItemType) {
+            let self_as_helper_trait = &self.self_as_helper_trait;
+
+            let ident = &node.ident;
+            node.ty = syn::parse_quote!(
+                #self_as_helper_trait::#ident
+            );
+        }
+
+        fn visit_impl_item_macro_mut(&mut self, _node: &mut syn::ImplItemMacro) {
+            unimplemented!("Trait macros are not supported")
+        }
+    }
+}
+
 mod param {
-    use std::collections::HashMap;
+    //! Contains logic related to uniform position based (re-)naming of parameters
+
+    use rustc_hash::FxHashMap;
 
     use quote::format_ident;
     use syn::{
@@ -547,9 +683,9 @@ mod param {
     }
 
     struct NonPredicateParamResolver {
-        lifetimes: HashMap<syn::Ident, usize>,
-        type_params: HashMap<syn::Ident, usize>,
-        const_params: HashMap<syn::Ident, usize>,
+        lifetimes: FxHashMap<syn::Ident, usize>,
+        type_params: FxHashMap<syn::Ident, usize>,
+        const_params: FxHashMap<syn::Ident, usize>,
     }
 
     /// Indexer for params used in traits, impl trait or self type, but not predicates.
@@ -559,9 +695,9 @@ mod param {
     /// `U` = 1,
     /// `V` = undetermined
     struct NonPredicateParamIndexer<'ast> {
-        lifetime_params: HashMap<&'ast syn::Lifetime, Option<usize>>,
-        type_params: HashMap<&'ast syn::Ident, Option<usize>>,
-        const_params: HashMap<&'ast syn::Ident, Option<usize>>,
+        lifetime_params: FxHashMap<&'ast syn::Ident, Option<usize>>,
+        type_params: FxHashMap<&'ast syn::Ident, Option<usize>>,
+        const_params: FxHashMap<&'ast syn::Ident, Option<usize>>,
 
         curr_lifetime_param_pos_idx: usize,
         curr_type_param_pos_idx: usize,
@@ -575,6 +711,7 @@ mod param {
             let mut param_resolver = NonPredicateParamResolver::new(non_predicate_param_indexer);
             param_resolver.visit_item_impl_mut(self);
 
+            // TODO: Add unnamed lifetimes (&u32) or elided lifetimes (&'_ u32)
             // TODO: Remove unused lifetimes. Example where 'b is unused:
             // impl<'a: 'b, 'b: 'a, T: 'b > Kara<'a, T> for &'a T {
             //
@@ -619,7 +756,7 @@ mod param {
         fn new(generics: &'ast syn::Generics) -> Self {
             let lifetime_params = generics
                 .lifetimes()
-                .map(|param| (&param.lifetime, None))
+                .map(|param| (&param.lifetime.ident, None))
                 .collect();
             let type_params = generics
                 .type_params()
@@ -683,7 +820,8 @@ mod param {
         }
 
         fn visit_lifetime(&mut self, node: &'ast syn::Lifetime) {
-            *self.lifetime_params.get_mut(&node).unwrap() = Some(self.curr_lifetime_param_pos_idx);
+            *self.lifetime_params.get_mut(&node.ident).unwrap() =
+                Some(self.curr_lifetime_param_pos_idx);
 
             if let Some(curr_pos_idx) = self.curr_lifetime_param_pos_idx.checked_add(1) {
                 self.curr_lifetime_param_pos_idx = curr_pos_idx;
@@ -723,7 +861,7 @@ mod param {
                 lifetimes: indexer
                     .lifetime_params
                     .into_iter()
-                    .filter_map(|(param, idx)| idx.map(|idx| (param.ident.clone(), idx)))
+                    .filter_map(|(param, idx)| idx.map(|idx| (param.clone(), idx)))
                     .collect(),
                 type_params: indexer
                     .type_params
@@ -776,11 +914,11 @@ mod param {
     }
 
     //struct PredicateIndexer<'ast> {
-    //    type_params: HashMap<&'ast syn::Ident, Option<usize>>,
+    //    type_params: FxHashMap<&'ast syn::Ident, Option<usize>>,
     //    curr_pos_idx: usize,
     //}
     //impl<'ast> PredicateIndexer<'ast> {
-    //    fn new(type_params: HashMap<&'ast syn::Ident, Option<usize>>) -> Self {
+    //    fn new(type_params: FxHashMap<&'ast syn::Ident, Option<usize>>) -> Self {
     //        let curr_pos_idx: usize = type_params
     //            .values()
     //            .filter_map(|x| *x)

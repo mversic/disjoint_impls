@@ -41,15 +41,15 @@ const _: () = {
         const _NAME: &'static str;
     }
 
-    impl<T> Kita for T where Option<T>: Dispatch + _Kita<<Option<T> as Dispatch>::Group> {
-        const NAME: &'static str = <Option<T> as _Kita<<Option<T> as Dispatch>::Group>>::_NAME;
-    }
-
-    impl<T> _Kita<GroupA> for Option<T> where Option<T>: Dispatch<Group = GroupA>{
+    impl<T0> _Kita<GroupA> for T0 where Option<T0>: Dispatch<Group = GroupA>{
         const _NAME: &'static str = "Blanket A";
     }
-    impl<T> _Kita<GroupB> for Option<T> where Option<T>: Dispatch<Group = GroupB>{
+    impl<T0> _Kita<GroupB> for T0 where Option<T0>: Dispatch<Group = GroupB>{
         const _NAME: &'static str = "Blanket B";
+    }
+
+    impl<T0> Kita for T0 where Option<T0>: Dispatch, Self: _Kita<<Option<T0> as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<<Option<T0> as Dispatch>::Group>>::_NAME;
     }
 };
 */
