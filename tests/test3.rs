@@ -23,10 +23,10 @@ disjoint::impls! {
         const NAME: &'static str;
     }
 
-    impl<U: Dispatch<Group = GroupA>> Kita<U> for u32 {
+    impl<U: Dispatch<Group = GroupA>, T> Kita<U> for T {
         const NAME: &'static str = "Blanket A";
     }
-    impl<U: Dispatch<Group = GroupB>> Kita<U> for u32 {
+    impl<U: Dispatch<Group = GroupB>, T> Kita<U> for T {
         const NAME: &'static str = "Blanket B";
     }
 }
@@ -37,23 +37,24 @@ pub trait Kita<T0> {
 }
 
 const _: () = {
-    trait _Kita<T0> {
+    trait _Kita<T0, T1> {
         const NAME: &'static str;
     }
 
-    impl _Kita<GroupA> for u32 {
+    impl<T1, M1> _Kita<GroupA, M1> for T1 {
         const NAME: &'static str = "Blanket A";
     }
-    impl _Kita<GroupB> for u32 {
+    impl<T1, M1> _Kita<GroupB, M1> for T1 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<T0: Dispatch> Kita<T0> for u32 where Self: _Kita<<T0 as Dispatch>::Group> {
-        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group>>::NAME;
+    impl<T0: Dispatch, T1> Kita<T0> for T1 where Self: _Kita<<T0 as Dispatch>::Group, T1> {
+        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group, T1>>::NAME;
     }
 };
 */
 
+#[test]
 fn main() {
     assert_eq!("Blanket A", <u32 as Kita<String>>::NAME);
     assert_eq!("Blanket B", <u32 as Kita<u32>>::NAME);

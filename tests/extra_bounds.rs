@@ -61,6 +61,7 @@ const _: () = {
 };
 */
 
+#[test]
 fn main() {
     assert_eq!("Blanket A", String::NAME);
     assert_eq!("Blanket A", Vec::<u32>::NAME);

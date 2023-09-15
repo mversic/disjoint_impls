@@ -55,6 +55,7 @@ const _: () = {
 };
 */
 
+#[test]
 fn main() {
     assert_eq!("Blanket A", <String as Kita<String>>::NAME);
     assert_eq!("Blanket B", <Vec::<u32> as Kita<u32>>::NAME);
