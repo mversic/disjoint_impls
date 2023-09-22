@@ -15,14 +15,23 @@ struct ImplItemResolver {
 }
 
 /// Generate main trait impl
-pub fn gen(main_trait: &Option<ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImpl> {
-    let Some(main_trait) = main_trait else {
-        return None;
-    };
-
+pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImpl> {
     let Some(example_impl) = impls.get(0).cloned() else {
         return None;
     };
+
+    let helper_trait_ident = main_trait.as_ref().map_or_else(
+        || {
+            if let syn::Type::Path(type_path) = &*example_impl.self_ty {
+                if let Some(last_seg) = type_path.path.segments.last() {
+                    return Some(helper_trait::gen_ident(&last_seg.ident));
+                }
+            }
+
+            None
+        },
+        |main_trait| Some(helper_trait::gen_ident(&main_trait.ident)),
+    )?;
 
     let ItemImpl {
         attrs,
@@ -39,35 +48,28 @@ pub fn gen(main_trait: &Option<ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImp
         type_param_idents, ..
     } = AssocBounds::find(impls);
 
-    let mut generics_resolver = GenericsResolver::new(
-        &helper_trait::gen_ident(&main_trait.ident),
-        &type_param_idents,
-    );
+    let mut generics_resolver =
+        GenericsResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
 
     generics_resolver.visit_generics_mut(&mut generics);
     let trait_ = trait_.as_ref().map(|trait_| &trait_.1);
 
-    let mut impl_item_resolver = ImplItemResolver::new(
-        &helper_trait::gen_ident(&main_trait.ident),
-        &type_param_idents,
-    );
+    let mut impl_item_resolver =
+        ImplItemResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
     items
         .iter_mut()
         .for_each(|item| impl_item_resolver.visit_impl_item_mut(item));
 
     let (impl_generics, _, where_clause) = generics.split_for_impl();
-
-    let k = quote! {
-        #(#attrs)*
-        #defaultness #unsafety impl #impl_generics #trait_ for #self_ty #where_clause {
-            #(#items)*
-        }
+    let for_ = if main_trait.is_some() {
+        quote!(for)
+    } else {
+        quote!()
     };
-    println!("{}", k);
 
     Some(syn::parse_quote! {
         #(#attrs)*
-        #defaultness #unsafety impl #impl_generics #trait_ for #self_ty #where_clause {
+        #defaultness #unsafety impl #impl_generics #trait_ #for_ #self_ty #where_clause {
             #(#items)*
         }
     })
@@ -84,7 +86,11 @@ fn gen_assoc_bounds<'a>(
 }
 
 impl<'a> GenericsResolver<'a> {
-    fn new(helper_trait_ident: &syn::Ident, type_param_idents: &'a [AssocBoundIdent]) -> Self {
+    fn new(
+        main_trait: Option<&ItemTrait>,
+        helper_trait_ident: &syn::Ident,
+        type_param_idents: &'a [AssocBoundIdent],
+    ) -> Self {
         let mut assoc_bounds = FxHashMap::<_, FxHashSet<_>>::default();
 
         type_param_idents
@@ -108,8 +114,11 @@ impl<'a> GenericsResolver<'a> {
                 quote! { #param_ident: #(#trait_bounds)+* }
             })
             .chain(core::iter::once_with(|| {
+                let main_trait_generics = main_trait
+                    .map(|main_trait| main_trait.generics.type_params().collect::<Vec<_>>())
+                    .unwrap_or_default();
                 let assoc_bounds = gen_assoc_bounds(type_param_idents);
-                quote! { Self: #helper_trait_ident<#(#assoc_bounds),*> }
+                quote! { Self: #helper_trait_ident<#(#main_trait_generics,)* #(#assoc_bounds),*> }
             }))
             .collect();
 
@@ -121,12 +130,19 @@ impl<'a> GenericsResolver<'a> {
 }
 
 impl ImplItemResolver {
-    fn new(helper_trait_ident: &syn::Ident, type_param_idents: &[AssocBoundIdent]) -> Self {
+    fn new(
+        main_trait: Option<&ItemTrait>,
+        helper_trait_ident: &syn::Ident,
+        type_param_idents: &[AssocBoundIdent],
+    ) -> Self {
+        let main_trait_generics = main_trait
+            .map(|main_trait| main_trait.generics.type_params().collect::<Vec<_>>())
+            .unwrap_or_default();
         let assoc_bounds = gen_assoc_bounds(type_param_idents);
 
         Self {
             self_as_helper_trait: quote! {
-                <Self as #helper_trait_ident<#(#assoc_bounds),*>>
+                <Self as #helper_trait_ident<#(#main_trait_generics,)* #(#assoc_bounds),*>>
             },
         }
     }

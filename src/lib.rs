@@ -350,12 +350,12 @@ pub fn impls(input: TokenStream) -> TokenStream {
     let main_trait = impls.trait_;
     for (_, per_self_ty_impls) in impls.item_impls {
         // TODO: Assoc bounds are computed multiple times
-        helper_traits.push(helper_trait::gen(&main_trait, &per_self_ty_impls));
-        main_trait_impl = Some(main_trait::gen(&main_trait, &per_self_ty_impls));
+        helper_traits.push(helper_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
+        main_trait_impl = Some(main_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
         item_impls.extend(disjoint_impls::gen(per_self_ty_impls));
     }
 
-    let k = quote! {
+    quote! {
         #main_trait
 
         const _: () = {
@@ -364,10 +364,7 @@ pub fn impls(input: TokenStream) -> TokenStream {
 
             #main_trait_impl
         };
-    };
-
-    println!("{}", quote!(#k));
-    k.into()
+    }.into()
 }
 
 impl Parse for ItemImpls {
@@ -381,6 +378,13 @@ impl Parse for ItemImpls {
         let mut item_impls = FxHashMap::default();
         let trait_ident = trait_.as_ref().map(|trait_| &trait_.ident);
         while let Ok(mut item) = input.parse::<ItemImpl>() {
+            if trait_.is_none() && item.trait_.is_some() {
+                abort!(trait_, "Trait definition missing");
+            }
+            if trait_.is_some() && item.trait_.is_none() {
+                abort!(trait_, "Trait definition given but found inherent impl");
+            }
+
             item.resolve_non_predicate_params();
             // TODO: Resolve predicate param idents
 
@@ -423,23 +427,88 @@ mod helper_trait {
     /// Helper trait contains all items of the main trait but is parametrized with
     /// type parameters corresponding to a minimal set of associated bounds
     /// required to uniquely identify all of the disjoint impls
-    pub fn gen(main_trait: &Option<ItemTrait>, impls: &[ItemImpl]) -> Option<TokenStream2> {
-        if let Some(main_trait) = main_trait {
-            let assoc_type_param_count = AssocBounds::find(impls).type_param_idents.len();
+    pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<TokenStream2> {
+        let assoc_type_param_count = AssocBounds::find(impls).type_param_idents.len();
+        let type_param_idents = (0..assoc_type_param_count).map(param::gen_indexed_type_param_name);
 
-            let helper_trait_ident = gen_ident(&main_trait.ident);
-            let type_param_idents =
-                (0..assoc_type_param_count).map(param::gen_indexed_type_param_name);
-            let items = &main_trait.items;
+        if let Some(mut helper_trait) = main_trait.cloned() {
+            helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));
+            helper_trait.ident = gen_ident(&helper_trait.ident);
+            let start_idx = helper_trait.generics.type_params().count();
 
-            return Some(quote! {
-                pub trait #helper_trait_ident<#(#type_param_idents),*> {
-                    #(#items)*
+            (start_idx..(assoc_type_param_count + start_idx))
+                .map(param::gen_indexed_type_param_name)
+                .for_each(|type_param_ident| {
+                    helper_trait
+                        .generics
+                        .params
+                        .push(syn::parse_quote!(#type_param_ident));
+                });
+
+            return Some(quote!(#helper_trait));
+        } else if let Some(inherent_impl) = impls.get(0) {
+            let items = resolve_inherent_impl_items(&inherent_impl.items);
+
+            if let syn::Type::Path(type_path) = &*inherent_impl.self_ty {
+                if let Some(last_seg) = type_path.path.segments.last() {
+                    let helper_trait_ident = gen_ident(&last_seg.ident);
+
+                    return Some(quote! {
+                        pub trait #helper_trait_ident<#(#type_param_idents),*> {
+                            #(#items)*
+                        }
+                    });
                 }
-            });
+            }
         }
 
         None
+    }
+
+    fn resolve_inherent_impl_items(
+        impl_items: &[syn::ImplItem],
+    ) -> impl Iterator<Item = TokenStream2> + '_ {
+        impl_items.iter().map(|impl_item| match impl_item {
+            syn::ImplItem::Const(item) => {
+                let syn::ImplItemConst {
+                    attrs,
+                    ident,
+                    generics,
+                    ty,
+                    ..
+                } = &item;
+
+                quote! {
+                    #(#attrs),*
+                    const #ident: #ty #generics;
+                }
+            }
+            syn::ImplItem::Fn(item) => {
+                let syn::ImplItemFn { attrs, sig, .. } = &item;
+                quote! {
+                    #(#attrs),*
+                    #sig;
+                }
+            }
+            syn::ImplItem::Type(item) => {
+                let syn::ImplItemType {
+                    attrs,
+                    ident,
+                    generics,
+                    ..
+                } = &item;
+
+                let (impl_generics, _, where_clause) = generics.split_for_impl();
+
+                quote! {
+                    #(#attrs),*
+                    type #ident #impl_generics #where_clause;
+                }
+            }
+            syn::ImplItem::Macro(item) => quote! { #item },
+            syn::ImplItem::Verbatim(item) => item.clone(),
+            _ => unimplemented!(),
+        })
     }
 
     /// Generate identifier of helper trait
@@ -530,15 +599,15 @@ mod param {
         }
     }
 
-    pub fn gen_indexed_lifetime_param_name(idx: usize) -> syn::Ident {
+    fn gen_indexed_lifetime_param_name(idx: usize) -> syn::Ident {
         format_ident!("_LŠČ{idx}")
     }
 
-    pub fn gen_indexed_type_param_name(idx: usize) -> syn::Ident {
+    pub(super) fn gen_indexed_type_param_name(idx: usize) -> syn::Ident {
         format_ident!("_TŠČ{idx}")
     }
 
-    pub fn gen_indexed_const_param_name(idx: usize) -> syn::Ident {
+    fn gen_indexed_const_param_name(idx: usize) -> syn::Ident {
         format_ident!("_CŠČ{idx}")
     }
 
@@ -631,12 +700,12 @@ mod param {
                     .and_modify(|param_idx| {
                         if param_idx.is_none() {
                             *param_idx = Some(self.curr_type_param_pos_idx);
+
+                            if let Some(pos_idx) = self.curr_type_param_pos_idx.checked_add(1) {
+                                self.curr_type_param_pos_idx = pos_idx;
+                            }
                         }
                     });
-
-                if let Some(pos_idx) = self.curr_type_param_pos_idx.checked_add(1) {
-                    self.curr_type_param_pos_idx = pos_idx;
-                }
             }
 
             visit_path(self, node);

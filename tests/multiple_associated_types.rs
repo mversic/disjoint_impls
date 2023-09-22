@@ -47,21 +47,21 @@ pub trait Kita {
 
 const _: () = {
     trait _Kita<T0, T1> {
-        const _NAME: &'static str;
+        const NAME: &'static str;
     }
 
     impl<T0: Dispatch<Group1 = GroupA, Group2 = GroupA>> _Kita<GroupA, GroupA> for T0 {
-        const _NAME: &'static str = "Blanket AA";
+        const NAME: &'static str = "Blanket AA";
     }
     impl<T0: Dispatch<Group1 = GroupA, Group2 = GroupB>> _Kita<GroupA, GroupB> for T0 {
-        const _NAME: &'static str = "Blanket AB";
+        const NAME: &'static str = "Blanket AB";
     }
     impl<T0: Dispatch<Group1 = GroupB>, T1> _Kita<GroupB, T1> for T0 {
-        const _NAME: &'static str = "Blanket B*";
+        const NAME: &'static str = "Blanket B*";
     }
 
-    impl<T0: Dispatch> Kita for T0 where Self: _Kita<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2> {
-        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2>>::_NAME;
+    impl<T0> Kita for T0 where T0: Dispatch, Self: _Kita<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2> {
+        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2>>::NAME;
     }
 };
 */

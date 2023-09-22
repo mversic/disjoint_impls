@@ -1,4 +1,3 @@
-// TODO
 //pub trait Dispatch {
 //    type Group;
 //}
@@ -39,18 +38,18 @@
 //
 //const _: () = {
 //    trait _Kita<T0> {
-//        const _NAME: &'static str;
+//        const NAME: &'static str;
 //    }
 //
 //    impl<T0> _Kita<GroupA> for T0 where Option<T0>: Dispatch<Group = GroupA>{
-//        const _NAME: &'static str = "Blanket A";
+//        const NAME: &'static str = "Blanket A";
 //    }
 //    impl<T0> _Kita<GroupB> for T0 where Option<T0>: Dispatch<Group = GroupB>{
-//        const _NAME: &'static str = "Blanket B";
+//        const NAME: &'static str = "Blanket B";
 //    }
 //
 //    impl<T0> Kita for T0 where Option<T0>: Dispatch, Self: _Kita<<Option<T0> as Dispatch>::Group> {
-//        const NAME: &'static str = <Self as _Kita<<Option<T0> as Dispatch>::Group>>::_NAME;
+//        const NAME: &'static str = <Self as _Kita<<Option<T0> as Dispatch>::Group>>::NAME;
 //    }
 //};
 //

@@ -2,10 +2,14 @@ pub trait Dispatch {
     type Group;
 }
 
+trait A {}
+
 pub enum GroupA {}
+impl A for String {}
 impl Dispatch for String {
     type Group = GroupA;
 }
+impl<T> A for Vec<T> {}
 impl<T> Dispatch for Vec<T> {
     type Group = GroupA;
 }
@@ -23,7 +27,7 @@ disjoint::impls! {
         const NAME: &'static str;
     }
 
-    impl<U: Dispatch<Group = GroupA>, T> Kita<U> for T {
+    impl<U: Dispatch<Group = GroupA> + A, T> Kita<U> for T {
         const NAME: &'static str = "Blanket A";
     }
     impl<U: Dispatch<Group = GroupB>, T> Kita<U> for T {
@@ -41,15 +45,15 @@ const _: () = {
         const NAME: &'static str;
     }
 
-    impl<T1, M1> _Kita<GroupA, M1> for T1 {
+    impl<T0: Dispatch<Group = GroupA> + A, T1> Kita<T0, GroupA> for T1 {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T1, M1> _Kita<GroupB, M1> for T1 {
+    impl<T0: Dispatch<Group = GroupB>, T1> Kita<GroupB> for T1 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<T0: Dispatch, T1> Kita<T0> for T1 where Self: _Kita<<T0 as Dispatch>::Group, T1> {
-        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group, T1>>::NAME;
+    impl<T0, T1> Kita<T0> for T1 where T0: Dispatch, Self: _Kita<T0, <T0 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<T0, <T0 as Dispatch>::Group>>::NAME;
     }
 };
 */
@@ -57,5 +61,7 @@ const _: () = {
 #[test]
 fn main() {
     assert_eq!("Blanket A", <u32 as Kita<String>>::NAME);
+    assert_eq!("Blanket A", <u32 as Kita<Vec<String>>>::NAME);
     assert_eq!("Blanket B", <u32 as Kita<u32>>::NAME);
+    assert_eq!("Blanket B", <u32 as Kita<i32>>::NAME);
 }
