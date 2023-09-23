@@ -155,7 +155,6 @@ impl VisitMut for GenericsResolver<'_> {
 
         let node_type_params: FxHashSet<_> = node
             .type_params()
-            .into_iter()
             .map(|type_param| type_param.ident.clone())
             .collect();
 

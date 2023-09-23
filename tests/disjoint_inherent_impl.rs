@@ -1,3 +1,5 @@
+use disjoint_impls::disjoint_impls;
+
 pub trait Dispatch {
     type Group;
 }
@@ -20,7 +22,7 @@ impl Dispatch for u32 {
 
 pub struct Wrapper<T>(T);
 
-disjoint::impls! {
+disjoint_impls! {
     impl<T> Wrapper<T> where T: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
         // TODO: Compare inherent impls items to make sure they have the same items

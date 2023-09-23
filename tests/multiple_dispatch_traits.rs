@@ -1,3 +1,5 @@
+use disjoint_impls::disjoint_impls;
+
 pub trait Dispatch1 {
     type Group;
 }
@@ -34,7 +36,7 @@ impl Dispatch2 for u32 {
     type Group = GroupB;
 }
 
-disjoint::impls! {
+disjoint_impls! {
     pub trait Kita {
         const NAME: &'static str;
     }

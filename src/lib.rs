@@ -1,4 +1,4 @@
-mod disjoint_impls;
+mod disjoint;
 mod main_trait;
 
 use std::collections::BTreeSet;
@@ -338,9 +338,47 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
     }
 }
 
+/// Unlock support for a variety of mutually disjoint implementations.
+///
+/// This library enables you to write certain types of disjoint impls that Rust compiler doesn't (yet?) allow.
+/// Namely, disjoint impls where a type is bounded by an associated type. One would expect the following
+/// syntax to compile without the need to invoke `disjoint_impls!`, but it doesn't:
+///
+/// ```
+/// use disjoint_impls::disjoint_impls;
+///
+/// pub trait Dispatch {
+///     type Group;
+/// }
+///
+/// pub enum GroupA {}
+/// impl Dispatch for String {
+///     type Group = GroupA;
+/// }
+///
+/// pub enum GroupB {}
+/// impl Dispatch for i32 {
+///     type Group = GroupB;
+/// }
+///
+/// disjoint_impls! {
+///     pub trait Kita {
+///         const NAME: &'static str;
+///     }
+///
+///     impl<T: Dispatch<Group = GroupA>> Kita for T {
+///         const NAME: &'static str = "Blanket A";
+///     }
+///     impl<U: Dispatch<Group = GroupB>> Kita for U {
+///         const NAME: &'static str = "Blanket B";
+///     }
+/// }
+/// ```
+///
+/// Other much more complex examples can be found in `tests`
 #[proc_macro]
 #[proc_macro_error]
-pub fn impls(input: TokenStream) -> TokenStream {
+pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let impls: ItemImpls = parse_macro_input!(input);
 
     let mut helper_traits = Vec::new();
@@ -352,7 +390,7 @@ pub fn impls(input: TokenStream) -> TokenStream {
         // TODO: Assoc bounds are computed multiple times
         helper_traits.push(helper_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
         main_trait_impl = Some(main_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
-        item_impls.extend(disjoint_impls::gen(per_self_ty_impls));
+        item_impls.extend(disjoint::gen(per_self_ty_impls));
     }
 
     quote! {
@@ -364,7 +402,8 @@ pub fn impls(input: TokenStream) -> TokenStream {
 
             #main_trait_impl
         };
-    }.into()
+    }
+    .into()
 }
 
 impl Parse for ItemImpls {
@@ -412,7 +451,7 @@ impl Parse for ItemImpls {
             item_impls
                 .entry((*item.self_ty).clone())
                 .or_insert_with(Vec::new)
-                .push(item.into());
+                .push(item);
         }
 
         Ok(ItemImpls { trait_, item_impls })
@@ -566,7 +605,7 @@ mod param {
     impl ParamResolver for ItemImpl {
         fn resolve_non_predicate_params(&mut self) {
             let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(&self.generics);
-            non_predicate_param_indexer.visit_item_impl(&self);
+            non_predicate_param_indexer.visit_item_impl(self);
             let mut param_resolver = NonPredicateParamResolver::new(non_predicate_param_indexer);
             param_resolver.visit_item_impl_mut(self);
 
@@ -593,7 +632,7 @@ mod param {
     impl ParamResolver for syn::ItemTrait {
         fn resolve_non_predicate_params(&mut self) {
             let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(&self.generics);
-            non_predicate_param_indexer.visit_item_trait(&self);
+            non_predicate_param_indexer.visit_item_trait(self);
             let mut param_resolver = NonPredicateParamResolver::new(non_predicate_param_indexer);
             param_resolver.visit_item_trait_mut(self);
         }
@@ -652,7 +691,7 @@ mod param {
                 }
             }
 
-            self.visit_type(&*node.self_ty);
+            self.visit_type(&node.self_ty);
         }
 
         // Called only for a trait definition, never for impl block
@@ -715,7 +754,7 @@ mod param {
     }
 
     impl NonPredicateParamResolver {
-        fn new<'ast>(indexer: NonPredicateParamIndexer) -> Self {
+        fn new(indexer: NonPredicateParamIndexer) -> Self {
             Self {
                 lifetimes: indexer
                     .lifetime_params

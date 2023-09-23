@@ -1,7 +1,10 @@
 [package]
-name = "disjoint"
+name = "disjoint_impls"
 version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+description = "Support for a variety of mutually disjoint implementations"
+keywords = ["disjoint", "exclusive", "associated", "impl", "implementation"]
 
 [lib]
 proc-macro = true

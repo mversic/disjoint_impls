@@ -33,7 +33,7 @@ pub fn gen(mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
         .map(|params| {
             type_param_idents
                 .iter()
-                .map(|param_ident| params.get(&param_ident).map(|&param| param.clone()))
+                .map(|param_ident| params.get(param_ident).map(|&param| param.clone()))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
