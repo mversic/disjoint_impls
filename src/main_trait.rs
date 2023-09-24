@@ -5,8 +5,8 @@ use syn::visit_mut::VisitMut;
 
 use super::*;
 
-struct GenericsResolver<'a> {
-    assoc_bound_type_params: FxHashSet<&'a syn::Ident>,
+struct GenericsResolver {
+    assoc_bound_type_params: FxHashSet<syn::Type>,
     where_clause_predicates: Vec<TokenStream2>,
 }
 
@@ -85,11 +85,11 @@ fn gen_assoc_bounds<'a>(
         })
 }
 
-impl<'a> GenericsResolver<'a> {
+impl GenericsResolver {
     fn new(
         main_trait: Option<&ItemTrait>,
         helper_trait_ident: &syn::Ident,
-        type_param_idents: &'a [AssocBoundIdent],
+        type_param_idents: &[AssocBoundIdent],
     ) -> Self {
         let mut assoc_bounds = FxHashMap::<_, FxHashSet<_>>::default();
 
@@ -104,7 +104,8 @@ impl<'a> GenericsResolver<'a> {
 
         let assoc_bound_type_params = type_param_idents
             .iter()
-            .map(|(param_ident, _, _)| *param_ident)
+            .map(|(param_ident, _, _)| param_ident)
+            .cloned()
             .collect::<FxHashSet<_>>();
 
         let where_clause_predicates = assoc_bounds
@@ -148,21 +149,27 @@ impl ImplItemResolver {
     }
 }
 
-impl VisitMut for GenericsResolver<'_> {
+impl VisitMut for GenericsResolver {
     fn visit_generics_mut(&mut self, node: &mut syn::Generics) {
         node.make_where_clause();
         syn::visit_mut::visit_generics_mut(self, node);
 
-        let node_type_params: FxHashSet<_> = node
+        let node_type_params: FxHashSet<syn::Type> = node
             .type_params()
-            .map(|type_param| type_param.ident.clone())
+            .map(|type_param| {
+                let type_param = &type_param.ident;
+                syn::parse_quote!(#type_param)
+            })
             .collect();
 
         for assoc_bound_type_param in &self.assoc_bound_type_params {
             if !node_type_params.contains(assoc_bound_type_param) {
-                node.params.push(syn::GenericParam::Type(
-                    syn::parse_quote!(#assoc_bound_type_param),
-                ));
+                use syn::parse;
+
+                if let Ok(assoc_bound_type_param) = parse(quote!(#assoc_bound_type_param).into()) {
+                    node.params
+                        .push(syn::GenericParam::Type(assoc_bound_type_param));
+                }
             }
         }
     }

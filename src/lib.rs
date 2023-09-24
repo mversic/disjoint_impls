@@ -7,7 +7,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote};
 use rustc_hash::{FxHashMap, FxHashSet};
-use syn::visit::{visit_trait_bound, visit_type_param, Visit};
+use syn::visit::{visit_predicate_type, visit_trait_bound, visit_type_param, Visit};
 use syn::ItemImpl;
 use syn::{
     parse::{Parse, ParseStream},
@@ -27,9 +27,6 @@ struct ItemImpls {
     item_impls: FxHashMap<SelfType, Vec<ItemImpl>>,
 }
 
-/// Parameter identifier such as `T` in `impl<T> Clone for T`
-type ParamIdent = syn::Ident;
-
 /// AST node type of the trait identifier such as 'Deref<Target = u32>' in `impl<T: Deref<Target = u32>> Clone for T`.
 /// Equality of this type doesn't compare associated bounds. Therefore `Deref<Target = u32>` == `Deref<Target = u64>`.
 #[derive(Debug, Clone, Copy, Eq)]
@@ -37,7 +34,7 @@ struct TraitBound<'ast>(pub &'ast syn::Path);
 
 /// Unique name based identifier of the associated type bound such as:
 ///     `(T, Deref, Deref::Target)` in `impl<T: Deref<Target = bool>> for Clone for T`
-type AssocBoundIdent<'ast> = (&'ast ParamIdent, TraitBound<'ast>, &'ast syn::Ident);
+type AssocBoundIdent<'ast> = (syn::Type, TraitBound<'ast>, &'ast syn::Ident);
 
 /// AST node type of the associated bound constraint such as:
 ///     `bool` in `impl<T: Deref<Target = bool>> for Clone for T`
@@ -149,9 +146,9 @@ impl quote::ToTokens for TraitBound<'_> {
 }
 
 struct AssocBounds<'ast> {
-    /// Collection of assoc bound idents
+    /// Collection of associated bound identifiers
     type_param_idents: Vec<AssocBoundIdent<'ast>>,
-    /// Assoc types params for every implementation
+    /// Collection of associated bounds for every implementation
     type_params: Vec<FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
 }
 
@@ -177,13 +174,13 @@ impl<'ast> AssocBounds<'ast> {
 
 struct AssocBoundsVisitor<'ast> {
     /// Type parameter identifier currently being visited
-    curr_type_param: Option<&'ast syn::Ident>,
+    curr_type_param: Option<syn::Type>,
     /// Trait bound currently being visited
     curr_trait_bound: Option<TraitBound<'ast>>,
 
-    /// Collection of associated bound idents
+    /// Collection of associated bound identifiers
     type_param_idents: FxHashSet<AssocBoundIdent<'ast>>,
-    /// Collection of all associated type param bounds
+    /// Collection of associated bounds for every implementation
     type_params: FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>,
 }
 
@@ -200,7 +197,7 @@ impl<'ast> AssocBoundsVisitor<'ast> {
 
     fn make_assoc_param_ident(&self, assoc_param_name: &'ast syn::Ident) -> AssocBoundIdent<'ast> {
         (
-            self.curr_type_param.unwrap(),
+            self.curr_type_param.clone().unwrap(),
             self.curr_trait_bound.unwrap(),
             assoc_param_name,
         )
@@ -213,8 +210,13 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
     }
 
     fn visit_type_param(&mut self, node: &'ast syn::TypeParam) {
-        self.curr_type_param = Some(&node.ident);
+        let param = &node.ident;
+        self.curr_type_param = Some(syn::parse_quote!(#param));
         visit_type_param(self, node);
+    }
+    fn visit_predicate_type(&mut self, node: &'ast syn::PredicateType) {
+        self.curr_type_param = Some(node.bounded_ty.clone());
+        visit_predicate_type(self, node);
     }
 
     fn visit_trait_bound(&mut self, node: &'ast syn::TraitBound) {
@@ -224,7 +226,7 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
 
     fn visit_assoc_type(&mut self, node: &'ast syn::AssocType) {
         let assoc_bound_ident = self.make_assoc_param_ident(&node.ident);
-        self.type_params.insert(assoc_bound_ident, &node.ty);
+        self.type_params.insert(assoc_bound_ident.clone(), &node.ty);
         self.type_param_idents.insert(assoc_bound_ident);
     }
 }
