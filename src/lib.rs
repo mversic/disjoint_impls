@@ -1,14 +1,12 @@
 mod disjoint;
 mod main_trait;
 
-use std::collections::BTreeSet;
-
 use param::ParamResolver;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use syn::visit::{visit_trait_bound, visit_type_param, Visit};
 use syn::ItemImpl;
 use syn::{
@@ -34,7 +32,7 @@ type ParamIdent = syn::Ident;
 
 /// AST node type of the trait identifier such as 'Deref<Target = u32>' in `impl<T: Deref<Target = u32>> Clone for T`.
 /// Equality of this type doesn't compare associated bounds. Therefore `Deref<Target = u32>` == `Deref<Target = u64>`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq)]
 struct TraitBound<'ast>(pub &'ast syn::Path);
 
 /// Unique name based identifier of the associated type bound such as:
@@ -100,7 +98,6 @@ impl PartialEq for TraitBound<'_> {
     }
 }
 
-impl Eq for TraitBound<'_> {}
 impl core::hash::Hash for TraitBound<'_> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.0.leading_colon.hash(state);
@@ -151,113 +148,8 @@ impl quote::ToTokens for TraitBound<'_> {
     }
 }
 
-mod ord {
-    use core::cmp::Ordering;
-
-    use super::TraitBound;
-
-    fn cmp_colons(first: Option<syn::Token![::]>, second: Option<syn::Token![::]>) -> Ordering {
-        match (first, second) {
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
-            (Some(_), Some(_)) | (None, None) => Ordering::Equal,
-        }
-    }
-
-    fn cmp_angle_bracketed_generic_arguments(
-        first: &syn::AngleBracketedGenericArguments,
-        second: &syn::AngleBracketedGenericArguments,
-    ) -> Ordering {
-        let res = cmp_colons(first.colon2_token, second.colon2_token);
-        if res != Ordering::Equal {
-            return res;
-        }
-
-        let first_args = first
-            .args
-            .iter()
-            .filter(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
-            .collect::<Vec<_>>();
-        let second_args = second
-            .args
-            .iter()
-            .filter(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
-            .collect::<Vec<_>>();
-
-        for zipped_args in first_args.iter().zip(&second_args) {
-            match zipped_args {
-                (syn::GenericArgument::AssocType(_), _)
-                | (_, syn::GenericArgument::AssocType(_)) => unreachable!(),
-                _ => {
-                    // TODO
-                    //first.cmp(second),
-                    unimplemented!("AngleBracketedGenericArguments ordering not implemented yet")
-                }
-            }
-        }
-
-        if first_args.len() < second_args.len() {
-            return Ordering::Less;
-        }
-        if first_args.len() > second_args.len() {
-            return Ordering::Greater;
-        }
-        Ordering::Equal
-    }
-
-    impl PartialOrd for TraitBound<'_> {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-    impl Ord for TraitBound<'_> {
-        fn cmp(&self, other: &Self) -> Ordering {
-            let res = cmp_colons(self.0.leading_colon, other.0.leading_colon);
-            if res != Ordering::Equal {
-                return res;
-            }
-
-            let mut first_iter = self.0.segments.iter().rev();
-            let mut second_iter = other.0.segments.iter().rev();
-
-            let first_elem = first_iter.next().unwrap();
-            let second_elem = second_iter.next().unwrap();
-
-            let res = first_iter
-                .rev()
-                .map(|seg| &seg.ident)
-                .cmp(second_iter.rev().map(|seg| &seg.ident));
-            if res != Ordering::Equal {
-                return res;
-            }
-
-            let res = first_elem.ident.cmp(&second_elem.ident);
-            if res != Ordering::Equal {
-                return res;
-            }
-
-            match (&first_elem.arguments, &second_elem.arguments) {
-                (
-                    syn::PathArguments::AngleBracketed(first_args),
-                    syn::PathArguments::AngleBracketed(second_args),
-                ) => cmp_angle_bracketed_generic_arguments(first_args, second_args),
-                (
-                    syn::PathArguments::Parenthesized(_first_args),
-                    syn::PathArguments::Parenthesized(_second_args),
-                ) => {
-                    unimplemented!("Parenthesized ordering not implemented yet")
-                }
-                (syn::PathArguments::None, _) => Ordering::Less,
-                (_, syn::PathArguments::None) => Ordering::Greater,
-                (syn::PathArguments::AngleBracketed(_), _) => Ordering::Less,
-                (_, syn::PathArguments::AngleBracketed(_)) => Ordering::Greater,
-            }
-        }
-    }
-}
-
 struct AssocBounds<'ast> {
-    /// Ordered collection of assoc bound idents
+    /// Collection of assoc bound idents
     type_param_idents: Vec<AssocBoundIdent<'ast>>,
     /// Assoc types params for every implementation
     type_params: Vec<FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
@@ -265,7 +157,7 @@ struct AssocBounds<'ast> {
 
 impl<'ast> AssocBounds<'ast> {
     fn find(impls: &'ast [ItemImpl]) -> Self {
-        let (mut type_param_idents, mut type_params) = (BTreeSet::new(), Vec::new());
+        let (mut type_param_idents, mut type_params) = (FxHashSet::default(), Vec::new());
 
         for impl_ in impls {
             let mut visitor = AssocBoundsVisitor::new();
@@ -277,7 +169,6 @@ impl<'ast> AssocBounds<'ast> {
         }
 
         AssocBounds {
-            // Collect all type param assoc bounds into a sorted list
             type_param_idents: type_param_idents.into_iter().collect(),
             type_params,
         }
@@ -290,8 +181,8 @@ struct AssocBoundsVisitor<'ast> {
     /// Trait bound currently being visited
     curr_trait_bound: Option<TraitBound<'ast>>,
 
-    /// Ordered set of associated bound idents
-    type_param_idents: BTreeSet<AssocBoundIdent<'ast>>,
+    /// Collection of associated bound idents
+    type_param_idents: FxHashSet<AssocBoundIdent<'ast>>,
     /// Collection of all associated type param bounds
     type_params: FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>,
 }
@@ -302,7 +193,7 @@ impl<'ast> AssocBoundsVisitor<'ast> {
             curr_type_param: None,
             curr_trait_bound: None,
 
-            type_param_idents: BTreeSet::new(),
+            type_param_idents: FxHashSet::default(),
             type_params: FxHashMap::default(),
         }
     }
