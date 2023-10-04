@@ -22,7 +22,7 @@ type SelfType = syn::Type;
 #[derive(Debug, PartialEq, Eq)]
 struct ItemImpls {
     /// Definition of the main trait
-    trait_: Option<ItemTrait>,
+    item_trait_: Option<ItemTrait>,
     /// impls map as in: (self type -> ItemImpl)
     item_impls: FxHashMap<SelfType, Vec<ItemImpl>>,
 }
@@ -278,7 +278,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut main_trait_impl = None;
     let mut item_impls = Vec::new();
 
-    let main_trait = impls.trait_;
+    let main_trait = impls.item_trait_;
     for (_, per_self_ty_impls) in impls.item_impls {
         // TODO: Assoc bounds are computed multiple times
         helper_traits.push(helper_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
@@ -347,7 +347,10 @@ impl Parse for ItemImpls {
                 .push(item);
         }
 
-        Ok(ItemImpls { trait_, item_impls })
+        Ok(ItemImpls {
+            item_trait_: trait_,
+            item_impls,
+        })
     }
 }
 
@@ -374,7 +377,7 @@ mod helper_trait {
                     helper_trait
                         .generics
                         .params
-                        .push(syn::parse_quote!(#type_param_ident));
+                        .push(syn::parse_quote!(#type_param_ident: ?Sized));
                 });
 
             return Some(quote!(#helper_trait));
@@ -386,7 +389,7 @@ mod helper_trait {
                     let helper_trait_ident = gen_ident(&last_seg.ident);
 
                     return Some(quote! {
-                        pub trait #helper_trait_ident<#(#type_param_idents),*> {
+                        pub trait #helper_trait_ident<#(#type_param_idents: ?Sized),*> {
                             #(#items)*
                         }
                     });

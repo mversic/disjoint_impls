@@ -34,13 +34,10 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImp
     )?;
 
     let ItemImpl {
-        attrs,
         defaultness,
         unsafety,
-        mut generics,
         trait_,
         self_ty,
-        mut items,
         ..
     } = example_impl;
 
@@ -51,11 +48,18 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImp
     let mut generics_resolver =
         GenericsResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
 
+    let attrs = main_trait
+        .map(|trait_| &trait_.attrs)
+        .unwrap_or(&example_impl.attrs);
+    let mut generics = example_impl.generics;
+    let mut items = example_impl.items;
+
     generics_resolver.visit_generics_mut(&mut generics);
     let trait_ = trait_.as_ref().map(|trait_| &trait_.1);
 
     let mut impl_item_resolver =
         ImplItemResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
+
     items
         .iter_mut()
         .for_each(|item| impl_item_resolver.visit_impl_item_mut(item));
@@ -209,7 +213,7 @@ impl VisitMut for ImplItemResolver {
             syn::FnArg::Typed(arg) => arg.pat.clone(),
         });
         node.block = syn::parse_quote!({
-            #self_as_helper_trait::#ident(#(#inputs),*, #variadic)
+            #self_as_helper_trait::#ident(#(#inputs,)* #variadic)
         });
     }
 
