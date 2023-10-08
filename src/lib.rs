@@ -1,10 +1,11 @@
 mod disjoint;
 mod main_trait;
+mod validate;
 
 use param::ParamResolver;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::{abort, proc_macro_error};
+use proc_macro_error::{abort, proc_macro_error, OptionExt};
 use quote::{format_ident, quote};
 use rustc_hash::{FxHashMap, FxHashSet};
 use syn::visit::{visit_predicate_type, visit_trait_bound, visit_type_param, Visit};
@@ -21,7 +22,8 @@ type SelfType = syn::Type;
 /// Trait definition can be absent if dealing with inherent impls.
 #[derive(Debug, PartialEq, Eq)]
 struct ItemImpls {
-    /// Definition of the main trait
+    /// Definition of the main trait.
+    /// [`None`] for inherent impl blocks.
     item_trait_: Option<ItemTrait>,
     /// impls map as in: (self type -> ItemImpl)
     item_impls: FxHashMap<SelfType, Vec<ItemImpl>>,
@@ -302,44 +304,15 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
 impl Parse for ItemImpls {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
         let mut trait_ = input.parse::<ItemTrait>().ok();
+
         trait_
             .as_mut()
             .map(ParamResolver::resolve_non_predicate_params);
 
-        let mut prev_trait = None;
         let mut item_impls = FxHashMap::default();
-        let trait_ident = trait_.as_ref().map(|trait_| &trait_.ident);
         while let Ok(mut item) = input.parse::<ItemImpl>() {
-            if trait_.is_none() && item.trait_.is_some() {
-                abort!(trait_, "Trait definition missing");
-            }
-            if trait_.is_some() && item.trait_.is_none() {
-                abort!(trait_, "Trait definition given but found inherent impl");
-            }
-
-            item.resolve_non_predicate_params();
             // TODO: Resolve predicate param idents
-
-            // TODO: check that all have unsafe, default and the same set of attributes
-            // TODO: Improve this trait checking. We have to make sure that all traits
-            // have the same signature(including generics) which is consistent with trait definition
-            // Maybe we don't have to check they are consistent
-            let kita = item.trait_.as_ref().map(|trait_| &trait_.1);
-            if let Some(prev_trait) = &prev_trait {
-                if Some(prev_trait) != kita {
-                    abort!(kita, "Differing traits");
-                }
-            } else {
-                prev_trait = kita.cloned();
-            }
-
-            let item_trait_ident = kita
-                .and_then(|trait_| trait_.segments.last())
-                .map(|seg| &seg.ident);
-
-            if trait_ident != item_trait_ident {
-                abort!(item_trait_ident, "Doesn't match trait definition");
-            }
+            item.resolve_non_predicate_params();
 
             item_impls
                 .entry((*item.self_ty).clone())
@@ -347,10 +320,22 @@ impl Parse for ItemImpls {
                 .push(item);
         }
 
-        Ok(ItemImpls {
-            item_trait_: trait_,
+        Ok(ItemImpls::new(trait_, item_impls))
+    }
+}
+
+impl ItemImpls {
+    fn new(item_trait_: Option<ItemTrait>, item_impls: FxHashMap<SelfType, Vec<ItemImpl>>) -> Self {
+        if let Some(trait_) = &item_trait_ {
+            validate::validate_trait_impls(trait_, &item_impls);
+        } else {
+            validate::validate_inherent_impls(&item_impls);
+        }
+
+        Self {
+            item_trait_,
             item_impls,
-        })
+        }
     }
 }
 

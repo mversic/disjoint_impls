@@ -24,12 +24,10 @@ pub struct Wrapper<T>(T);
 
 disjoint_impls! {
     impl<T> Wrapper<T> where T: Dispatch<Group = GroupA> {
-        const NAME: &'static str = "Blanket A";
-        // TODO: Compare inherent impls items to make sure they have the same items
-        // const N: &'static str = "Blanket A";
+        pub const NAME: &'static str = "Blanket A";
     }
     impl<T> Wrapper<T> where T: Dispatch<Group = GroupB> {
-        const NAME: &'static str = "Blanket B";
+        pub const NAME: &'static str = "Blanket B";
     }
 }
 

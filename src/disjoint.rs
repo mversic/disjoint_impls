@@ -81,4 +81,22 @@ pub fn gen(mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
         });
 
     impls
+        .iter_mut()
+        .flat_map(|impl_| &mut impl_.items)
+        .for_each(|item| match item {
+            syn::ImplItem::Const(item) => {
+                item.vis = syn::Visibility::Inherited;
+            }
+            syn::ImplItem::Fn(item) => {
+                item.vis = syn::Visibility::Inherited;
+            }
+            syn::ImplItem::Type(item) => {
+                item.vis = syn::Visibility::Inherited;
+            }
+            syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
+            syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
+            _ => unimplemented!("Unknown item"),
+        });
+
+    impls
 }

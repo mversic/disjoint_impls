@@ -23,6 +23,10 @@ impl Dispatch for u32 {
 disjoint_impls! {
     pub trait Kita {
         const NAME: &'static str;
+
+        fn name() -> &'static str {
+            "Default blanket"
+        }
     }
 
     impl<T: Dispatch<Group = GroupA>> Kita for T {
@@ -30,6 +34,10 @@ disjoint_impls! {
     }
     impl<U: Dispatch<Group = GroupB>> Kita for U {
         const NAME: &'static str = "Blanket B";
+
+        fn name() -> &'static str {
+            "Blanket B"
+        }
     }
 }
 
@@ -62,4 +70,9 @@ fn main() {
     assert_eq!("Blanket A", Vec::<u32>::NAME);
     assert_eq!("Blanket B", u32::NAME);
     assert_eq!("Blanket B", i32::NAME);
+
+    assert_eq!("Default blanket", String::name());
+    assert_eq!("Default blanket", Vec::<u32>::name());
+    assert_eq!("Blanket B", u32::name());
+    assert_eq!("Blanket B", i32::name());
 }
