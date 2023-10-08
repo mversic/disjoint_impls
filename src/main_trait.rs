@@ -1,7 +1,7 @@
 //! Contains logic related to generating impl of the main trait
 
 use rustc_hash::FxHashSet;
-use syn::visit_mut::VisitMut;
+use syn::{parse_quote, visit_mut::VisitMut};
 
 use super::*;
 
@@ -16,30 +16,29 @@ struct ImplItemResolver {
 
 /// Generate main trait impl
 pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImpl> {
-    let Some(example_impl) = impls.get(0).cloned() else {
-        return None;
-    };
+    let example_impl = impls.get(0)?;
+    let self_ty = &example_impl.self_ty;
 
-    let helper_trait_ident = main_trait.as_ref().map_or_else(
+    let mut main_item_impl = main_trait
+        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, self_ty))
+        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl, self_ty));
+
+    let helper_trait_ident = main_item_impl.trait_.as_ref().map_or_else(
         || {
             if let syn::Type::Path(type_path) = &*example_impl.self_ty {
-                if let Some(last_seg) = type_path.path.segments.last() {
-                    return Some(helper_trait::gen_ident(&last_seg.ident));
-                }
+                return Some(helper_trait::gen_ident(
+                    &type_path.path.segments.last()?.ident,
+                ));
             }
 
             None
         },
-        |main_trait| Some(helper_trait::gen_ident(&main_trait.ident)),
+        |main_trait| {
+            Some(helper_trait::gen_ident(
+                &main_trait.1.segments.last()?.ident,
+            ))
+        },
     )?;
-
-    let ItemImpl {
-        defaultness,
-        unsafety,
-        trait_,
-        self_ty,
-        ..
-    } = example_impl;
 
     let AssocBounds {
         type_param_idents, ..
@@ -47,36 +46,108 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImp
 
     let mut generics_resolver =
         GenericsResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
-
-    let attrs = main_trait
-        .map(|trait_| &trait_.attrs)
-        .unwrap_or(&example_impl.attrs);
-    let mut generics = example_impl.generics;
-    let mut items = example_impl.items;
-
-    generics_resolver.visit_generics_mut(&mut generics);
-    let trait_ = trait_.as_ref().map(|trait_| &trait_.1);
+    main_item_impl.generics = example_impl.generics.clone();
+    generics_resolver.visit_generics_mut(&mut main_item_impl.generics);
 
     let mut impl_item_resolver =
         ImplItemResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
-
-    items
+    main_item_impl
+        .items
         .iter_mut()
         .for_each(|item| impl_item_resolver.visit_impl_item_mut(item));
 
-    let (impl_generics, _, where_clause) = generics.split_for_impl();
-    let for_ = if main_trait.is_some() {
-        quote!(for)
-    } else {
-        quote!()
-    };
+    Some(main_item_impl)
+}
 
-    Some(syn::parse_quote! {
-        #(#attrs)*
-        #defaultness #unsafety impl #impl_generics #trait_ #for_ #self_ty #where_clause {
+/// Generates main trait implementation with item values set to dummy values
+fn gen_dummy_impl_from_inherent_impl(
+    inherent_impl: &ItemImpl,
+    self_ty: &SelfType,
+) -> syn::ItemImpl {
+    let mut main_item_impl = inherent_impl.clone();
+
+    main_item_impl.attrs = Vec::new();
+    main_item_impl.self_ty = Box::new(self_ty.clone());
+    main_item_impl.items.iter_mut().for_each(|item| match item {
+        syn::ImplItem::Const(item) => {
+            item.expr = parse_quote! { DUMMY };
+        }
+        syn::ImplItem::Type(item) => {
+            item.ty = parse_quote! { DUMMY };
+        }
+        syn::ImplItem::Fn(item) => {
+            item.block = parse_quote! { DUMMY };
+        }
+        syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
+        syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
+        _ => unimplemented!("Unknown item"),
+    });
+
+    main_item_impl
+}
+
+/// Generates main trait implementation with item values set to dummy values
+fn gen_dummy_impl_from_trait_definition(
+    main_trait: &ItemTrait,
+    self_ty: &SelfType,
+) -> syn::ItemImpl {
+    let ItemTrait {
+        unsafety,
+        generics,
+        ident,
+        items,
+        ..
+    } = main_trait;
+
+    let items = items.iter().map(|item| {
+        let item: syn::ImplItem = match item {
+            syn::TraitItem::Const(item) => {
+                let syn::TraitItemConst {
+                    generics,
+                    ident,
+                    ty,
+                    ..
+                } = item;
+
+                let (_, ty_generics, where_clause) = generics.split_for_impl();
+
+                parse_quote! {
+                    const #ident #ty_generics: #ty = DUMMY #where_clause;
+                }
+            }
+            syn::TraitItem::Type(item) => {
+                let syn::TraitItemType {
+                    generics, ident, ..
+                } = item;
+
+                let (_, ty_generics, where_clause) = generics.split_for_impl();
+
+                parse_quote! {
+                    type #ident #ty_generics = DUMMY #where_clause;
+                }
+            }
+            syn::TraitItem::Fn(item) => {
+                let sig = &item.sig;
+
+                parse_quote! {
+                    #sig { /* DUMMY */ }
+                }
+            }
+            syn::TraitItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
+            syn::TraitItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
+            _ => unimplemented!("Unknown item"),
+        };
+
+        item
+    });
+
+    let (_, ty_generics, where_clause) = generics.split_for_impl();
+
+    parse_quote! {
+        #unsafety impl #ident #ty_generics for #self_ty #where_clause {
             #(#items)*
         }
-    })
+    }
 }
 
 fn gen_assoc_bounds<'a>(
@@ -162,7 +233,7 @@ impl VisitMut for GenericsResolver {
             .type_params()
             .map(|type_param| {
                 let type_param = &type_param.ident;
-                syn::parse_quote!(#type_param)
+                parse_quote!(#type_param)
             })
             .collect();
 
@@ -184,7 +255,7 @@ impl VisitMut for GenericsResolver {
 
     fn visit_where_clause_mut(&mut self, node: &mut syn::WhereClause) {
         let predicates = &self.where_clause_predicates;
-        node.predicates = syn::parse_quote! {#(#predicates),*};
+        node.predicates = parse_quote! {#(#predicates),*};
     }
 }
 
@@ -193,7 +264,7 @@ impl VisitMut for ImplItemResolver {
         let self_as_helper_trait = &self.self_as_helper_trait;
 
         let ident = &node.ident;
-        node.expr = syn::parse_quote!(
+        node.expr = parse_quote!(
             #self_as_helper_trait::#ident
         );
     }
@@ -209,10 +280,10 @@ impl VisitMut for ImplItemResolver {
         } = &node.sig;
 
         let inputs = inputs.iter().map(|input| match input {
-            syn::FnArg::Receiver(_) => syn::parse_quote!(self),
+            syn::FnArg::Receiver(_) => parse_quote!(self),
             syn::FnArg::Typed(arg) => arg.pat.clone(),
         });
-        node.block = syn::parse_quote!({
+        node.block = parse_quote!({
             #self_as_helper_trait::#ident(#(#inputs,)* #variadic)
         });
     }
@@ -221,7 +292,7 @@ impl VisitMut for ImplItemResolver {
         let self_as_helper_trait = &self.self_as_helper_trait;
 
         let ident = &node.ident;
-        node.ty = syn::parse_quote!(
+        node.ty = parse_quote!(
             #self_as_helper_trait::#ident
         );
     }

@@ -53,11 +53,11 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
         syn::ImplItem::Const(item) => {
             second_consts.insert(&item.ident, item);
         }
-        syn::ImplItem::Fn(item) => {
-            second_fns.insert(&item.sig.ident, item);
-        }
         syn::ImplItem::Type(item) => {
             second_types.insert(&item.ident, item);
+        }
+        syn::ImplItem::Fn(item) => {
+            second_fns.insert(&item.sig.ident, item);
         }
         syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
         syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
@@ -75,15 +75,15 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
                     abort!(trait_item, "Missing in one of the impls");
                 }
             }
-            syn::TraitItem::Fn(trait_item) => {
-                if second_fns.remove(&trait_item.sig.ident).is_none()
-                    && trait_item.default.is_none()
+            syn::TraitItem::Type(trait_item) => {
+                if second_types.remove(&trait_item.ident).is_none() && trait_item.default.is_none()
                 {
                     abort!(trait_item, "Missing in one of the impls");
                 }
             }
-            syn::TraitItem::Type(trait_item) => {
-                if second_types.remove(&trait_item.ident).is_none() && trait_item.default.is_none()
+            syn::TraitItem::Fn(trait_item) => {
+                if second_fns.remove(&trait_item.sig.ident).is_none()
+                    && trait_item.default.is_none()
                 {
                     abort!(trait_item, "Missing in one of the impls");
                 }
@@ -97,10 +97,10 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
     for (second_item, _) in second_consts {
         abort!(second_item, "Not found in trait definition");
     }
-    for (second_item, _) in second_fns {
+    for (second_item, _) in second_types {
         abort!(second_item, "Not found in trait definition");
     }
-    for (second_item, _) in second_types {
+    for (second_item, _) in second_fns {
         abort!(second_item, "Not found in trait definition");
     }
 }
@@ -114,11 +114,11 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
         syn::ImplItem::Const(item) => {
             second_consts.insert(&item.ident, item);
         }
-        syn::ImplItem::Fn(item) => {
-            second_fns.insert(&item.sig.ident, item);
-        }
         syn::ImplItem::Type(item) => {
             second_types.insert(&item.ident, item);
+        }
+        syn::ImplItem::Fn(item) => {
+            second_fns.insert(&item.sig.ident, item);
         }
         syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
         syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
@@ -136,13 +136,13 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
                     abort!(first_item, "Not found in one of the impls");
                 }
             }
-            syn::ImplItem::Fn(first_item) => {
-                if second_fns.remove(&first_item.sig.ident).is_none() {
+            syn::ImplItem::Type(first_item) => {
+                if second_types.remove(&first_item.ident).is_none() {
                     abort!(first_item, "Not found in one of the impls");
                 }
             }
-            syn::ImplItem::Type(first_item) => {
-                if second_types.remove(&first_item.ident).is_none() {
+            syn::ImplItem::Fn(first_item) => {
+                if second_fns.remove(&first_item.sig.ident).is_none() {
                     abort!(first_item, "Not found in one of the impls");
                 }
             }
@@ -155,10 +155,10 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
     for (second_item, _) in second_consts {
         abort!(second_item, "Not found in one of the impls");
     }
-    for (second_item, _) in second_fns {
+    for (second_item, _) in second_types {
         abort!(second_item, "Not found in one of the impls");
     }
-    for (second_item, _) in second_types {
+    for (second_item, _) in second_fns {
         abort!(second_item, "Not found in one of the impls");
     }
 }
