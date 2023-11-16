@@ -193,8 +193,11 @@ impl GenericsResolver {
                 let main_trait_generics = main_trait
                     .map(|main_trait| main_trait.generics.type_params().collect::<Vec<_>>())
                     .unwrap_or_default();
+                let main_trait_lifetimes = main_trait
+                    .map(|main_trait| main_trait.generics.lifetimes().map(|x| &x.lifetime).collect::<Vec<_>>())
+                    .unwrap_or_default();
                 let assoc_bounds = gen_assoc_bounds(type_param_idents);
-                quote! { Self: #helper_trait_ident<#(#main_trait_generics,)* #(#assoc_bounds),*> }
+                quote! { Self: #helper_trait_ident<#(#main_trait_lifetimes,)* #(#main_trait_generics,)* #(#assoc_bounds),*> }
             }))
             .collect();
 
