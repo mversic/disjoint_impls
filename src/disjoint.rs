@@ -22,7 +22,7 @@ fn update_disjoint_impl_generics(
         .collect()
 }
 
-pub fn gen(mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
+pub fn gen(mut impls: Vec<ItemImpl>, idx: usize) -> Vec<ItemImpl> {
     let AssocBounds {
         type_param_idents,
         type_params,
@@ -41,11 +41,11 @@ pub fn gen(mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
     impls.iter_mut().for_each(|impl_| {
         if let Some((_, trait_, _)) = impl_.trait_.as_mut() {
             if let Some(last_seg) = trait_.segments.last_mut() {
-                last_seg.ident = helper_trait::gen_ident(&last_seg.ident);
+                last_seg.ident = helper_trait::gen_ident(&last_seg.ident, idx);
             }
         } else if let syn::Type::Path(type_path) = &*impl_.self_ty {
             if let Some(last_seg) = type_path.path.segments.last() {
-                let helper_trait_ident = helper_trait::gen_ident(&last_seg.ident);
+                let helper_trait_ident = helper_trait::gen_ident(&last_seg.ident, idx);
                 impl_.trait_ = Some((None, parse_quote!(#helper_trait_ident), parse_quote![for]));
             }
         }

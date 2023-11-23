@@ -24,33 +24,69 @@ impl Dispatch for i32 {
     type Group = GroupB;
 }
 
+// Basic example
 disjoint_impls! {
-    pub trait Kita {
-        const NAME: &'static str;
+    pub trait BasicKita {
+        const BASIC_NAME: &'static str;
 
-        fn name() -> &'static str {
+        fn basic_name() -> &'static str {
             "Default blanket"
         }
     }
 
-    impl<T: Dispatch<Group = GroupA>> Kita for T {
-        const NAME: &'static str = "Blanket A";
+    impl<T: Dispatch<Group = GroupA>> BasicKita for T {
+        const BASIC_NAME: &'static str = "Blanket A";
     }
-    impl<U: Dispatch<Group = GroupB>> Kita for U {
-        const NAME: &'static str = "Blanket B";
+    impl<U: Dispatch<Group = GroupB>> BasicKita for U {
+        const BASIC_NAME: &'static str = "Blanket B";
 
-        fn name() -> &'static str {
+        fn basic_name() -> &'static str {
             "Blanket B"
         }
     }
 }
 
-fn main() {
-    assert_eq!("Blanket A", String::NAME);
-    assert_eq!("Blanket B", i32::NAME);
+// Complex example
+disjoint_impls! {
+    pub trait ComplexKita {
+        const COMPLEX_NAME: &'static str;
+    }
 
-    assert_eq!("Default blanket", String::name());
-    assert_eq!("Blanket B", i32::name());
+    impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> ComplexKita for (T, U) {
+        const COMPLEX_NAME: &'static str = "Blanket AA";
+    }
+    impl<U, T> ComplexKita for (U, T)
+    where
+        U: Dispatch<Group = GroupA>,
+        T: Dispatch<Group = GroupB>
+    {
+        const COMPLEX_NAME: &'static str = "Blanket AB";
+    }
+    impl<T: Dispatch<Group = GroupB>, U> ComplexKita for (T, U) {
+        const COMPLEX_NAME: &'static str = "Blanket B*";
+    }
+
+    impl<T: Dispatch<Group = GroupA>> ComplexKita for T {
+        const COMPLEX_NAME: &'static str = "Blanket A";
+    }
+    impl<U: Dispatch<Group = GroupB>> ComplexKita for U {
+        const COMPLEX_NAME: &'static str = "Blanket B";
+    }
+}
+
+fn main() {
+    assert_eq!("Blanket A", String::BASIC_NAME);
+    assert_eq!("Blanket B", i32::BASIC_NAME);
+
+    assert_eq!("Default blanket", String::basic_name());
+    assert_eq!("Blanket B", i32::basic_name());
+
+    assert_eq!("Blanket A", String::COMPLEX_NAME);
+    assert_eq!("Blanket B", i32::COMPLEX_NAME);
+
+    assert_eq!("Blanket AA", <(String, String)>::COMPLEX_NAME);
+    assert_eq!("Blanket AB", <(String, i32)>::COMPLEX_NAME);
+    assert_eq!("Blanket B*", <(i32, String)>::COMPLEX_NAME);
 }
 ```
 

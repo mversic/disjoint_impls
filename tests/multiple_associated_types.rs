@@ -48,22 +48,22 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T0: ?Sized, T1: ?Sized> {
+    trait _Kita0<T0: ?Sized, T1: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<T0: Dispatch<Group1 = GroupA, Group2 = GroupA>> _Kita<GroupA, GroupA> for T0 {
+    impl<T0: Dispatch<Group1 = GroupA, Group2 = GroupA>> _Kita0<GroupA, GroupA> for T0 {
         const NAME: &'static str = "Blanket AA";
     }
-    impl<T0: Dispatch<Group1 = GroupA, Group2 = GroupB>> _Kita<GroupA, GroupB> for T0 {
+    impl<T0: Dispatch<Group1 = GroupA, Group2 = GroupB>> _Kita0<GroupA, GroupB> for T0 {
         const NAME: &'static str = "Blanket AB";
     }
-    impl<T0: Dispatch<Group1 = GroupB>, T1> _Kita<GroupB, T1> for T0 {
+    impl<T0: Dispatch<Group1 = GroupB>, T1> _Kita0<GroupB, T1> for T0 {
         const NAME: &'static str = "Blanket B*";
     }
 
-    impl<T0> Kita for T0 where T0: Dispatch, Self: _Kita<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2> {
-        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2>>::NAME;
+    impl<T0> Kita for T0 where T0: Dispatch, Self: _Kita0<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2> {
+        const NAME: &'static str = <Self as _Kita0<<T0 as Dispatch>::Group1, <T0 as Dispatch>::Group2>>::NAME;
     }
 };
 */

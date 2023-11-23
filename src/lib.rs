@@ -256,33 +256,69 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
 ///     type Group = GroupB;
 /// }
 ///
+/// // Basic example
 /// disjoint_impls! {
-///     pub trait Kita {
-///         const NAME: &'static str;
+///     pub trait BasicKita {
+///         const BASIC_NAME: &'static str;
 ///
-///         fn name() -> &'static str {
+///         fn basic_name() -> &'static str {
 ///             "Default blanket"
 ///         }
 ///     }
 ///
-///     impl<T: Dispatch<Group = GroupA>> Kita for T {
-///         const NAME: &'static str = "Blanket A";
+///     impl<T: Dispatch<Group = GroupA>> BasicKita for T {
+///         const BASIC_NAME: &'static str = "Blanket A";
 ///     }
-///     impl<U: Dispatch<Group = GroupB>> Kita for U {
-///         const NAME: &'static str = "Blanket B";
+///     impl<U: Dispatch<Group = GroupB>> BasicKita for U {
+///         const BASIC_NAME: &'static str = "Blanket B";
 ///
-///         fn name() -> &'static str {
+///         fn basic_name() -> &'static str {
 ///             "Blanket B"
 ///         }
 ///     }
 /// }
 ///
-/// fn main() {
-///     assert_eq!("Blanket A", String::NAME);
-///     assert_eq!("Blanket B", i32::NAME);
+/// // Complex example
+/// disjoint_impls! {
+///     pub trait ComplexKita {
+///         const COMPLEX_NAME: &'static str;
+///     }
 ///
-///     assert_eq!("Default blanket", String::name());
-///     assert_eq!("Blanket B", i32::name());
+///     impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> ComplexKita for (T, U) {
+///         const COMPLEX_NAME: &'static str = "Blanket AA";
+///     }
+///     impl<U, T> ComplexKita for (U, T)
+///     where
+///         U: Dispatch<Group = GroupA>,
+///         T: Dispatch<Group = GroupB>
+///     {
+///         const COMPLEX_NAME: &'static str = "Blanket AB";
+///     }
+///     impl<T: Dispatch<Group = GroupB>, U> ComplexKita for (T, U) {
+///         const COMPLEX_NAME: &'static str = "Blanket B*";
+///     }
+///
+///     impl<T: Dispatch<Group = GroupA>> ComplexKita for T {
+///         const COMPLEX_NAME: &'static str = "Blanket A";
+///     }
+///     impl<U: Dispatch<Group = GroupB>> ComplexKita for U {
+///         const COMPLEX_NAME: &'static str = "Blanket B";
+///     }
+/// }
+///
+/// fn main() {
+///     assert_eq!("Blanket A", String::BASIC_NAME);
+///     assert_eq!("Blanket B", i32::BASIC_NAME);
+///
+///     assert_eq!("Default blanket", String::basic_name());
+///     assert_eq!("Blanket B", i32::basic_name());
+///
+///     assert_eq!("Blanket A", String::COMPLEX_NAME);
+///     assert_eq!("Blanket B", i32::COMPLEX_NAME);
+///
+///     assert_eq!("Blanket AA", <(String, String)>::COMPLEX_NAME);
+///     assert_eq!("Blanket AB", <(String, i32)>::COMPLEX_NAME);
+///     assert_eq!("Blanket B*", <(i32, String)>::COMPLEX_NAME);
 /// }
 /// ```
 ///
@@ -293,15 +329,23 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let impls: ItemImpls = parse_macro_input!(input);
 
     let mut helper_traits = Vec::new();
-    let mut main_trait_impl = None;
+    let mut main_trait_impls = Vec::new();
     let mut item_impls = Vec::new();
 
     let main_trait = impls.item_trait_;
-    for (_, per_self_ty_impls) in impls.item_impls {
+    for (idx, (_, per_self_ty_impls)) in impls.item_impls.into_iter().enumerate() {
         // TODO: Assoc bounds are computed multiple times
-        helper_traits.push(helper_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
-        main_trait_impl = Some(main_trait::gen(main_trait.as_ref(), &per_self_ty_impls));
-        item_impls.extend(disjoint::gen(per_self_ty_impls));
+        helper_traits.push(helper_trait::gen(
+            main_trait.as_ref(),
+            &per_self_ty_impls,
+            idx,
+        ));
+        main_trait_impls.push(Some(main_trait::gen(
+            main_trait.as_ref(),
+            &per_self_ty_impls,
+            idx,
+        )));
+        item_impls.extend(disjoint::gen(per_self_ty_impls, idx));
     }
 
     quote! {
@@ -310,8 +354,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
         const _: () = {
             #( #helper_traits )*
             #( #item_impls )*
-
-            #main_trait_impl
+            #( #main_trait_impls )*
         };
     }
     .into()
@@ -363,13 +406,17 @@ mod helper_trait {
     /// Helper trait contains all items of the main trait but is parametrized with
     /// type parameters corresponding to a minimal set of associated bounds
     /// required to uniquely identify all of the disjoint impls
-    pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<TokenStream2> {
+    pub fn gen(
+        main_trait: Option<&ItemTrait>,
+        impls: &[ItemImpl],
+        idx: usize,
+    ) -> Option<TokenStream2> {
         let assoc_type_param_count = AssocBounds::find(impls).type_param_idents.len();
         let type_param_idents = (0..assoc_type_param_count).map(param::gen_indexed_type_param_name);
 
         if let Some(mut helper_trait) = main_trait.cloned() {
             helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));
-            helper_trait.ident = gen_ident(&helper_trait.ident);
+            helper_trait.ident = gen_ident(&helper_trait.ident, idx);
             let start_idx = helper_trait.generics.type_params().count();
 
             (start_idx..(assoc_type_param_count + start_idx))
@@ -387,7 +434,7 @@ mod helper_trait {
 
             if let syn::Type::Path(type_path) = &*inherent_impl.self_ty {
                 if let Some(last_seg) = type_path.path.segments.last() {
-                    let helper_trait_ident = gen_ident(&last_seg.ident);
+                    let helper_trait_ident = gen_ident(&last_seg.ident, idx);
 
                     return Some(quote! {
                         pub trait #helper_trait_ident<#(#type_param_idents: ?Sized),*> {
@@ -448,8 +495,8 @@ mod helper_trait {
     }
 
     /// Generate identifier of helper trait
-    pub fn gen_ident(ident: &syn::Ident) -> syn::Ident {
-        format_ident!("_{}", &ident)
+    pub fn gen_ident(ident: &syn::Ident, idx: usize) -> syn::Ident {
+        format_ident!("_{}{}", ident, idx)
     }
 }
 

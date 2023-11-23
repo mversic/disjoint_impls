@@ -33,19 +33,19 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    trait _Wrapper<T0: ?Sized> {
+    trait _Wrapper0<T0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<T0> _Wrapper<GroupA> for Wrapper<T0> where T0: Dispatch<Group = GroupA> {
+    impl<T0> _Wrapper0<GroupA> for Wrapper<T0> where T0: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T0> _Wrapper<GroupB> for Wrapper<T0> where T0: Dispatch<Group = GroupB> {
+    impl<T0> _Wrapper0<GroupB> for Wrapper<T0> where T0: Dispatch<Group = GroupB> {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<T0> Wrapper<T0> where T0: Dispatch, Self: _Wrapper<<T0 as Dispatch>::Group> {
-        const NAME: &'static str = <Self as _Wrapper<<T0 as Dispatch>::Group>>::NAME;
+    impl<T0> Wrapper<T0> where T0: Dispatch, Self: _Wrapper0<<T0 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Wrapper0<<T0 as Dispatch>::Group>>::NAME;
     }
 };
 */

@@ -15,7 +15,7 @@ struct ImplItemResolver {
 }
 
 /// Generate main trait impl
-pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImpl> {
+pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl], idx: usize) -> Option<ItemImpl> {
     let example_impl = impls.get(0)?;
     let self_ty = &example_impl.self_ty;
 
@@ -28,6 +28,7 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImp
             if let syn::Type::Path(type_path) = &*example_impl.self_ty {
                 return Some(helper_trait::gen_ident(
                     &type_path.path.segments.last()?.ident,
+                    idx,
                 ));
             }
 
@@ -36,6 +37,7 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl]) -> Option<ItemImp
         |main_trait| {
             Some(helper_trait::gen_ident(
                 &main_trait.1.segments.last()?.ident,
+                idx,
             ))
         },
     )?;
