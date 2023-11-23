@@ -39,7 +39,7 @@ pub trait Kita<T0> {
 }
 
 const _: () = {
-    trait _Kita<T0, T1> {
+    trait _Kita<T0, T1: ?Sized> {
         const NAME: &'static str;
     }
 
@@ -57,7 +57,7 @@ const _: () = {
 */
 
 #[test]
-fn main() {
+fn extra_parameter() {
     assert_eq!("Blanket A", <String as Kita<GroupB>>::NAME);
     assert_eq!("Blanket A", <Vec::<u32> as Kita<GroupA>>::NAME);
     assert_eq!("Blanket B", <u32 as Kita<String>>::NAME);

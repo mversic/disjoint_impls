@@ -39,7 +39,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T0> {
+    trait _Kita<T0: ?Sized> {
         const NAME: &'static str;
     }
 
@@ -57,7 +57,7 @@ const _: () = {
 */
 
 #[test]
-fn main() {
+fn blanket_for_derivative_type() {
     assert_eq!("Blanket A", Option::<String>::NAME);
     assert_eq!("Blanket A", Option::<Vec::<u32>>::NAME);
     assert_eq!("Blanket B", Option::<u32>::NAME);

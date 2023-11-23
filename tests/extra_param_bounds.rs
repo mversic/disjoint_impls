@@ -46,7 +46,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T0> {
+    trait _Kita<T0: ?Sized> {
         const NAME: &'static str;
     }
 
@@ -64,7 +64,7 @@ const _: () = {
 */
 
 #[test]
-fn main() {
+fn extra_param_bounds() {
     assert_eq!("Blanket A", String::NAME);
     assert_eq!("Blanket A", Vec::<u32>::NAME);
     assert_eq!("Blanket B", u32::NAME);

@@ -33,7 +33,7 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    trait _Wrapper<T0> {
+    trait _Wrapper<T0: ?Sized> {
         const NAME: &'static str;
     }
 
@@ -51,7 +51,7 @@ const _: () = {
 */
 
 #[test]
-fn main() {
+fn disjoint_inherent_impl() {
     assert_eq!("Blanket A", <Wrapper<String>>::NAME);
     assert_eq!("Blanket A", <Wrapper<Vec::<u32>>>::NAME);
     assert_eq!("Blanket B", <Wrapper<u32>>::NAME);

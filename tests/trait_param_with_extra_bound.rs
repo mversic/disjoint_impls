@@ -43,14 +43,14 @@ pub trait Kita<T0> {
 }
 
 const _: () = {
-    trait _Kita<T0, T1> {
+    trait _Kita<T0, T1: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<T0: Dispatch<Group = GroupA> + A, T1> Kita<T0, GroupA> for T1 {
+    impl<T0: Dispatch<Group = GroupA> + A, T1> _Kita<T0, GroupA> for T1 {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T0: Dispatch<Group = GroupB>, T1> Kita<GroupB> for T1 {
+    impl<T0: Dispatch<Group = GroupB>, T1> _Kita<T0, GroupB> for T1 {
         const NAME: &'static str = "Blanket B";
     }
 
@@ -61,7 +61,7 @@ const _: () = {
 */
 
 #[test]
-fn main() {
+fn trait_param_with_extra_bound() {
     assert_eq!("Blanket A", <u32 as Kita<String>>::NAME);
     assert_eq!("Blanket A", <u32 as Kita<Vec<String>>>::NAME);
     assert_eq!("Blanket B", <u32 as Kita<u32>>::NAME);

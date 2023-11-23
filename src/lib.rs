@@ -259,6 +259,10 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
 /// disjoint_impls! {
 ///     pub trait Kita {
 ///         const NAME: &'static str;
+///
+///         fn name() -> &'static str {
+///             "Default blanket"
+///         }
 ///     }
 ///
 ///     impl<T: Dispatch<Group = GroupA>> Kita for T {
@@ -266,7 +270,19 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
 ///     }
 ///     impl<U: Dispatch<Group = GroupB>> Kita for U {
 ///         const NAME: &'static str = "Blanket B";
+///
+///         fn name() -> &'static str {
+///             "Blanket B"
+///         }
 ///     }
+/// }
+///
+/// fn main() {
+///     assert_eq!("Blanket A", String::NAME);
+///     assert_eq!("Blanket B", i32::NAME);
+///
+///     assert_eq!("Default blanket", String::name());
+///     assert_eq!("Blanket B", i32::name());
 /// }
 /// ```
 ///

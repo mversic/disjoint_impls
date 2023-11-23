@@ -39,14 +39,14 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T0> {
+    trait _Kita<T0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<T0> _Kita<GroupA> for T0 where Option<T0>: Dispatch<Group = GroupA>{
+    impl<T0> _Kita<GroupA> for T0 where Option<T0>: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T0> _Kita<GroupB> for T0 where Option<T0>: Dispatch<Group = GroupB>{
+    impl<T0> _Kita<GroupB> for T0 where Option<T0>: Dispatch<Group = GroupB> {
         const NAME: &'static str = "Blanket B";
     }
 
@@ -56,7 +56,8 @@ const _: () = {
 };
 */
 
-fn main() {
+#[test]
+fn composite_where_clause() {
     assert_eq!("Blanket A", <String as Kita>::NAME);
     assert_eq!("Blanket A", <Vec::<u32> as Kita>::NAME);
     assert_eq!("Blanket B", <u32 as Kita>::NAME);

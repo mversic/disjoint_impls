@@ -58,7 +58,7 @@ pub trait Kita {
 }
 
 const _: () = {
-    trait _Kita<T0, T1> {
+    trait _Kita<T0: ?Sized, T1: ?Sized> {
         const NAME: &'static str;
     }
 
@@ -79,7 +79,7 @@ const _: () = {
 */
 
 #[test]
-fn main() {
+fn multiple_dispatch_traits() {
     assert_eq!("Blanket AA", String::NAME);
     assert_eq!("Blanket AB", Vec::<u32>::NAME);
     assert_eq!("Blanket B*", u32::NAME);

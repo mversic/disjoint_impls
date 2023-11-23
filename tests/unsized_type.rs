@@ -44,29 +44,29 @@ pub trait Kita {
 }
 const _: () = {
     // NOTE: Marker types are not used so they can always be ?Sized
-    pub trait _Kita<_TŠČ0: ?Sized> {
+    pub trait _Kita<T0: ?Sized> {
         fn kita(&self) -> String;
     }
-    impl<_TŠČ0: Dispatch<Group = GroupA>> _Kita<GroupA> for _TŠČ0 {
+    impl<T0: Dispatch<Group = GroupA>> _Kita<GroupA> for T0 {
         fn kita(&self) -> String {
             "Blanket A".to_owned()
         }
     }
-    impl<_TŠČ0: Dispatch<Group = GroupB> + ?Sized> _Kita<GroupB> for _TŠČ0 {
+    impl<T0: Dispatch<Group = GroupB> + ?Sized> _Kita<GroupB> for T0 {
         fn kita(&self) -> String {
             "Blanket B".to_owned()
         }
     }
-    impl<_TŠČ0> Kita for _TŠČ0 where _TŠČ0: Dispatch, Self: _Kita<<_TŠČ0 as Dispatch>::Group> {
+    impl<T0> Kita for T0 where T0: Dispatch, Self: _Kita<<T0 as Dispatch>::Group> {
         fn kita(&self) -> String {
-            <Self as _Kita<<_TŠČ0 as Dispatch>::Group>>::kita(self)
+            <Self as _Kita<<T0 as Dispatch>::Group>>::kita(self)
         }
     }
 };
 */
 
 #[test]
-fn main() {
+fn unsized_type() {
     assert_eq!("Blanket A", String::new().kita());
     assert_eq!("Blanket A", Vec::<u8>::new().kita());
     assert_eq!("Blanket B", 0_u32.kita());

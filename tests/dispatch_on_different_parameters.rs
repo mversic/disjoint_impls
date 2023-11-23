@@ -34,27 +34,29 @@ disjoint_impls! {
 }
 
 /*
-pub trait Kita<_TŠČ0> {
+pub trait Kita<T0> {
     const NAME: &'static str;
 }
 const _: () = {
-    pub trait _Kita<T0> {
+    pub trait _Kita<T0, T1: ?Sized> {
         const NAME: &'static str;
     }
-    impl<T1> _Kita<GroupA> for T1 {
+
+    impl<T1, T0> _Kita<T0, GroupA> for T1 where T0: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T1> _Kita<GroupB> for T1 {
+    impl<T1, T0: Dispatch<Group = GroupB>> _Kita<T0, GroupB> for T1 {
         const NAME: &'static str = "Blanket B";
     }
-    impl<T1, T0> Kita<T0> for T1 where T0: Dispatch, Self: _Kita<<T0 as Dispatch>::Group> {
-        const NAME: &'static str = <Self as _Kita<<T0 as Dispatch>::Group>>::NAME;
+
+    impl<T1, T0> Kita<T0> for T1 where T0: Dispatch, Self: _Kita<T0, <T0 as Dispatch>::Group> {
+        const NAME: &'static str = <Self as _Kita<T0, <T0 as Dispatch>::Group>>::NAME;
     }
 };
 */
 
 #[test]
-fn main() {
+fn dispatch_on_different_parameters() {
     assert_eq!("Blanket A", <String as Kita<String>>::NAME);
     assert_eq!("Blanket B", <Vec::<u32> as Kita<u32>>::NAME);
     assert_eq!("Blanket B", <u32 as Kita<u32>>::NAME);
