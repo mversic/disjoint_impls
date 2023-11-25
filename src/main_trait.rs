@@ -46,9 +46,27 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl], idx: usize) -> Op
         type_param_idents, ..
     } = AssocBounds::find(impls);
 
+    let main_item_impl_type_params: FxHashSet<syn::Ident> = main_item_impl
+        .generics
+        .type_params()
+        .map(|type_param| &type_param.ident)
+        .cloned()
+        .collect();
+
+    for type_param in example_impl.generics.type_params() {
+        if !main_item_impl_type_params.contains(&type_param.ident) {
+            let mut type_param = type_param.clone();
+            type_param.bounds = syn::punctuated::Punctuated::new();
+
+            main_item_impl
+                .generics
+                .params
+                .push(type_param.into());
+        }
+    }
+
     let mut generics_resolver =
         GenericsResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
-    main_item_impl.generics = example_impl.generics.clone();
     generics_resolver.visit_generics_mut(&mut main_item_impl.generics);
 
     let mut impl_item_resolver =
@@ -143,10 +161,10 @@ fn gen_dummy_impl_from_trait_definition(
         item
     });
 
-    let (_, ty_generics, where_clause) = generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     parse_quote! {
-        #unsafety impl #ident #ty_generics for #self_ty #where_clause {
+        #unsafety impl #impl_generics #ident #ty_generics for #self_ty #where_clause {
             #(#items)*
         }
     }
@@ -185,23 +203,40 @@ impl GenericsResolver {
             .cloned()
             .collect::<FxHashSet<_>>();
 
-        let where_clause_predicates = assoc_bounds
-            .into_iter()
-            .map(|(param_ident, trait_bounds)| {
-                let trait_bounds = trait_bounds.into_iter();
-                quote! { #param_ident: #(#trait_bounds)+* }
-            })
-            .chain(core::iter::once_with(|| {
-                let main_trait_generics = main_trait
-                    .map(|main_trait| main_trait.generics.type_params().collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let main_trait_lifetimes = main_trait
-                    .map(|main_trait| main_trait.generics.lifetimes().map(|x| &x.lifetime).collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let assoc_bounds = gen_assoc_bounds(type_param_idents);
-                quote! { Self: #helper_trait_ident<#(#main_trait_lifetimes,)* #(#main_trait_generics,)* #(#assoc_bounds),*> }
-            }))
-            .collect();
+        let assoc_bound_predicates = assoc_bounds.into_iter().map(|(param_ident, trait_bounds)| {
+            let trait_bounds = trait_bounds.into_iter();
+            quote! { #param_ident: #(#trait_bounds)+* }
+        });
+        let where_clause_predicates = if let Some(main_trait) = main_trait {
+            let main_trait_predicates = main_trait
+                .generics
+                .where_clause
+                .as_ref()
+                .map(|where_clause| {
+                    where_clause
+                        .predicates
+                        .iter()
+                        .map(|predicate| quote!(#predicate))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            main_trait_predicates.into_iter().chain(
+                assoc_bound_predicates
+                .chain(core::iter::once_with(|| {
+                    let main_trait_lifetimes = main_trait.generics.lifetimes().map(|x| &x.lifetime);
+                    let main_trait_type_params = main_trait.generics.type_params().map(|type_param| &type_param.ident);
+                    let assoc_bounds = gen_assoc_bounds(type_param_idents);
+                    quote! { Self: #helper_trait_ident<#(#main_trait_lifetimes,)* #(#main_trait_type_params,)* #(#assoc_bounds),*> }
+                }))).collect()
+        } else {
+            assoc_bound_predicates
+                .chain(core::iter::once_with(|| {
+                    let assoc_bounds = gen_assoc_bounds(type_param_idents);
+                    quote! { Self: #helper_trait_ident<#(#assoc_bounds),*> }
+                }))
+                .collect()
+        };
 
         Self {
             assoc_bound_type_params,
@@ -216,14 +251,20 @@ impl ImplItemResolver {
         helper_trait_ident: &syn::Ident,
         type_param_idents: &[AssocBoundIdent],
     ) -> Self {
-        let main_trait_generics = main_trait
-            .map(|main_trait| main_trait.generics.type_params().collect::<Vec<_>>())
-            .unwrap_or_default();
         let assoc_bounds = gen_assoc_bounds(type_param_idents);
+
+        let main_trait_type_params = main_trait.map(|main_trait| {
+            let main_trait_type_params = main_trait
+                .generics
+                .type_params()
+                .map(|type_param| &type_param.ident);
+
+            quote!(#(#main_trait_type_params,)*)
+        });
 
         Self {
             self_as_helper_trait: quote! {
-                <Self as #helper_trait_ident<#(#main_trait_generics,)* #(#assoc_bounds),*>>
+                <Self as #helper_trait_ident<#main_trait_type_params #(#assoc_bounds),*>>
             },
         }
     }
@@ -232,13 +273,12 @@ impl ImplItemResolver {
 impl VisitMut for GenericsResolver {
     fn visit_generics_mut(&mut self, node: &mut syn::Generics) {
         node.make_where_clause();
-        syn::visit_mut::visit_generics_mut(self, node);
 
         let node_type_params: FxHashSet<syn::Type> = node
             .type_params()
             .map(|type_param| {
-                let type_param = &type_param.ident;
-                parse_quote!(#type_param)
+                let type_param_ident = &type_param.ident;
+                parse_quote!(#type_param_ident)
             })
             .collect();
 
@@ -252,15 +292,9 @@ impl VisitMut for GenericsResolver {
                 }
             }
         }
-    }
 
-    fn visit_type_param_mut(&mut self, node: &mut syn::TypeParam) {
-        node.bounds = syn::punctuated::Punctuated::new();
-    }
-
-    fn visit_where_clause_mut(&mut self, node: &mut syn::WhereClause) {
         let predicates = &self.where_clause_predicates;
-        node.predicates = parse_quote! {#(#predicates),*};
+        node.where_clause = parse_quote!(where #(#predicates),*);
     }
 }
 

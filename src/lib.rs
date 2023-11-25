@@ -683,12 +683,12 @@ mod param {
                     .and_modify(|param_idx| {
                         if param_idx.is_none() {
                             *param_idx = Some(self.curr_type_param_pos_idx);
-
-                            if let Some(pos_idx) = self.curr_type_param_pos_idx.checked_add(1) {
-                                self.curr_type_param_pos_idx = pos_idx;
-                            }
                         }
                     });
+
+                if let Some(pos_idx) = self.curr_type_param_pos_idx.checked_add(1) {
+                    self.curr_type_param_pos_idx = pos_idx;
+                }
             }
 
             visit_path(self, node);
