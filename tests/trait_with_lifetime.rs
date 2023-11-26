@@ -59,7 +59,7 @@ const _: () = {
 
     impl<'L0, 'L1: 'L0, T0> Kita<'L0, 'L1> for T0 where T0: Dispatch, Self: _Kita0<'L0, 'L1, <T0 as Dispatch>::Group> {
         fn get_name(&'L1 self) -> &'L0 str {
-            <Self as _Kita0<<T0 as Dispatch>::Group>>::get_name(self)
+            <Self as _Kita0<<'L0, 'L1, T0 as Dispatch>::Group>>::get_name(self)
         }
     }
 };

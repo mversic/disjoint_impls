@@ -694,6 +694,12 @@ mod param {
             visit_path(self, node);
         }
 
+        fn visit_expr(&mut self, _: &'ast syn::Expr) {
+            if let Some(curr_pos_idx) = self.curr_const_param_pos_idx.checked_add(1) {
+                self.curr_const_param_pos_idx = curr_pos_idx;
+            }
+        }
+
         fn visit_where_clause(&mut self, _node: &'ast syn::WhereClause) {}
     }
 

@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support where clause on main trait
+- Support bounds for main trait parameters
+- Support const parameters in main trait
 
 ## [0.5.0] - 2023-11-23
 

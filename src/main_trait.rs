@@ -56,12 +56,9 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl], idx: usize) -> Op
     for type_param in example_impl.generics.type_params() {
         if !main_item_impl_type_params.contains(&type_param.ident) {
             let mut type_param = type_param.clone();
-            type_param.bounds = syn::punctuated::Punctuated::new();
 
-            main_item_impl
-                .generics
-                .params
-                .push(type_param.into());
+            type_param.bounds = syn::punctuated::Punctuated::new();
+            main_item_impl.generics.params.push(type_param.into());
         }
     }
 
@@ -221,14 +218,17 @@ impl GenericsResolver {
                 })
                 .unwrap_or_default();
 
-            main_trait_predicates.into_iter().chain(
-                assoc_bound_predicates
-                .chain(core::iter::once_with(|| {
-                    let main_trait_lifetimes = main_trait.generics.lifetimes().map(|x| &x.lifetime);
-                    let main_trait_type_params = main_trait.generics.type_params().map(|type_param| &type_param.ident);
-                    let assoc_bounds = gen_assoc_bounds(type_param_idents);
-                    quote! { Self: #helper_trait_ident<#(#main_trait_lifetimes,)* #(#main_trait_type_params,)* #(#assoc_bounds),*> }
-                }))).collect()
+            main_trait_predicates
+                .into_iter()
+                .chain(assoc_bound_predicates.chain(core::iter::once_with(|| {
+                    let helper_trait_bound = gen_helper_trait_bound(
+                        Some(main_trait),
+                        helper_trait_ident,
+                        type_param_idents,
+                    );
+                    quote! { Self: #helper_trait_bound }
+                })))
+                .collect()
         } else {
             assoc_bound_predicates
                 .chain(core::iter::once_with(|| {
@@ -245,26 +245,42 @@ impl GenericsResolver {
     }
 }
 
+fn gen_helper_trait_bound(
+    main_trait: Option<&ItemTrait>,
+    helper_trait_ident: &syn::Ident,
+    type_param_idents: &[AssocBoundIdent],
+) -> TokenStream2 {
+    let assoc_bounds = gen_assoc_bounds(type_param_idents);
+
+    let main_trait_ty_generics = main_trait.map(|main_trait| {
+        let main_trait_params = main_trait.generics.params.iter().map(|param| match param {
+            syn::GenericParam::Lifetime(lifetime_param) => &lifetime_param.lifetime.ident,
+            syn::GenericParam::Type(type_param) => &type_param.ident,
+            syn::GenericParam::Const(const_param) => &const_param.ident,
+        });
+
+        quote! {
+            #(#main_trait_params,)*
+        }
+    });
+
+    quote! {
+        #helper_trait_ident<#main_trait_ty_generics #(#assoc_bounds),*>
+    }
+}
+
 impl ImplItemResolver {
     fn new(
         main_trait: Option<&ItemTrait>,
         helper_trait_ident: &syn::Ident,
         type_param_idents: &[AssocBoundIdent],
     ) -> Self {
-        let assoc_bounds = gen_assoc_bounds(type_param_idents);
-
-        let main_trait_type_params = main_trait.map(|main_trait| {
-            let main_trait_type_params = main_trait
-                .generics
-                .type_params()
-                .map(|type_param| &type_param.ident);
-
-            quote!(#(#main_trait_type_params,)*)
-        });
+        let helper_trait_bound =
+            gen_helper_trait_bound(main_trait, helper_trait_ident, type_param_idents);
 
         Self {
             self_as_helper_trait: quote! {
-                <Self as #helper_trait_ident<#main_trait_type_params #(#assoc_bounds),*>>
+                <Self as #helper_trait_bound>
             },
         }
     }
