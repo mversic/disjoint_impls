@@ -252,21 +252,17 @@ fn gen_helper_trait_bound(
 ) -> TokenStream2 {
     let assoc_bounds = gen_assoc_bounds(type_param_idents);
 
-    let main_trait_ty_generics = main_trait.map(|main_trait| {
-        let main_trait_params = main_trait.generics.params.iter().map(|param| match param {
-            syn::GenericParam::Lifetime(lifetime_param) => &lifetime_param.lifetime.ident,
-            syn::GenericParam::Type(type_param) => &type_param.ident,
-            syn::GenericParam::Const(const_param) => &const_param.ident,
+    if let Some(main_trait) = main_trait {
+        let main_trait_ty_generics = main_trait.generics.params.iter().map(|param| match param {
+            syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => quote! {#lifetime},
+            syn::GenericParam::Type(syn::TypeParam { ident, .. }) => quote! {#ident},
+            syn::GenericParam::Const(syn::ConstParam { ident, .. }) => quote! {#ident},
         });
 
-        quote! {
-            #(#main_trait_params,)*
-        }
-    });
-
-    quote! {
-        #helper_trait_ident<#main_trait_ty_generics #(#assoc_bounds),*>
+        return quote! { #helper_trait_ident<#(#main_trait_ty_generics,)* #(#assoc_bounds),*> };
     }
+
+    quote! { #helper_trait_ident<#(#assoc_bounds),*> }
 }
 
 impl ImplItemResolver {
