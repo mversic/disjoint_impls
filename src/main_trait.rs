@@ -3,6 +3,8 @@
 use rustc_hash::FxHashSet;
 use syn::{parse_quote, visit_mut::VisitMut};
 
+use crate::param::get_param_idents;
+
 use super::*;
 
 struct GenericsResolver {
@@ -17,15 +19,15 @@ struct ImplItemResolver {
 /// Generate main trait impl
 pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl], idx: usize) -> Option<ItemImpl> {
     let example_impl = impls.get(0)?;
-    let self_ty = &example_impl.self_ty;
+    let self_ty = &*example_impl.self_ty;
 
-    let mut main_item_impl = main_trait
+    let mut main_trait_impl = main_trait
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, self_ty))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl, self_ty));
 
-    let helper_trait_ident = main_item_impl.trait_.as_ref().map_or_else(
+    let helper_trait_ident = main_trait_impl.trait_.as_ref().map_or_else(
         || {
-            if let syn::Type::Path(type_path) = &*example_impl.self_ty {
+            if let syn::Type::Path(type_path) = self_ty {
                 return Some(helper_trait::gen_ident(
                     &type_path.path.segments.last()?.ident,
                     idx,
@@ -46,34 +48,53 @@ pub fn gen(main_trait: Option<&ItemTrait>, impls: &[ItemImpl], idx: usize) -> Op
         type_param_idents, ..
     } = AssocBounds::find(impls);
 
-    let main_item_impl_type_params: FxHashSet<syn::Ident> = main_item_impl
-        .generics
-        .type_params()
-        .map(|type_param| &type_param.ident)
+    let main_trait_impl_param_idents: FxHashSet<_> = get_param_idents(&main_trait_impl.generics)
         .cloned()
         .collect();
 
     for type_param in example_impl.generics.type_params() {
-        if !main_item_impl_type_params.contains(&type_param.ident) {
+        if !main_trait_impl_param_idents.contains(&type_param.ident) {
             let mut type_param = type_param.clone();
 
             type_param.bounds = syn::punctuated::Punctuated::new();
-            main_item_impl.generics.params.push(type_param.into());
+            main_trait_impl.generics.params.push(type_param.into());
+        }
+    }
+    for const_param in example_impl.generics.const_params() {
+        if !main_trait_impl_param_idents.contains(&const_param.ident) {
+            main_trait_impl.generics.params.extend(
+                example_impl
+                    .generics
+                    .const_params()
+                    .cloned()
+                    .map(syn::GenericParam::from),
+            );
+        }
+    }
+    for lifetime_param in example_impl.generics.lifetimes() {
+        if !main_trait_impl_param_idents.contains(&lifetime_param.lifetime.ident) {
+            main_trait_impl.generics.params.extend(
+                example_impl
+                    .generics
+                    .lifetimes()
+                    .cloned()
+                    .map(syn::GenericParam::from),
+            );
         }
     }
 
     let mut generics_resolver =
         GenericsResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
-    generics_resolver.visit_generics_mut(&mut main_item_impl.generics);
+    generics_resolver.visit_generics_mut(&mut main_trait_impl.generics);
 
     let mut impl_item_resolver =
         ImplItemResolver::new(main_trait, &helper_trait_ident, &type_param_idents);
-    main_item_impl
+    main_trait_impl
         .items
         .iter_mut()
         .for_each(|item| impl_item_resolver.visit_impl_item_mut(item));
 
-    Some(main_item_impl)
+    Some(main_trait_impl)
 }
 
 /// Generates main trait implementation with item values set to dummy values
@@ -81,26 +102,29 @@ fn gen_dummy_impl_from_inherent_impl(
     inherent_impl: &ItemImpl,
     self_ty: &SelfType,
 ) -> syn::ItemImpl {
-    let mut main_item_impl = inherent_impl.clone();
+    let mut main_trait_impl = inherent_impl.clone();
 
-    main_item_impl.attrs = Vec::new();
-    main_item_impl.self_ty = Box::new(self_ty.clone());
-    main_item_impl.items.iter_mut().for_each(|item| match item {
-        syn::ImplItem::Const(item) => {
-            item.expr = parse_quote! { DUMMY };
-        }
-        syn::ImplItem::Type(item) => {
-            item.ty = parse_quote! { DUMMY };
-        }
-        syn::ImplItem::Fn(item) => {
-            item.block = parse_quote! { DUMMY };
-        }
-        syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-        syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-        _ => unimplemented!("Unknown item"),
-    });
+    main_trait_impl.attrs = Vec::new();
+    main_trait_impl.self_ty = Box::new(self_ty.clone());
+    main_trait_impl
+        .items
+        .iter_mut()
+        .for_each(|item| match item {
+            syn::ImplItem::Const(item) => {
+                item.expr = parse_quote! { DUMMY };
+            }
+            syn::ImplItem::Type(item) => {
+                item.ty = parse_quote! { DUMMY };
+            }
+            syn::ImplItem::Fn(item) => {
+                item.block = parse_quote! { DUMMY };
+            }
+            syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
+            syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
+            _ => unimplemented!("Unknown item"),
+        });
 
-    main_item_impl
+    main_trait_impl
 }
 
 /// Generates main trait implementation with item values set to dummy values
@@ -226,14 +250,17 @@ impl GenericsResolver {
                         helper_trait_ident,
                         type_param_idents,
                     );
+
                     quote! { Self: #helper_trait_bound }
                 })))
                 .collect()
         } else {
             assoc_bound_predicates
                 .chain(core::iter::once_with(|| {
-                    let assoc_bounds = gen_assoc_bounds(type_param_idents);
-                    quote! { Self: #helper_trait_ident<#(#assoc_bounds),*> }
+                    let helper_trait_bound =
+                        gen_helper_trait_bound(None, helper_trait_ident, type_param_idents);
+
+                    quote! { Self: #helper_trait_bound }
                 }))
                 .collect()
         };
@@ -259,7 +286,7 @@ fn gen_helper_trait_bound(
             syn::GenericParam::Const(syn::ConstParam { ident, .. }) => quote! {#ident},
         });
 
-        return quote! { #helper_trait_ident<#(#main_trait_ty_generics,)* #(#assoc_bounds),*> };
+        return quote! { #helper_trait_ident<#(#assoc_bounds,)* #(#main_trait_ty_generics),*> };
     }
 
     quote! { #helper_trait_ident<#(#assoc_bounds),*> }

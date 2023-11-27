@@ -51,8 +51,9 @@ impl PartialEq for TraitBound<'_> {
         let mut first_iter = self.0.segments.iter().rev();
         let mut second_iter = other.0.segments.iter().rev();
 
-        let first_elem = first_iter.next().unwrap();
-        let second_elem = second_iter.next().unwrap();
+        let (Some(first_elem), Some(second_elem)) = (first_iter.next(), second_iter.next()) else {
+            return true;
+        };
 
         if first_elem.ident != second_elem.ident || !first_iter.eq(second_iter) {
             return false;
@@ -339,11 +340,11 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
             &per_self_ty_impls,
             idx,
         ));
-        main_trait_impls.push(Some(main_trait::gen(
+        main_trait_impls.push(main_trait::gen(
             main_trait.as_ref(),
             &per_self_ty_impls,
             idx,
-        )));
+        ));
         item_impls.extend(disjoint::gen(per_self_ty_impls, idx));
     }
 
@@ -414,14 +415,11 @@ mod helper_trait {
             helper_trait.ident = gen_ident(&helper_trait.ident, idx);
             let start_idx = helper_trait.generics.type_params().count();
 
-            (start_idx..(assoc_type_param_count + start_idx))
+            helper_trait.generics.params = (start_idx..(assoc_type_param_count + start_idx))
                 .map(param::gen_indexed_param_name)
-                .for_each(|type_param_ident| {
-                    helper_trait
-                        .generics
-                        .params
-                        .push(syn::parse_quote!(#type_param_ident: ?Sized));
-                });
+                .map(|type_param_ident| syn::parse_quote!(#type_param_ident: ?Sized))
+                .chain(helper_trait.generics.params)
+                .collect();
 
             return Some(quote!(#helper_trait));
         } else if let Some(inherent_impl) = impls.get(0) {
@@ -588,7 +586,9 @@ mod param {
         }
 
         fn visit_lifetime(&mut self, node: &'ast syn::Lifetime) {
-            *self.params.get_mut(&node.ident).unwrap() = Some(self.curr_param_pos_idx);
+            if let Some(lifetime) = self.params.get_mut(&node.ident) {
+                *lifetime = Some(self.curr_param_pos_idx);
+            }
 
             if let Some(curr_pos_idx) = self.curr_param_pos_idx.checked_add(1) {
                 self.curr_param_pos_idx = curr_pos_idx;
@@ -611,8 +611,10 @@ mod param {
             syn::visit::visit_path(self, node);
         }
 
-        fn visit_expr(&mut self, _: &'ast syn::Expr) {
-            if let Some(curr_pos_idx) = self.curr_param_pos_idx.checked_add(1) {
+        fn visit_expr(&mut self, node: &'ast syn::Expr) {
+            if let syn::Expr::Path(path) = node {
+                syn::visit::visit_expr_path(self, path);
+            } else if let Some(curr_pos_idx) = self.curr_param_pos_idx.checked_add(1) {
                 self.curr_param_pos_idx = curr_pos_idx;
             }
         }
@@ -730,7 +732,7 @@ mod param {
     //    }
     //}
 
-    fn get_param_idents(generics: &syn::Generics) -> impl Iterator<Item = &syn::Ident> {
+    pub fn get_param_idents(generics: &syn::Generics) -> impl Iterator<Item = &syn::Ident> {
         generics.params.iter().map(|param| match param {
             syn::GenericParam::Lifetime(lifetime_param) => &lifetime_param.lifetime.ident,
             syn::GenericParam::Type(type_param) => &type_param.ident,

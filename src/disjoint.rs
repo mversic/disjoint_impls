@@ -66,11 +66,11 @@ pub fn gen(mut impls: Vec<ItemImpl>, idx: usize) -> Vec<ItemImpl> {
                             )
                         }
                         syn::PathArguments::AngleBracketed(bracketed) => {
-                            bracketed.args.extend(
-                                params.into_iter().map::<syn::GenericArgument, _>(
-                                    |param| syn::parse_quote!(#param),
-                                ),
-                            );
+                            bracketed.args = params
+                                .into_iter()
+                                .map::<syn::GenericArgument, _>(|param| syn::parse_quote!(#param))
+                                .chain(core::mem::take(&mut bracketed.args))
+                                .collect();
                         }
                         syn::PathArguments::Parenthesized(_) => {
                             unreachable!("Not a valid trait name")

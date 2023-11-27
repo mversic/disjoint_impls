@@ -42,24 +42,24 @@ disjoint_impls! {
 pub trait Kita {
     fn kita(&self) -> String;
 }
+
 const _: () = {
-    // NOTE: Marker types are not used so they can always be ?Sized
-    pub trait _Kita0<T0: ?Sized> {
+    pub trait _Kita0<_0: ?Sized> {
         fn kita(&self) -> String;
     }
-    impl<T0: Dispatch<Group = GroupA>> _Kita0<GroupA> for T0 {
+    impl<_0: Dispatch<Group = GroupA>> _Kita0<GroupA> for _0 {
         fn kita(&self) -> String {
             "Blanket A".to_owned()
         }
     }
-    impl<T0: Dispatch<Group = GroupB> + ?Sized> _Kita0<GroupB> for T0 {
+    impl<_0: Dispatch<Group = GroupB> + ?Sized> _Kita0<GroupB> for _0 {
         fn kita(&self) -> String {
             "Blanket B".to_owned()
         }
     }
-    impl<T0> Kita for T0 where T0: Dispatch, Self: _Kita0<<T0 as Dispatch>::Group> {
+    impl<_0> Kita for _0 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
         fn kita(&self) -> String {
-            <Self as _Kita0<<T0 as Dispatch>::Group>>::kita(self)
+            <Self as _Kita0<<_0 as Dispatch>::Group>>::kita(self)
         }
     }
 };

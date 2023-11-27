@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Support default generic params in main trait
 - Support bounds for main trait parameters
 - Support const parameters in main trait
 - Keep original trait param identifiers

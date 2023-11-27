@@ -38,28 +38,29 @@ disjoint_impls! {
 }
 
 /*
-pub trait Kita<'L0, 'L1: 'L0> {
-    fn get_name(&'L1 self) -> &'L0 str;
+pub trait Kita<'a, 'b: 'a> {
+    fn get_name(&'b self) -> &'a str;
 }
+
 const _: () = {
-    pub trait _Kita0<'L0, 'L1: 'L0, T0: ?Sized> {
-        fn get_name(&'L1 self) -> &'L0 str;
+    pub trait _Kita0<'a, 'b: 'a, _0: ?Sized> {
+        fn get_name(&'b self) -> &'a str;
     }
 
-    impl<'L0, 'L1: 'L0, T0: Dispatch<Group = GroupA>> _Kita0<'L0, 'L1, GroupA> for T0 {
-        fn get_name(&'L1 self) -> &'L0 str {
+    impl<'a, 'b: 'a, _2: Dispatch<Group = GroupA>> _Kita0<'a, 'b, GroupA> for _2 {
+        fn get_name(&'b self) -> &'a str {
             "Blanket A"
         }
     }
-    impl<'L0, 'L1: 'L0, T0: Dispatch<Group = GroupB>> _Kita0<'L0, 'L1, GroupB> for T0 {
-        fn get_name(&'L1 self) -> &'L0 str {
+    impl<'a, 'b: 'a, _2: Dispatch<Group = GroupB>> _Kita0<'a, 'b, GroupB> for _2 {
+        fn get_name(&'b self) -> &'a str {
             "Blanket B"
         }
     }
 
-    impl<'L0, 'L1: 'L0, T0> Kita<'L0, 'L1> for T0 where T0: Dispatch, Self: _Kita0<'L0, 'L1, <T0 as Dispatch>::Group> {
-        fn get_name(&'L1 self) -> &'L0 str {
-            <Self as _Kita0<<'L0, 'L1, T0 as Dispatch>::Group>>::get_name(self)
+    impl<'a, 'b: 'a, _2> Kita<'a, 'b> for _2 where _2: Dispatch, Self: _Kita0<'a, 'b, <_2 as Dispatch>::Group> {
+        fn get_name(&'b self) -> &'a str {
+            <Self as _Kita0<'a, 'b, <_2 as Dispatch>::Group>>::get_name(self)
         }
     }
 };

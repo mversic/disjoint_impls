@@ -31,14 +31,14 @@ disjoint_impls! {
         type Item = u32;
 
         fn kita() -> u32 {
-            0
+            1
         }
     }
-    impl<U: Dispatch<Group = GroupB>> Kita for U {
-        type Item = u16;
+    impl<U: Dispatch<Group = GroupB> + Default> Kita for U {
+        type Item = U;
 
-        fn kita() -> u16 {
-            1
+        fn kita() -> Self::Item {
+            U::default()
         }
     }
 }
@@ -49,31 +49,32 @@ pub trait Kita {
 
     fn kita() -> Self::Item;
 }
+
 const _: () = {
-    pub trait _Kita0<T0: ?Sized> {
+    pub trait _Kita0<_0: ?Sized> {
         type Item;
 
         fn kita() -> Self::Item;
     }
-    impl<T0: Dispatch<Group = GroupA>> _Kita0<GroupA> for T0 {
+    impl<_0: Dispatch<Group = GroupA>> _Kita0<GroupA> for _0 {
         type Item = u32;
 
         fn kita() -> u32 {
-            0
-        }
-    }
-    impl<T0: Dispatch<Group = GroupB>> _Kita0<GroupB> for T0 {
-        type Item = u16;
-
-        fn kita() -> u16 {
             1
         }
     }
-    impl<T0> Kita for T0 where T0: Dispatch, Self: _Kita0<<T0 as Dispatch>::Group> {
-        type Item = <Self as _Kita0<<T0 as Dispatch>::Group>>::Item;
+    impl<_0: Dispatch<Group = GroupB> + Default> _Kita0<GroupB> for _0 {
+        type Item = _0;
 
         fn kita() -> Self::Item {
-            <Self as _Kita0<<T0 as Dispatch>::Group>>::kita()
+            _0::default()
+        }
+    }
+    impl<_0> Kita for _0 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
+        type Item = <Self as _Kita0<<_0 as Dispatch>::Group>>::Item;
+
+        fn kita() -> Self::Item {
+            <Self as _Kita0<<_0 as Dispatch>::Group>>::kita()
         }
     }
 };
@@ -81,8 +82,8 @@ const _: () = {
 
 #[test]
 fn concrete_assoc_type() {
-    assert_eq!(0, String::kita());
-    assert_eq!(0, Vec::<u32>::kita());
-    assert_eq!(1, u32::kita());
-    assert_eq!(1, i32::kita());
+    assert_eq!(1, String::kita());
+    assert_eq!(1, Vec::<u32>::kita());
+    assert_eq!(0, u32::kita());
+    assert_eq!(0, i32::kita());
 }
