@@ -2,8 +2,13 @@ use super::*;
 
 // TODO: Check content of ItemImpl::items, not only idents for impls?
 
-pub fn validate_trait_impls(trait_: &ItemTrait, item_impls: &FxHashMap<SelfType, Vec<ItemImpl>>) {
-    let item_impls = item_impls.values().flatten();
+pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
+    trait_: &ItemTrait,
+    item_impls: I,
+) where
+    I::IntoIter: Clone,
+{
+    let item_impls = item_impls.into_iter();
 
     for item_impl in item_impls.clone() {
         if let Some((_, trait_path, _)) = &item_impl.trait_ {
@@ -27,8 +32,11 @@ pub fn validate_trait_impls(trait_: &ItemTrait, item_impls: &FxHashMap<SelfType,
     }
 }
 
-pub fn validate_inherent_impls(item_impls: &FxHashMap<SelfType, Vec<ItemImpl>>) {
-    let item_impls = item_impls.values().flatten();
+pub fn validate_inherent_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(item_impls: I)
+where
+    I::IntoIter: Clone,
+{
+    let item_impls = item_impls.into_iter();
 
     for item_impl in item_impls.clone() {
         if let Some((_, item_impl_trait, _)) = &item_impl.trait_ {

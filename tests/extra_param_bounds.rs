@@ -28,14 +28,14 @@ impl Dispatch for u32 {
 }
 
 disjoint_impls! {
-    pub trait Kita {
+    pub trait Kita<U> {
         const NAME: &'static str;
     }
 
-    impl<T: Dispatch<Group = GroupA> + Dispatch + A> Kita for T {
+    impl<T: Dispatch<Group = GroupA> + Dispatch + A> Kita<u32> for T {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T: Dispatch<Group = GroupB>> Kita for T where T: B + Dispatch<Group = GroupB> {
+    impl<T: Dispatch<Group = GroupB>> Kita<u32> for T where T: B + Dispatch<Group = GroupB> {
         const NAME: &'static str = "Blanket B";
     }
 }

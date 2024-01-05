@@ -14,8 +14,7 @@ use syn::{
     parse_macro_input, ItemTrait,
 };
 
-/// AST node type of self type such as `u32` in `impl Clone for u32`
-type SelfType = syn::Type;
+type ImplGroupId = (Option<syn::Path>, syn::Type);
 
 /// A collection of {Option<ItemTrait>, [`ItemImpl`]}.
 /// Trait definition can be absent if dealing with inherent impls.
@@ -24,8 +23,8 @@ struct ItemImpls {
     /// Definition of the main trait.
     /// [`None`] for inherent impl blocks.
     item_trait_: Option<ItemTrait>,
-    /// impls map as in: (self type -> ItemImpl)
-    item_impls: FxHashMap<SelfType, Vec<ItemImpl>>,
+    /// impls map as in: ((trait path, self type) -> ItemImpl)
+    item_impls: FxHashMap<ImplGroupId, Vec<ItemImpl>>,
 }
 
 /// AST node type of the trait identifier such as 'Deref<Target = u32>' in `impl<T: Deref<Target = u32>> Clone for T`.
@@ -155,10 +154,10 @@ struct AssocBounds<'ast> {
 }
 
 impl<'ast> AssocBounds<'ast> {
-    fn find(impls: &'ast [ItemImpl]) -> Self {
+    fn find(impl_group: &'ast [ItemImpl]) -> Self {
         let (mut type_param_idents, mut type_params) = (FxHashSet::default(), Vec::new());
 
-        for impl_ in impls {
+        for impl_ in impl_group {
             let mut visitor = AssocBoundsVisitor::new();
 
             visitor.visit_generics(&impl_.generics);
@@ -333,19 +332,21 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut item_impls = Vec::new();
 
     let main_trait = impls.item_trait_;
-    for (idx, (_, per_self_ty_impls)) in impls.item_impls.into_iter().enumerate() {
+    for (idx, (impl_group_id, impl_group)) in impls.item_impls.into_iter().enumerate() {
         // TODO: Assoc bounds are computed multiple times
         helper_traits.push(helper_trait::gen(
             main_trait.as_ref(),
-            &per_self_ty_impls,
+            &impl_group_id,
+            &impl_group,
             idx,
         ));
         main_trait_impls.push(main_trait::gen(
             main_trait.as_ref(),
-            &per_self_ty_impls,
+            &impl_group_id,
+            &impl_group,
             idx,
         ));
-        item_impls.extend(disjoint::gen(per_self_ty_impls, idx));
+        item_impls.extend(disjoint::gen(impl_group, idx));
     }
 
     quote! {
@@ -370,7 +371,10 @@ impl Parse for ItemImpls {
             param::resolve_non_predicate_params(&mut item, main_trait.as_ref());
 
             item_impls
-                .entry((*item.self_ty).clone())
+                .entry((
+                    item.trait_.as_ref().map(|trait_| trait_.1.clone()),
+                    (*item.self_ty).clone(),
+                ))
                 .or_insert_with(Vec::new)
                 .push(item);
         }
@@ -380,11 +384,14 @@ impl Parse for ItemImpls {
 }
 
 impl ItemImpls {
-    fn new(item_trait_: Option<ItemTrait>, item_impls: FxHashMap<SelfType, Vec<ItemImpl>>) -> Self {
+    fn new(
+        item_trait_: Option<ItemTrait>,
+        item_impls: FxHashMap<ImplGroupId, Vec<ItemImpl>>,
+    ) -> Self {
         if let Some(trait_) = &item_trait_ {
-            validate::validate_trait_impls(trait_, &item_impls);
+            validate::validate_trait_impls(trait_, item_impls.values().flatten());
         } else {
-            validate::validate_inherent_impls(&item_impls);
+            validate::validate_inherent_impls(item_impls.values().flatten());
         }
 
         Self {
@@ -404,10 +411,11 @@ mod helper_trait {
     /// required to uniquely identify all of the disjoint impls
     pub fn gen(
         main_trait: Option<&ItemTrait>,
-        impls: &[ItemImpl],
+        impl_group_id: &ImplGroupId,
+        impl_group: &[ItemImpl],
         idx: usize,
     ) -> Option<TokenStream2> {
-        let assoc_type_param_count = AssocBounds::find(impls).type_param_idents.len();
+        let assoc_type_param_count = AssocBounds::find(impl_group).type_param_idents.len();
         let type_param_idents = (0..assoc_type_param_count).map(param::gen_indexed_param_name);
 
         if let Some(mut helper_trait) = main_trait.cloned() {
@@ -415,17 +423,18 @@ mod helper_trait {
             helper_trait.ident = gen_ident(&helper_trait.ident, idx);
             let start_idx = helper_trait.generics.type_params().count();
 
-            helper_trait.generics.params = (start_idx..(assoc_type_param_count + start_idx))
+            helper_trait.generics.params = (start_idx..(start_idx + assoc_type_param_count))
                 .map(param::gen_indexed_param_name)
                 .map(|type_param_ident| syn::parse_quote!(#type_param_ident: ?Sized))
                 .chain(helper_trait.generics.params)
                 .collect();
 
             return Some(quote!(#helper_trait));
-        } else if let Some(inherent_impl) = impls.get(0) {
+        } else if let Some(inherent_impl) = impl_group.get(0) {
             let items = resolve_inherent_impl_items(&inherent_impl.items);
 
-            if let syn::Type::Path(type_path) = &*inherent_impl.self_ty {
+            let self_ty = &impl_group_id.1;
+            if let syn::Type::Path(type_path) = self_ty {
                 if let Some(last_seg) = type_path.path.segments.last() {
                     let helper_trait_ident = gen_ident(&last_seg.ident, idx);
 
@@ -552,7 +561,7 @@ mod param {
 
     impl<'ast> NonPredicateParamIndexer<'ast> {
         fn new(generics: &'ast syn::Generics) -> Self {
-            let params = get_param_idents(generics)
+            let params = get_param_idents(generics.params.iter())
                 .map(|param| (param, None))
                 .collect();
 
@@ -628,7 +637,7 @@ mod param {
             main_trait: Option<&'ast syn::ItemTrait>,
         ) -> Self {
             let main_trait_generics: Vec<_> = main_trait
-                .map(|main_trait| get_param_idents(&main_trait.generics).collect())
+                .map(|main_trait| get_param_idents(main_trait.generics.params.iter()).collect())
                 .unwrap_or_default();
 
             Self {
@@ -732,8 +741,10 @@ mod param {
     //    }
     //}
 
-    pub fn get_param_idents(generics: &syn::Generics) -> impl Iterator<Item = &syn::Ident> {
-        generics.params.iter().map(|param| match param {
+    pub fn get_param_idents<'a>(
+        generic_params: impl Iterator<Item = &'a syn::GenericParam>,
+    ) -> impl Iterator<Item = &'a syn::Ident> {
+        generic_params.into_iter().map(|param| match param {
             syn::GenericParam::Lifetime(lifetime_param) => &lifetime_param.lifetime.ident,
             syn::GenericParam::Type(type_param) => &type_param.ident,
             syn::GenericParam::Const(const_param) => &const_param.ident,
