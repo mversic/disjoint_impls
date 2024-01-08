@@ -75,6 +75,7 @@ fn gen_dummy_impl_from_inherent_impl(inherent_impl: &ItemImpl) -> syn::ItemImpl 
     let mut main_trait_impl = inherent_impl.clone();
 
     main_trait_impl.attrs = Vec::new();
+    main_trait_impl.generics = syn::Generics::default();
     main_trait_impl
         .items
         .iter_mut()
