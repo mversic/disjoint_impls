@@ -197,6 +197,7 @@ impl GenericsResolver {
             let trait_bounds = trait_bounds.into_iter();
             quote! { #param_ident: #(#trait_bounds)+* }
         });
+
         let where_clause_predicates = assoc_bound_predicates
             .chain(core::iter::once_with(|| {
                 let helper_trait_bound =
@@ -205,7 +206,6 @@ impl GenericsResolver {
                 quote! { Self: #helper_trait_bound }
             }))
             .collect();
-
         Self {
             assoc_bound_type_params,
             where_clause_predicates,
