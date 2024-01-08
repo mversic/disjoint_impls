@@ -57,6 +57,7 @@ const _: () = {
             "Blanket B".to_owned()
         }
     }
+
     impl<_0> Kita for _0 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
         fn kita(&self) -> String {
             <Self as _Kita0<<_0 as Dispatch>::Group>>::kita(self)

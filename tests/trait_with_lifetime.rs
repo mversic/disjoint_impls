@@ -47,20 +47,20 @@ const _: () = {
         fn get_name(&'b self) -> &'a str;
     }
 
-    impl<'a, 'b: 'a, _2: Dispatch<Group = GroupA>> _Kita0<'a, 'b, GroupA> for _2 {
-        fn get_name(&'b self) -> &'a str {
+    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupA>> _Kita0<'_0, '_1, GroupA> for _2 {
+        fn get_name(&'_1 self) -> &'_0 str {
             "Blanket A"
         }
     }
-    impl<'a, 'b: 'a, _2: Dispatch<Group = GroupB>> _Kita0<'a, 'b, GroupB> for _2 {
-        fn get_name(&'b self) -> &'a str {
+    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupB>> _Kita0<'_0, '_1, GroupB> for _2 {
+        fn get_name(&'_1 self) -> &'_0 str {
             "Blanket B"
         }
     }
 
-    impl<'a, 'b: 'a, _2> Kita<'a, 'b> for _2 where _2: Dispatch, Self: _Kita0<'a, 'b, <_2 as Dispatch>::Group> {
-        fn get_name(&'b self) -> &'a str {
-            <Self as _Kita0<'a, 'b, <_2 as Dispatch>::Group>>::get_name(self)
+    impl<'_0, '_1, _2> Kita<'_0, '_1> for _2 where '_1: '_0, _2: Dispatch, Self: _Kita0<'_0, '_1, <_2 as Dispatch>::Group> {
+        fn get_name(&'_1 self) -> &'_0 str {
+            <Self as _Kita0<'_0, '_1, <_2 as Dispatch>::Group>>::get_name(self)
         }
     }
 };

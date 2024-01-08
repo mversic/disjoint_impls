@@ -56,6 +56,7 @@ const _: () = {
 
         fn kita() -> Self::Item;
     }
+
     impl<_0: Dispatch<Group = GroupA>> _Kita0<GroupA> for _0 {
         type Item = u32;
 
@@ -70,6 +71,7 @@ const _: () = {
             _0::default()
         }
     }
+
     impl<_0> Kita for _0 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
         type Item = <Self as _Kita0<<_0 as Dispatch>::Group>>::Item;
 

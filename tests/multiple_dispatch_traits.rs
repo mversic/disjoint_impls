@@ -62,7 +62,7 @@ const _: () = {
         const NAME: &'static str;
     }
 
-    impl<_0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>, > _Kita0<GroupA, GroupA> for _0 {
+    impl<_0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> _Kita0<GroupA, GroupA> for _0 {
         const NAME: &'static str = "Blanket AA";
     }
     impl<_0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> _Kita0<GroupB, GroupA> for _0 {

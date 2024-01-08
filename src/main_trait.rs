@@ -24,8 +24,8 @@ pub fn gen(
     let example_impl = impl_group.get(0)?;
 
     let mut main_trait_impl = main_trait
-        .map(|main_trait| gen_dummy_impl_from_trait_definition(impl_group_id, main_trait))
-        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(impl_group_id, example_impl));
+        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group_id.1))
+        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl));
 
     let helper_trait_ident = main_trait_impl.trait_.as_ref().map_or_else(
         || {
@@ -33,7 +33,7 @@ pub fn gen(
 
             if let syn::Type::Path(type_path) = self_ty {
                 return Some(helper_trait::gen_ident(
-                    &type_path.path.segments.last()?.ident,
+                    &type_path.path.segments.last().unwrap().ident,
                     idx,
                 ));
             }
@@ -42,7 +42,7 @@ pub fn gen(
         },
         |main_trait| {
             Some(helper_trait::gen_ident(
-                &main_trait.1.segments.last()?.ident,
+                &main_trait.1.segments.last().unwrap().ident,
                 idx,
             ))
         },
@@ -52,40 +52,12 @@ pub fn gen(
         type_param_idents, ..
     } = AssocBounds::find(impl_group);
 
-    let mut main_trait_generics: FxHashMap<_, _> = core::mem::replace(
-        &mut main_trait_impl.generics.params,
-        example_impl.generics.params.clone(),
-    )
-    .into_iter()
-    .filter_map(|param| {
-        if let syn::GenericParam::Type(type_param) = param {
-            return Some((type_param.ident.clone(), type_param));
-        }
+    if let Some(impl_trait) = &impl_group_id.0 {
+        param::resolve_main_trait_params(impl_trait, &mut main_trait_impl, &example_impl.generics);
+    }
 
-        None
-    })
-    .collect();
-
-    main_trait_impl
-        .generics
-        .type_params_mut()
-        .for_each(|type_param| {
-            let main_trait_type_param = main_trait_generics.remove(&type_param.ident);
-
-            // TODO: This is incorrect because it removes assoc bounds
-            if let Some(main_trait_type_param) = main_trait_type_param {
-                type_param.bounds = main_trait_type_param.bounds;
-            } else {
-                type_param.bounds = Default::default();
-            }
-        });
-
-    let mut generics_resolver = GenericsResolver::new(
-        impl_group_id,
-        main_trait,
-        &helper_trait_ident,
-        &type_param_idents,
-    );
+    let mut generics_resolver =
+        GenericsResolver::new(impl_group_id, &helper_trait_ident, &type_param_idents);
     generics_resolver.visit_generics_mut(&mut main_trait_impl.generics);
 
     let mut impl_item_resolver =
@@ -99,14 +71,10 @@ pub fn gen(
 }
 
 /// Generates main trait implementation with item values set to dummy values
-fn gen_dummy_impl_from_inherent_impl(
-    impl_group_id: &ImplGroupId,
-    inherent_impl: &ItemImpl,
-) -> syn::ItemImpl {
+fn gen_dummy_impl_from_inherent_impl(inherent_impl: &ItemImpl) -> syn::ItemImpl {
     let mut main_trait_impl = inherent_impl.clone();
 
     main_trait_impl.attrs = Vec::new();
-    main_trait_impl.self_ty = Box::new(impl_group_id.1.clone());
     main_trait_impl
         .items
         .iter_mut()
@@ -130,15 +98,13 @@ fn gen_dummy_impl_from_inherent_impl(
 
 /// Generates main trait implementation with item values set to dummy values
 fn gen_dummy_impl_from_trait_definition(
-    impl_group_id: &ImplGroupId,
     main_trait: &ItemTrait,
+    self_ty: &syn::Type,
 ) -> syn::ItemImpl {
-    let trait_path = &impl_group_id.0;
-    let self_ty = &impl_group_id.1;
-
     let ItemTrait {
         unsafety,
         generics,
+        ident,
         items,
         ..
     } = main_trait;
@@ -185,10 +151,10 @@ fn gen_dummy_impl_from_trait_definition(
         item
     });
 
-    let (impl_generics, _, where_clause) = generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     parse_quote! {
-        #unsafety impl #impl_generics #trait_path for #self_ty #where_clause {
+        #unsafety impl #impl_generics #ident #ty_generics for #self_ty #where_clause {
             #(#items)*
         }
     }
@@ -207,7 +173,6 @@ fn gen_assoc_bounds<'a>(
 impl GenericsResolver {
     fn new(
         impl_group_id: &ImplGroupId,
-        main_trait: Option<&ItemTrait>,
         helper_trait_ident: &syn::Ident,
         type_param_idents: &[AssocBoundIdent],
     ) -> Self {
@@ -232,45 +197,14 @@ impl GenericsResolver {
             let trait_bounds = trait_bounds.into_iter();
             quote! { #param_ident: #(#trait_bounds)+* }
         });
-        let where_clause_predicates = if let Some(main_trait) = main_trait {
-            let main_trait_predicates = main_trait
-                .generics
-                .where_clause
-                .as_ref()
-                .map(|where_clause| {
-                    where_clause
-                        .predicates
-                        .iter()
-                        .map(|predicate| quote!(#predicate))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+        let where_clause_predicates = assoc_bound_predicates
+            .chain(core::iter::once_with(|| {
+                let helper_trait_bound =
+                    gen_helper_trait_bound(impl_group_id, helper_trait_ident, type_param_idents);
 
-            main_trait_predicates
-                .into_iter()
-                .chain(assoc_bound_predicates.chain(core::iter::once_with(|| {
-                    let helper_trait_bound = gen_helper_trait_bound(
-                        impl_group_id,
-                        helper_trait_ident,
-                        type_param_idents,
-                    );
-
-                    quote! { Self: #helper_trait_bound }
-                })))
-                .collect()
-        } else {
-            assoc_bound_predicates
-                .chain(core::iter::once_with(|| {
-                    let helper_trait_bound = gen_helper_trait_bound(
-                        impl_group_id,
-                        helper_trait_ident,
-                        type_param_idents,
-                    );
-
-                    quote! { Self: #helper_trait_bound }
-                }))
-                .collect()
-        };
+                quote! { Self: #helper_trait_bound }
+            }))
+            .collect();
 
         Self {
             assoc_bound_type_params,
@@ -320,7 +254,7 @@ impl ImplItemResolver {
 
 impl VisitMut for GenericsResolver {
     fn visit_generics_mut(&mut self, node: &mut syn::Generics) {
-        node.make_where_clause();
+        let where_clause = node.where_clause.take();
 
         let node_type_params: FxHashSet<syn::Type> = node
             .type_params()
@@ -341,8 +275,14 @@ impl VisitMut for GenericsResolver {
             }
         }
 
-        let predicates = &self.where_clause_predicates;
-        node.where_clause = parse_quote!(where #(#predicates),*);
+        let node_where_clause = node.make_where_clause();
+        if let Some(where_clause) = where_clause {
+            *node_where_clause = where_clause;
+        }
+
+        self.where_clause_predicates.iter().for_each(|predicate| {
+            node_where_clause.predicates.push(parse_quote!(#predicate));
+        });
     }
 }
 
@@ -386,5 +326,176 @@ impl VisitMut for ImplItemResolver {
 
     fn visit_impl_item_macro_mut(&mut self, _node: &mut syn::ImplItemMacro) {
         unimplemented!("Trait macros are not supported")
+    }
+}
+
+mod param {
+    use super::*;
+
+    struct MainTraitParamIndexer {
+        params: FxHashMap<syn::Ident, usize>,
+        curr_param_pos_idx: usize,
+    }
+
+    impl MainTraitParamIndexer {
+        fn new() -> Self {
+            MainTraitParamIndexer {
+                params: FxHashMap::default(),
+                curr_param_pos_idx: 0,
+            }
+        }
+    }
+
+    struct MainTraitParamResolver<'ast> {
+        params: FxHashMap<syn::Ident, &'ast syn::GenericArgument>,
+    }
+
+    impl<'ast> MainTraitParamResolver<'ast> {
+        fn new(
+            params: FxHashMap<syn::Ident, usize>,
+            impl_bracketed: &'ast syn::AngleBracketedGenericArguments,
+        ) -> Self {
+            let params: FxHashMap<_, _> = params
+                .into_iter()
+                .map(|(param, idx)| (param, &impl_bracketed.args[idx]))
+                .collect();
+
+            Self { params }
+        }
+    }
+
+    impl<'ast> Visit<'ast> for MainTraitParamIndexer {
+        fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+            self.visit_generics(&node.generics);
+        }
+
+        fn visit_lifetime_param(&mut self, node: &'ast syn::LifetimeParam) {
+            self.params
+                .insert(node.lifetime.ident.clone(), self.curr_param_pos_idx);
+            self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+        }
+
+        fn visit_type_param(&mut self, node: &'ast syn::TypeParam) {
+            self.params
+                .insert(node.ident.clone(), self.curr_param_pos_idx);
+            self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+        }
+
+        fn visit_const_param(&mut self, node: &'ast syn::ConstParam) {
+            self.params
+                .insert(node.ident.clone(), self.curr_param_pos_idx);
+            self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+        }
+
+        fn visit_where_clause(&mut self, _node: &syn::WhereClause) {}
+    }
+
+    impl VisitMut for MainTraitParamResolver<'_> {
+        fn visit_lifetime_mut(&mut self, node: &mut syn::Lifetime) {
+            if let Some(&arg) = self.params.get(&node.ident) {
+                *node = parse_quote!(#arg);
+            }
+        }
+
+        fn visit_generics_mut(&mut self, node: &mut syn::Generics) {
+            node.params = core::mem::take(&mut node.params)
+                .into_iter()
+                .map(|mut param| {
+                    match &mut param {
+                        syn::GenericParam::Lifetime(syn::LifetimeParam {
+                            lifetime,
+                            bounds,
+                            ..
+                        }) => {
+                            let bounded_ty = self.params[&lifetime.ident];
+
+                            if !bounds.is_empty() {
+                                node.make_where_clause()
+                                    .predicates
+                                    .push(parse_quote!(#bounded_ty: #bounds));
+                            }
+                        }
+                        syn::GenericParam::Type(syn::TypeParam { ident, bounds, .. }) => {
+                            let bounded_ty = self.params[&ident];
+
+                            if !bounds.is_empty() {
+                                node.make_where_clause()
+                                    .predicates
+                                    .push(parse_quote!(#bounded_ty: #bounds));
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    param
+                })
+                .collect();
+
+            syn::visit_mut::visit_generics_mut(self, node);
+        }
+
+        fn visit_type_mut(&mut self, node: &mut syn::Type) {
+            if let syn::Type::Path(type_) = node {
+                let path = type_.path.segments.first_mut().unwrap();
+
+                if let Some(qself) = &mut type_.qself {
+                    self.visit_qself_mut(qself);
+                }
+
+                if let Some(&arg) = self.params.get(&path.ident) {
+                    *node = parse_quote!(#arg);
+                } else {
+                    self.visit_type_path_mut(type_);
+                }
+            } else {
+                syn::visit_mut::visit_type_mut(self, node);
+            }
+        }
+
+        fn visit_expr_mut(&mut self, node: &mut syn::Expr) {
+            if let syn::Expr::Path(type_) = node {
+                let path = type_.path.segments.first_mut().unwrap();
+
+                if let Some(qself) = &mut type_.qself {
+                    self.visit_qself_mut(qself);
+                }
+
+                if let Some(&arg) = self.params.get(&path.ident) {
+                    *node = parse_quote!(#arg);
+                } else {
+                    self.visit_expr_path_mut(type_);
+                }
+            } else {
+                syn::visit_mut::visit_expr_mut(self, node);
+            }
+        }
+    }
+
+    pub fn resolve_main_trait_params(
+        impl_trait: &syn::Path,
+        main_trait_impl: &mut syn::ItemImpl,
+        example_impl_generics: &syn::Generics,
+    ) {
+        let mut main_trait_param_indexer = MainTraitParamIndexer::new();
+        main_trait_param_indexer.visit_item_impl(main_trait_impl);
+        let params = main_trait_param_indexer.params;
+
+        let impl_trait_last_seg = impl_trait.segments.last().unwrap();
+        if let syn::PathArguments::AngleBracketed(impl_bracketed) = &impl_trait_last_seg.arguments {
+            let mut main_trait_param_resolver = MainTraitParamResolver::new(params, impl_bracketed);
+            main_trait_param_resolver.visit_item_impl_mut(main_trait_impl);
+        }
+
+        main_trait_impl.generics.params = example_impl_generics
+            .params
+            .iter()
+            .map(|param| match param {
+                syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => {
+                    syn::GenericParam::from(syn::LifetimeParam::new(lifetime.clone()))
+                }
+                syn::GenericParam::Type(syn::TypeParam { ident, .. }) => parse_quote!(#ident),
+                syn::GenericParam::Const(syn::ConstParam { ident, .. }) => parse_quote!(#ident),
+            })
+            .collect();
     }
 }

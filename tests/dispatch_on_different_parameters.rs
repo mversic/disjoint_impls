@@ -39,19 +39,19 @@ pub trait Kita<U> {
 }
 
 const _: () = {
-    pub trait _Kita0<_1: ?Sized, U> {
+    pub trait _Kita0<_0: ?Sized, U> {
         const NAME: &'static str;
     }
 
-    impl<_1, U> _Kita0<GroupA, U> for _1 where U: Dispatch<Group = GroupA> {
+    impl<_1, _0> _Kita0<GroupA, _0> for _1 where _0: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_1, U: Dispatch<Group = GroupB>> _Kita0<GroupB, U> for _1 {
+    impl<_1, _0: Dispatch<Group = GroupB>> _Kita0<GroupB, _0> for _1 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<U, _1> Kita<U> for _1 where U: Dispatch, Self: _Kita0<<U as Dispatch>::Group, U> {
-        const NAME: &'static str = <Self as _Kita0<<U as Dispatch>::Group, U>>::NAME;
+    impl<_1, _0> Kita<_0> for _1 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group, _0> {
+        const NAME: &'static str = <Self as _Kita0<<_0 as Dispatch>::Group, _0>>::NAME;
     }
 };
 */
