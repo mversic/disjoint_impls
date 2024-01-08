@@ -7,12 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2024-01-08
+
 ### Added
 
-- Support default generic params in main trait
 - Support bounds for main trait parameters
 - Support const parameters in main trait
+- Support default generic types in main trait
+- Support multiple blanket impls on different trait generics
+- Support for resolution of parameters not bounded by trait or self type
+
+### Changed
+
 - Keep original trait param identifiers
+
+### Fixed
+
+- Fix generation of main trait generics
 
 ## [0.5.0] - 2023-11-23
 
@@ -30,17 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- add input validation
-- add support for dispatch on unsized types
+- Add input validation
+- Add support for dispatch on unsized types
 
 ## [0.2.0] - 2023-09-24
 
 ### Added
 
-- enable dispatch on where clause bounded type
+- Enable dispatch on where clause bounded type
 
 ### Changed
 
-- don't require collection of type param identifiers to be ordered
+- Don't require collection of type param identifiers to be ordered
 
 ## [0.1.0] - 2023-09-23
