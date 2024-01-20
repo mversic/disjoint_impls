@@ -46,7 +46,7 @@ pub trait Kita<U> {
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized, U> {
+    pub trait _Kita0<_1: ?Sized, U> {
         const NAME: &'static str;
     }
 

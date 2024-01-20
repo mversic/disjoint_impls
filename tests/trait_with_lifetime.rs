@@ -21,16 +21,16 @@ impl Dispatch for u32 {
 }
 
 disjoint_impls! {
-    pub trait Kita<'a, 'b: 'a> {
+    pub trait Kita<'a, 'b: 'a, U> {
         fn get_name(&'b self) -> &'a str;
     }
 
-    impl<'a, 'x: 'a, T: Dispatch<Group = GroupA>> Kita<'a, 'x> for T {
+    impl<'a, 'x: 'a, T: Dispatch<Group = GroupA>> Kita<'a, 'x, u32> for T {
         fn get_name(&'x self) -> &'a str {
             "Blanket A"
         }
     }
-    impl<'a, 'b: 'a, T: Dispatch<Group = GroupB>> Kita<'a, 'b> for T {
+    impl<'a, 'b: 'a, T: Dispatch<Group = GroupB>> Kita<'a, 'b, u32> for T {
         fn get_name(&'b self) -> &'a str {
             "Blanket B"
         }
@@ -38,29 +38,29 @@ disjoint_impls! {
 }
 
 /*
-pub trait Kita<'a, 'b: 'a> {
+pub trait Kita<'a, 'b: 'a, U> {
     fn get_name(&'b self) -> &'a str;
 }
 
 const _: () = {
-    pub trait _Kita0<'a, 'b: 'a, _0: ?Sized> {
+    pub trait _Kita0<'a, 'b: 'a, _0: ?Sized, U> {
         fn get_name(&'b self) -> &'a str;
     }
 
-    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupA>> _Kita0<'_0, '_1, GroupA> for _2 {
+    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupA>> _Kita0<'_0, '_1, GroupA, u32> for _2 {
         fn get_name(&'_1 self) -> &'_0 str {
             "Blanket A"
         }
     }
-    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupB>> _Kita0<'_0, '_1, GroupB> for _2 {
+    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupB>> _Kita0<'_0, '_1, GroupB, u32> for _2 {
         fn get_name(&'_1 self) -> &'_0 str {
             "Blanket B"
         }
     }
 
-    impl<'_0, '_1, _2> Kita<'_0, '_1> for _2 where '_1: '_0, _2: Dispatch, Self: _Kita0<'_0, '_1, <_2 as Dispatch>::Group> {
+    impl<'_0, '_1, _2> Kita<'_0, '_1, u32> for _2 where '_1: '_0, _2: Dispatch, Self: _Kita0<'_0, '_1, <_2 as Dispatch>::Group, u32> {
         fn get_name(&'_1 self) -> &'_0 str {
-            <Self as _Kita0<'_0, '_1, <_2 as Dispatch>::Group>>::get_name(self)
+            <Self as _Kita0<'_0, '_1, <_2 as Dispatch>::Group, u32>>::get_name(self)
         }
     }
 };
@@ -68,8 +68,8 @@ const _: () = {
 
 #[test]
 fn trait_with_lifetime() {
-    assert_eq!("Blanket A", <String as Kita>::get_name(&"".into()));
-    assert_eq!("Blanket A", <Vec::<u32> as Kita>::get_name(&vec![]));
-    assert_eq!("Blanket B", <u32 as Kita>::get_name(&0));
-    assert_eq!("Blanket B", <i32 as Kita>::get_name(&0));
+    assert_eq!("Blanket A", <String as Kita<u32>>::get_name(&"".into()));
+    assert_eq!("Blanket A", <Vec::<u32> as Kita<u32>>::get_name(&vec![]));
+    assert_eq!("Blanket B", <u32 as Kita<u32>>::get_name(&0));
+    assert_eq!("Blanket B", <i32 as Kita<u32>>::get_name(&0));
 }

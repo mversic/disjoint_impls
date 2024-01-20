@@ -7,39 +7,98 @@ use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{abort, proc_macro_error, OptionExt};
 use quote::{format_ident, quote};
 use rustc_hash::{FxHashMap, FxHashSet};
-use syn::visit::{visit_predicate_type, visit_trait_bound, visit_type_param, Visit};
+use syn::visit::Visit;
+use syn::visit_mut::VisitMut;
 use syn::ItemImpl;
 use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, ItemTrait,
 };
 
+/// Unique id of an impl group, i.e. ([`ItemImpl::trait_`], [`ItemImpl::self_ty`]).
+/// All [`ImplItem`]s that have matching group ids are handled by one main trait impl.
 type ImplGroupId = (Option<syn::Path>, syn::Type);
 
-/// A collection of {Option<ItemTrait>, [`ItemImpl`]}.
-/// Trait definition can be absent if dealing with inherent impls.
+/// Body of the [`disjoint_impls`] macro
 #[derive(Debug, PartialEq, Eq)]
 struct ItemImpls {
-    /// Definition of the main trait.
-    /// [`None`] for inherent impl blocks.
+    /// Definition of the main trait. [`None`] for inherent impls
     item_trait_: Option<ItemTrait>,
-    /// impls map as in: ((trait path, self type) -> ItemImpl)
+    /// Collection of [`ItemImpl`] blocks grouped by [`ImplGroupId`]
     item_impls: FxHashMap<ImplGroupId, Vec<ItemImpl>>,
 }
 
-/// AST node type of the trait identifier such as 'Deref<Target = u32>' in `impl<T: Deref<Target = u32>> Clone for T`.
-/// Equality of this type doesn't compare associated bounds. Therefore `Deref<Target = u32>` == `Deref<Target = u64>`.
+/// AST node type of the trait identifier such as 'IntoIterator<Item = u32>' in `impl<T: IntoIterator<Item = u32>> Clone for T`.
+/// Equality of the type doesn't compare associated bounds. Therefore `IntoIterator<Item = u32>` == `IntoIterator<IntoIter = Vec<u32>>`.
 #[derive(Debug, Clone, Copy, Eq)]
-struct TraitBound<'ast>(pub &'ast syn::Path);
+struct TraitBound<'ast>(&'ast syn::Path);
+
+/// Bounded param/type
+#[derive(Debug, Clone, Eq)]
+enum Bounded<'ast> {
+    /// Holds the value of [`syn::TypeParam::ident`]
+    Param(syn::Type),
+    /// Holds the value of [`syn::PredicateType::bounded_ty`]
+    Type(&'ast syn::Type),
+}
 
 /// Unique name based identifier of the associated type bound such as:
 ///     `(T, Deref, Deref::Target)` in `impl<T: Deref<Target = bool>> for Clone for T`
-type AssocBoundIdent<'ast> = (syn::Type, TraitBound<'ast>, &'ast syn::Ident);
+type AssocBoundIdent<'ast> = (Bounded<'ast>, TraitBound<'ast>, &'ast syn::Ident);
 
 /// AST node type of the associated bound constraint such as:
 ///     `bool` in `impl<T: Deref<Target = bool>> for Clone for T`
 // TODO: how to support GATs? make a test
 type AssocBoundPayload = syn::Type;
+
+impl PartialEq for Bounded<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        use Bounded::*;
+
+        match (self, other) {
+            (Param(x), Param(y)) => x == y,
+            (Type(x), Type(y)) => x == y,
+
+            (Param(x), Type(y)) => x == *y,
+            (Type(x), Param(y)) => *x == y,
+        }
+    }
+}
+
+impl core::hash::Hash for Bounded<'_> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        use Bounded::*;
+
+        match self {
+            Type(ty_) => ty_.hash(state),
+            Param(ident) => {
+                let ty_: syn::Type = syn::parse_quote!(#ident);
+                ty_.hash(state)
+            }
+        }
+    }
+}
+
+impl From<&syn::Ident> for Bounded<'_> {
+    fn from(source: &syn::Ident) -> Self {
+        Self::Param(syn::parse_quote!(#source))
+    }
+}
+
+impl<'ast> From<&'ast syn::Type> for Bounded<'ast> {
+    fn from(source: &'ast syn::Type) -> Self {
+        Self::Type(source)
+    }
+}
+
+impl quote::ToTokens for Bounded<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        match self {
+            Bounded::Param(ident) => ident.to_tokens(tokens),
+            Bounded::Type(type_) => type_.to_tokens(tokens),
+        }
+    }
+}
 
 impl PartialEq for TraitBound<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -180,7 +239,7 @@ impl<'ast> AssocBounds<'ast> {
 
 struct AssocBoundsVisitor<'ast> {
     /// Type parameter identifier currently being visited
-    curr_type_param: Option<syn::Type>,
+    curr_type_param: Option<Bounded<'ast>>,
     /// Trait bound currently being visited
     curr_trait_bound: Option<TraitBound<'ast>>,
 
@@ -201,7 +260,10 @@ impl<'ast> AssocBoundsVisitor<'ast> {
         }
     }
 
-    fn make_assoc_param_ident(&self, assoc_param_name: &'ast syn::Ident) -> AssocBoundIdent<'ast> {
+    fn make_assoc_param_ident(
+        &mut self,
+        assoc_param_name: &'ast syn::Ident,
+    ) -> AssocBoundIdent<'ast> {
         (
             self.curr_type_param.clone().unwrap(),
             self.curr_trait_bound.unwrap(),
@@ -216,18 +278,17 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
     }
 
     fn visit_type_param(&mut self, node: &'ast syn::TypeParam) {
-        let param = &node.ident;
-        self.curr_type_param = Some(syn::parse_quote!(#param));
-        visit_type_param(self, node);
+        self.curr_type_param = Some((&node.ident).into());
+        syn::visit::visit_type_param(self, node);
     }
     fn visit_predicate_type(&mut self, node: &'ast syn::PredicateType) {
-        self.curr_type_param = Some(node.bounded_ty.clone());
-        visit_predicate_type(self, node);
+        self.curr_type_param = Some((&node.bounded_ty).into());
+        syn::visit::visit_predicate_type(self, node);
     }
 
     fn visit_trait_bound(&mut self, node: &'ast syn::TraitBound) {
         self.curr_trait_bound = Some(TraitBound(&node.path));
-        visit_trait_bound(self, node);
+        syn::visit::visit_trait_bound(self, node);
     }
 
     fn visit_assoc_type(&mut self, node: &'ast syn::AssocType) {
@@ -337,21 +398,21 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut item_impls = Vec::new();
 
     let main_trait = impls.item_trait_;
-    for (idx, (impl_group_id, impl_group)) in impls.item_impls.into_iter().enumerate() {
+    for (impl_group_idx, (_, impl_group)) in impls.item_impls.into_iter().enumerate() {
         // TODO: Assoc bounds are computed multiple times
         helper_traits.push(helper_trait::gen(
             main_trait.as_ref(),
-            &impl_group_id,
+            impl_group_idx,
             &impl_group,
-            idx,
         ));
+
         main_trait_impls.push(main_trait::gen(
             main_trait.as_ref(),
-            &impl_group_id,
+            impl_group_idx,
             &impl_group,
-            idx,
         ));
-        item_impls.extend(disjoint::gen(impl_group, idx));
+
+        item_impls.extend(disjoint::gen(impl_group_idx, impl_group));
     }
 
     quote! {
@@ -368,23 +429,76 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
 
 impl Parse for ItemImpls {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
-        let main_trait = input.parse::<ItemTrait>().ok();
+        let mut item_impls = FxHashMap::<_, Vec<_>>::default();
 
-        let mut item_impls = FxHashMap::default();
+        let main_trait = input.parse::<ItemTrait>().ok();
         while let Ok(mut item) = input.parse::<ItemImpl>() {
             // TODO: Resolve predicate param idents
             param::resolve_non_predicate_params(&mut item);
 
-            item_impls
-                .entry((
-                    item.trait_.as_ref().map(|trait_| trait_.1.clone()),
-                    (*item.self_ty).clone(),
-                ))
-                .or_insert_with(Vec::new)
-                .push(item);
+            let impl_group_id = (
+                item.trait_.as_ref().map(|trait_| &trait_.1).cloned(),
+                (*item.self_ty).clone(),
+            );
+
+            item_impls.entry(impl_group_id).or_default().push(item);
         }
 
         Ok(ItemImpls::new(main_trait, item_impls))
+    }
+}
+
+struct InherentImplGenericArgPruner<'ast> {
+    param_idents: FxHashSet<&'ast syn::Ident>,
+    should_remove_curr_arg: bool,
+}
+impl<'ast> InherentImplGenericArgPruner<'ast> {
+    fn new(generics: &'ast syn::Generics) -> Self {
+        Self {
+            param_idents: generics
+                .params
+                .iter()
+                .filter_map(|param| {
+                    if matches!(param, syn::GenericParam::Lifetime(_)) {
+                        return None;
+                    }
+
+                    Some(param::get_param_ident(param))
+                })
+                .collect(),
+            should_remove_curr_arg: true,
+        }
+    }
+}
+impl VisitMut for InherentImplGenericArgPruner<'_> {
+    fn visit_ident_mut(&mut self, node: &mut syn::Ident) {
+        if self.param_idents.contains(node) {
+            self.should_remove_curr_arg = false;
+        }
+    }
+
+    fn visit_angle_bracketed_generic_arguments_mut(
+        &mut self,
+        node: &mut syn::AngleBracketedGenericArguments,
+    ) {
+        node.args = core::mem::take(&mut node.args)
+            .into_iter()
+            .filter_map(|mut arg| {
+                match &mut arg {
+                    syn::GenericArgument::Lifetime(_) => return Some(arg),
+                    syn::GenericArgument::Type(type_) => self.visit_type_mut(type_),
+                    syn::GenericArgument::Const(const_) => self.visit_expr_mut(const_),
+                    _ => unreachable!(),
+                }
+
+                if self.should_remove_curr_arg {
+                    return None;
+                }
+
+                self.should_remove_curr_arg = true;
+                Some(arg)
+            })
+            .collect();
     }
 }
 
@@ -416,45 +530,96 @@ mod helper_trait {
     /// required to uniquely identify all of the disjoint impls
     pub fn gen(
         main_trait: Option<&ItemTrait>,
-        impl_group_id: &ImplGroupId,
+        impl_group_idx: usize,
         impl_group: &[ItemImpl],
-        idx: usize,
-    ) -> Option<TokenStream2> {
-        let assoc_type_param_count = AssocBounds::find(impl_group).type_param_idents.len();
-        let type_param_idents = (0..assoc_type_param_count).map(param::gen_indexed_param_name);
+    ) -> Option<syn::ItemTrait> {
+        let type_param_idents = AssocBounds::find(impl_group).type_param_idents;
 
-        if let Some(mut helper_trait) = main_trait.cloned() {
-            helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));
-            helper_trait.ident = gen_ident(&helper_trait.ident, idx);
+        let mut helper_trait = if let Some(helper_trait) = main_trait {
+            helper_trait.clone()
+        } else if let Some(helper_trait) = impl_group.first().cloned() {
+            let syn::ItemImpl {
+                attrs,
+                unsafety,
+                mut generics,
+                mut self_ty,
+                items,
+                ..
+            } = helper_trait.clone();
 
-            helper_trait.generics.params = type_param_idents
-                .map(|type_param_ident| syn::parse_quote!(#type_param_ident: ?Sized))
-                .chain(helper_trait.generics.params)
-                .collect();
+            let items = gen_inherent_impl_items(&items);
+            if let syn::Type::Path(type_path) = &mut *self_ty {
+                type_path.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
 
-            return Some(quote!(#helper_trait));
-        } else if let Some(inherent_impl) = impl_group.get(0) {
-            let items = resolve_inherent_impl_items(&inherent_impl.items);
+                let ty_params = &mut type_path.path.segments.last_mut().unwrap().arguments;
+                InherentImplGenericArgPruner::new(&generics).visit_path_arguments_mut(ty_params);
+            }
 
-            let self_ty = &impl_group_id.1;
-            if let syn::Type::Path(type_path) = self_ty {
-                let path = type_path.path.segments.last().unwrap();
-                let helper_trait_ident = gen_ident(&path.ident, idx);
+            remove_param_bounds(&mut generics);
+            let (impl_generics, _, _) = generics.split_for_impl();
 
-                return Some(quote! {
-                    pub trait #helper_trait_ident<#(#type_param_idents: ?Sized),*> {
-                        #(#items)*
-                    }
-                });
+            syn::parse_quote! {
+                #(#attrs)*
+                #unsafety trait #self_ty #impl_generics {
+                    #(#items)*
+                }
+            }
+        } else {
+            return None;
+        };
+
+        helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));
+        helper_trait.ident = gen_ident(&helper_trait.ident, impl_group_idx);
+
+        let start_idx = helper_trait.generics.params.len();
+        helper_trait.generics.params = combine_generic_args(
+            (start_idx..start_idx + type_param_idents.len()).map(param::gen_indexed_param_name),
+            &helper_trait.generics,
+        )
+        .map(|arg| -> syn::GenericParam { syn::parse_quote!(#arg) })
+        .collect();
+
+        Some(helper_trait)
+    }
+
+    pub fn remove_param_bounds(generics: &mut syn::Generics) {
+        generics.params.iter_mut().for_each(|param| match param {
+            syn::GenericParam::Lifetime(syn::LifetimeParam { bounds, .. }) => {
+                *bounds = syn::punctuated::Punctuated::default()
+            }
+            syn::GenericParam::Type(syn::TypeParam { bounds, .. }) => {
+                *bounds = syn::punctuated::Punctuated::default()
+            }
+            syn::GenericParam::Const(_) => {}
+        });
+
+        generics.where_clause = None;
+    }
+
+    fn combine_generic_args(
+        assoc_param_bounds: impl IntoIterator<Item = syn::Ident>,
+        generics: &syn::Generics,
+    ) -> impl Iterator<Item = TokenStream2> {
+        let mut generic_args: Vec<_> = assoc_param_bounds
+            .into_iter()
+            .map(|param| quote!(#param: ?Sized))
+            .collect();
+
+        let mut lifetimes = vec![];
+        for arg in &generics.params {
+            if matches!(arg, syn::GenericParam::Lifetime(_)) {
+                lifetimes.push(quote!(#arg));
+            } else {
+                generic_args.push(quote!(#arg));
             }
         }
 
-        None
+        lifetimes.into_iter().chain(generic_args)
     }
 
-    fn resolve_inherent_impl_items(
+    fn gen_inherent_impl_items(
         impl_items: &[syn::ImplItem],
-    ) -> impl Iterator<Item = TokenStream2> + '_ {
+    ) -> impl Iterator<Item = syn::ImplItem> + '_ {
         impl_items.iter().map(|impl_item| match impl_item {
             syn::ImplItem::Const(item) => {
                 let syn::ImplItemConst {
@@ -465,16 +630,9 @@ mod helper_trait {
                     ..
                 } = &item;
 
-                quote! {
+                syn::parse_quote! {
                     #(#attrs),*
                     const #ident: #ty #generics;
-                }
-            }
-            syn::ImplItem::Fn(item) => {
-                let syn::ImplItemFn { attrs, sig, .. } = &item;
-                quote! {
-                    #(#attrs),*
-                    #sig;
                 }
             }
             syn::ImplItem::Type(item) => {
@@ -487,18 +645,24 @@ mod helper_trait {
 
                 let (impl_generics, _, where_clause) = generics.split_for_impl();
 
-                quote! {
+                syn::parse_quote! {
                     #(#attrs),*
                     type #ident #impl_generics #where_clause;
                 }
             }
-            syn::ImplItem::Macro(item) => quote! { #item },
-            syn::ImplItem::Verbatim(item) => item.clone(),
-            _ => unimplemented!(),
+            syn::ImplItem::Fn(item) => {
+                let syn::ImplItemFn { attrs, sig, .. } = &item;
+
+                syn::parse_quote! {
+                    #(#attrs),*
+                    #sig;
+                }
+            }
+            item => abort!(item, "Not supported"),
         })
     }
 
-    /// Generate identifier of helper trait
+    /// Generate ident of the helper trait
     pub fn gen_ident(ident: &syn::Ident, idx: usize) -> syn::Ident {
         format_ident!("_{}{}", ident, idx)
     }
@@ -592,7 +756,7 @@ mod param {
     }
 
     pub(super) fn gen_indexed_param_name(idx: usize) -> syn::Ident {
-        format_ident!("_{idx}")
+        format_ident!("_ŠČ{idx}")
     }
 
     impl NonPredicateParamIndexer {
@@ -634,17 +798,6 @@ mod param {
     impl Visit<'_> for NonPredicateParamIndexer {
         fn visit_item_impl(&mut self, node: &syn::ItemImpl) {
             if let Some((_, trait_, _)) = &node.trait_ {
-                // NOTE: Calling `visit_path` on a trait would conflict
-                // with resolving params on `TypePath` so it's not done
-                //
-                // # Example
-                //
-                // ```
-                // trait T<T> {}
-                // ```
-                //
-                // had `Visit::visit_path` been used on `T<T>` to resolve
-                // trait generics it would also rename the trait ident itself
                 let path = trait_.segments.last().unwrap();
                 self.visit_path_arguments(&path.arguments);
             }
@@ -662,14 +815,16 @@ mod param {
             }
         }
 
-        // TODO: Is this required? I don't think it is anymore
-        //fn visit_expr(&mut self, node: &syn::Expr) {
-        //    if let syn::Expr::Path(path) = node {
-        //        self.visit_expr_path(path);
-        //    } else {
-        //        self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
-        //    }
-        //}
+        fn visit_trait_bound(&mut self, node: &syn::TraitBound) {
+            self.visit_trait_bound_modifier(&node.modifier);
+
+            if let Some(lifetime) = &node.lifetimes {
+                self.visit_bound_lifetimes(lifetime);
+            }
+
+            let path = node.path.segments.last().unwrap();
+            self.visit_path_arguments(&path.arguments);
+        }
     }
 
     impl NonPredicateParamResolver {
@@ -688,17 +843,6 @@ mod param {
 
             self.visit_generics_mut(&mut node.generics);
             if let Some((_, trait_, _)) = &mut node.trait_ {
-                // NOTE: Calling `visit_path` on a trait would conflict
-                // with resolving params on `TypePath` so it's not done
-                //
-                // # Example
-                //
-                // ```
-                // trait T<T> {}
-                // ```
-                //
-                // had `Visit::visit_path` been used on `T<T>` to resolve
-                // trait generics it would also rename the trait ident itself
                 let path = trait_.segments.last_mut().unwrap();
                 self.visit_path_arguments_mut(&mut path.arguments);
             }
@@ -743,8 +887,20 @@ mod param {
                 syn::visit_mut::visit_path_mut(self, node);
             }
         }
+
+        fn visit_trait_bound_mut(&mut self, node: &mut syn::TraitBound) {
+            self.visit_trait_bound_modifier_mut(&mut node.modifier);
+
+            if let Some(lifetime) = &mut node.lifetimes {
+                self.visit_bound_lifetimes_mut(lifetime);
+            }
+
+            let path = node.path.segments.last_mut().unwrap();
+            self.visit_path_arguments_mut(&mut path.arguments);
+        }
     }
 
+    // TODO: Lifetimes as type/const params can have the same ident
     pub fn get_param_ident(generic_param: &syn::GenericParam) -> &syn::Ident {
         match generic_param {
             syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => &lifetime.ident,

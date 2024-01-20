@@ -67,9 +67,7 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
         syn::ImplItem::Fn(item) => {
             second_fns.insert(&item.sig.ident, item);
         }
-        syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-        syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-        _ => unimplemented!("Unknown item"),
+        item => abort!(item, "Not supported"),
     });
 
     for trait_item in trait_items {
@@ -96,9 +94,7 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
                     abort!(trait_item, "Missing in one of the impls");
                 }
             }
-            syn::TraitItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-            syn::TraitItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-            _ => unimplemented!("Unknown item"),
+            item => abort!(item, "Not supported"),
         }
     }
 
@@ -128,9 +124,7 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
         syn::ImplItem::Fn(item) => {
             second_fns.insert(&item.sig.ident, item);
         }
-        syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-        syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-        _ => unimplemented!("Unknown item"),
+        item => abort!(item, "Not supported"),
     });
 
     for first_item in first {
@@ -154,9 +148,7 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
                     abort!(first_item, "Not found in one of the impls");
                 }
             }
-            syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-            syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-            _ => unimplemented!("Unknown item"),
+            item => abort!(item, "Not supported"),
         }
     }
 

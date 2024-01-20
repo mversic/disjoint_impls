@@ -3,11 +3,13 @@
 use rustc_hash::FxHashSet;
 use syn::{parse_quote, visit_mut::VisitMut};
 
+use crate::helper_trait::remove_param_bounds;
+
 use super::*;
 
-struct GenericsResolver {
-    assoc_bound_type_params: FxHashSet<syn::Type>,
-    where_clause_predicates: Vec<TokenStream2>,
+struct GenericsResolver<'ast> {
+    assoc_bound_type_params: FxHashSet<Bounded<'ast>>,
+    where_clause_predicates: Vec<syn::WherePredicate>,
 }
 
 struct ImplItemResolver {
@@ -17,24 +19,23 @@ struct ImplItemResolver {
 /// Generate main trait impl
 pub fn gen(
     main_trait: Option<&ItemTrait>,
-    impl_group_id: &ImplGroupId,
+    impl_group_idx: usize,
     impl_group: &[ItemImpl],
-    idx: usize,
 ) -> Option<ItemImpl> {
-    let example_impl = impl_group.get(0)?;
+    let example_impl = impl_group.first()?;
 
     let mut main_trait_impl = main_trait
-        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group_id.1))
+        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, example_impl))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl));
 
     let helper_trait_ident = main_trait_impl.trait_.as_ref().map_or_else(
         || {
-            let self_ty = &impl_group_id.1;
+            let self_ty = &*example_impl.self_ty;
 
             if let syn::Type::Path(type_path) = self_ty {
                 return Some(helper_trait::gen_ident(
                     &type_path.path.segments.last().unwrap().ident,
-                    idx,
+                    impl_group_idx,
                 ));
             }
 
@@ -43,7 +44,7 @@ pub fn gen(
         |main_trait| {
             Some(helper_trait::gen_ident(
                 &main_trait.1.segments.last().unwrap().ident,
-                idx,
+                impl_group_idx,
             ))
         },
     )?;
@@ -52,16 +53,11 @@ pub fn gen(
         type_param_idents, ..
     } = AssocBounds::find(impl_group);
 
-    if let Some(impl_trait) = &impl_group_id.0 {
-        param::resolve_main_trait_params(impl_trait, &mut main_trait_impl, &example_impl.generics);
-    }
-
-    let mut generics_resolver =
-        GenericsResolver::new(impl_group_id, &helper_trait_ident, &type_param_idents);
-    generics_resolver.visit_generics_mut(&mut main_trait_impl.generics);
+    GenericsResolver::new(example_impl, &helper_trait_ident, &type_param_idents)
+        .visit_generics_mut(&mut main_trait_impl.generics);
 
     let mut impl_item_resolver =
-        ImplItemResolver::new(impl_group_id, &helper_trait_ident, &type_param_idents);
+        ImplItemResolver::new(example_impl, &helper_trait_ident, &type_param_idents);
     main_trait_impl
         .items
         .iter_mut()
@@ -71,28 +67,9 @@ pub fn gen(
 }
 
 /// Generates main trait implementation with item values set to dummy values
-fn gen_dummy_impl_from_inherent_impl(inherent_impl: &ItemImpl) -> syn::ItemImpl {
-    let mut main_trait_impl = inherent_impl.clone();
-
-    main_trait_impl.attrs = Vec::new();
-    main_trait_impl.generics = syn::Generics::default();
-    main_trait_impl
-        .items
-        .iter_mut()
-        .for_each(|item| match item {
-            syn::ImplItem::Const(item) => {
-                item.expr = parse_quote! { DUMMY };
-            }
-            syn::ImplItem::Type(item) => {
-                item.ty = parse_quote! { DUMMY };
-            }
-            syn::ImplItem::Fn(item) => {
-                item.block = parse_quote! { DUMMY };
-            }
-            syn::ImplItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-            syn::ImplItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-            _ => unimplemented!("Unknown item"),
-        });
+fn gen_dummy_impl_from_inherent_impl(example_impl: &ItemImpl) -> syn::ItemImpl {
+    let mut main_trait_impl = example_impl.clone();
+    remove_param_bounds(&mut main_trait_impl.generics);
 
     main_trait_impl
 }
@@ -100,8 +77,10 @@ fn gen_dummy_impl_from_inherent_impl(inherent_impl: &ItemImpl) -> syn::ItemImpl 
 /// Generates main trait implementation with item values set to dummy values
 fn gen_dummy_impl_from_trait_definition(
     main_trait: &ItemTrait,
-    self_ty: &syn::Type,
+    example_impl: &ItemImpl,
 ) -> syn::ItemImpl {
+    let self_ty = &*example_impl.self_ty;
+
     let ItemTrait {
         unsafety,
         generics,
@@ -144,9 +123,7 @@ fn gen_dummy_impl_from_trait_definition(
                     #sig { /* DUMMY */ }
                 }
             }
-            syn::TraitItem::Macro(_) => unimplemented!("Macro expansion not supported yet"),
-            syn::TraitItem::Verbatim(_) => unimplemented!("Verbatim not supported yet"),
-            _ => unimplemented!("Unknown item"),
+            item => abort!(item, "Not supported"),
         };
 
         item
@@ -154,28 +131,20 @@ fn gen_dummy_impl_from_trait_definition(
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    parse_quote! {
+    let mut main_trait_impl = parse_quote! {
         #unsafety impl #impl_generics #ident #ty_generics for #self_ty #where_clause {
             #(#items)*
         }
-    }
+    };
+    param::resolve_main_trait_params(&mut main_trait_impl, example_impl);
+    main_trait_impl
 }
 
-fn gen_assoc_bounds<'a>(
-    type_param_idents: &'a [AssocBoundIdent],
-) -> impl Iterator<Item = TokenStream2> + 'a {
-    type_param_idents
-        .iter()
-        .map(|(param_ident, trait_bound, assoc_param_name)| {
-            quote! { <#param_ident as #trait_bound>::#assoc_param_name }
-        })
-}
-
-impl GenericsResolver {
+impl<'ast> GenericsResolver<'ast> {
     fn new(
-        impl_group_id: &ImplGroupId,
+        example_impl: &ItemImpl,
         helper_trait_ident: &syn::Ident,
-        type_param_idents: &[AssocBoundIdent],
+        type_param_idents: &'ast [AssocBoundIdent],
     ) -> Self {
         let mut assoc_bounds = FxHashMap::<_, FxHashSet<_>>::default();
 
@@ -196,15 +165,15 @@ impl GenericsResolver {
 
         let assoc_bound_predicates = assoc_bounds.into_iter().map(|(param_ident, trait_bounds)| {
             let trait_bounds = trait_bounds.into_iter();
-            quote! { #param_ident: #(#trait_bounds)+* }
+            parse_quote! { #param_ident: #(#trait_bounds)+* }
         });
 
         let where_clause_predicates = assoc_bound_predicates
             .chain(core::iter::once_with(|| {
                 let helper_trait_bound =
-                    gen_helper_trait_bound(impl_group_id, helper_trait_ident, type_param_idents);
+                    gen_helper_trait_bound(example_impl, helper_trait_ident, type_param_idents);
 
-                quote! { Self: #helper_trait_bound }
+                parse_quote! { Self: #helper_trait_bound }
             }))
             .collect();
         Self {
@@ -214,36 +183,63 @@ impl GenericsResolver {
     }
 }
 
-fn gen_helper_trait_bound(
-    impl_group_id: &ImplGroupId,
-    helper_trait_ident: &syn::Ident,
+fn combine_generic_args(
     type_param_idents: &[AssocBoundIdent],
-) -> TokenStream2 {
-    let assoc_bounds = gen_assoc_bounds(type_param_idents);
+    path: &syn::Path,
+) -> syn::AngleBracketedGenericArguments {
+    let arguments = &path.segments.last().unwrap().arguments;
 
-    if let Some(impl_trait) = &impl_group_id.0 {
-        let last_seg = impl_trait.segments.last().unwrap();
+    let mut generic_args: Vec<_> = type_param_idents
+        .iter()
+        .map(|(param_ident, trait_bound, assoc_param_name)| {
+            quote! { <#param_ident as #trait_bound>::#assoc_param_name }
+        })
+        .collect();
 
-        if let syn::PathArguments::AngleBracketed(bracketed) = &last_seg.arguments {
-            let impl_trait_generics = bracketed.args.iter();
-
-            return quote! {
-                #helper_trait_ident<#(#assoc_bounds,)* #(#impl_trait_generics),*>
-            };
+    let mut lifetimes = Vec::new();
+    if let syn::PathArguments::AngleBracketed(bracketed) = &arguments {
+        for arg in &bracketed.args {
+            if matches!(arg, syn::GenericArgument::Lifetime(_)) {
+                lifetimes.push(quote!(#arg));
+            } else {
+                generic_args.push(quote!(#arg));
+            }
         }
     }
 
-    quote! { #helper_trait_ident<#(#assoc_bounds),*> }
+    let generic_args = lifetimes.into_iter().chain(generic_args);
+    syn::parse_quote! { <#(#generic_args),*> }
+}
+
+fn gen_helper_trait_bound(
+    example_impl: &ItemImpl,
+    helper_trait_ident: &syn::Ident,
+    type_param_idents: &[AssocBoundIdent],
+) -> syn::Path {
+    let generic_args = if let Some((_, impl_trait, _)) = &example_impl.trait_ {
+        combine_generic_args(type_param_idents, impl_trait)
+    } else if let syn::Type::Path(self_ty) = &*example_impl.self_ty {
+        let mut generic_args = combine_generic_args(type_param_idents, &self_ty.path);
+
+        InherentImplGenericArgPruner::new(&example_impl.generics)
+            .visit_angle_bracketed_generic_arguments_mut(&mut generic_args);
+
+        generic_args
+    } else {
+        unreachable!()
+    };
+
+    parse_quote! { #helper_trait_ident #generic_args }
 }
 
 impl ImplItemResolver {
     fn new(
-        impl_group_id: &ImplGroupId,
+        example_impl: &ItemImpl,
         helper_trait_ident: &syn::Ident,
         type_param_idents: &[AssocBoundIdent],
     ) -> Self {
         let helper_trait_bound =
-            gen_helper_trait_bound(impl_group_id, helper_trait_ident, type_param_idents);
+            gen_helper_trait_bound(example_impl, helper_trait_ident, type_param_idents);
 
         Self {
             self_as_helper_trait: quote! {
@@ -253,16 +249,13 @@ impl ImplItemResolver {
     }
 }
 
-impl VisitMut for GenericsResolver {
+impl VisitMut for GenericsResolver<'_> {
     fn visit_generics_mut(&mut self, node: &mut syn::Generics) {
         let where_clause = node.where_clause.take();
 
-        let node_type_params: FxHashSet<syn::Type> = node
+        let node_type_params: FxHashSet<Bounded<'static>> = node
             .type_params()
-            .map(|type_param| {
-                let type_param_ident = &type_param.ident;
-                parse_quote!(#type_param_ident)
-            })
+            .map(|type_param| (&type_param.ident).into())
             .collect();
 
         for assoc_bound_type_param in &self.assoc_bound_type_params {
@@ -324,16 +317,13 @@ impl VisitMut for ImplItemResolver {
             #self_as_helper_trait::#ident
         );
     }
-
-    fn visit_impl_item_macro_mut(&mut self, _node: &mut syn::ImplItemMacro) {
-        unimplemented!("Trait macros are not supported")
-    }
 }
 
 mod param {
     use super::*;
 
     struct MainTraitParamIndexer {
+        // TODO: Lifetime and type/const params can have the same ident
         params: FxHashMap<syn::Ident, usize>,
         curr_param_pos_idx: usize,
     }
@@ -473,21 +463,24 @@ mod param {
     }
 
     pub fn resolve_main_trait_params(
-        impl_trait: &syn::Path,
         main_trait_impl: &mut syn::ItemImpl,
-        example_impl_generics: &syn::Generics,
+        example_impl: &syn::ItemImpl,
     ) {
         let mut main_trait_param_indexer = MainTraitParamIndexer::new();
         main_trait_param_indexer.visit_item_impl(main_trait_impl);
         let params = main_trait_param_indexer.params;
 
-        let impl_trait_last_seg = impl_trait.segments.last().unwrap();
-        if let syn::PathArguments::AngleBracketed(impl_bracketed) = &impl_trait_last_seg.arguments {
-            let mut main_trait_param_resolver = MainTraitParamResolver::new(params, impl_bracketed);
-            main_trait_param_resolver.visit_item_impl_mut(main_trait_impl);
+        if let Some((_, trait_, _)) = &example_impl.trait_ {
+            let last_seg = trait_.segments.last().unwrap();
+
+            if let syn::PathArguments::AngleBracketed(impl_bracketed) = &last_seg.arguments {
+                MainTraitParamResolver::new(params, impl_bracketed)
+                    .visit_item_impl_mut(main_trait_impl);
+            }
         }
 
-        main_trait_impl.generics.params = example_impl_generics
+        main_trait_impl.generics.params = example_impl
+            .generics
             .params
             .iter()
             .map(|param| match param {

@@ -21,7 +21,7 @@ impl Dispatch for u32 {
 }
 
 disjoint_impls! {
-    pub trait Kita<U> where U: From<u8> + From<bool> {
+    pub trait Kita<U>: Dispatch where U: From<u8> + From<bool> {
         const NAME: &'static str;
     }
 
