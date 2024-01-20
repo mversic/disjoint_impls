@@ -186,13 +186,13 @@ impl<'ast> GenericsResolver<'ast> {
 fn combine_generic_args(
     type_param_idents: &[AssocBoundIdent],
     path: &syn::Path,
-) -> syn::AngleBracketedGenericArguments {
+) -> impl Iterator<Item = syn::GenericArgument> {
     let arguments = &path.segments.last().unwrap().arguments;
 
     let mut generic_args: Vec<_> = type_param_idents
         .iter()
         .map(|(param_ident, trait_bound, assoc_param_name)| {
-            quote! { <#param_ident as #trait_bound>::#assoc_param_name }
+            syn::parse_quote! { <#param_ident as #trait_bound>::#assoc_param_name }
         })
         .collect();
 
@@ -200,15 +200,14 @@ fn combine_generic_args(
     if let syn::PathArguments::AngleBracketed(bracketed) = &arguments {
         for arg in &bracketed.args {
             if matches!(arg, syn::GenericArgument::Lifetime(_)) {
-                lifetimes.push(quote!(#arg));
+                lifetimes.push(syn::parse_quote!(#arg));
             } else {
-                generic_args.push(quote!(#arg));
+                generic_args.push(syn::parse_quote!(#arg));
             }
         }
     }
 
-    let generic_args = lifetimes.into_iter().chain(generic_args);
-    syn::parse_quote! { <#(#generic_args),*> }
+    lifetimes.into_iter().chain(generic_args)
 }
 
 fn gen_helper_trait_bound(
@@ -218,18 +217,14 @@ fn gen_helper_trait_bound(
 ) -> syn::Path {
     let generic_args = if let Some((_, impl_trait, _)) = &example_impl.trait_ {
         combine_generic_args(type_param_idents, impl_trait)
-    } else if let syn::Type::Path(self_ty) = &*example_impl.self_ty {
-        let mut generic_args = combine_generic_args(type_param_idents, &self_ty.path);
-
-        InherentImplGenericArgPruner::new(&example_impl.generics)
-            .visit_angle_bracketed_generic_arguments_mut(&mut generic_args);
-
-        generic_args
+    } else if let syn::Type::Path(mut self_ty) = (*example_impl.self_ty).clone() {
+        gen_inherent_self_ty_args(&mut self_ty, &example_impl.generics);
+        combine_generic_args(type_param_idents, &self_ty.path)
     } else {
         unreachable!()
     };
 
-    parse_quote! { #helper_trait_ident #generic_args }
+    parse_quote! { #helper_trait_ident<#(#generic_args),*> }
 }
 
 impl ImplItemResolver {

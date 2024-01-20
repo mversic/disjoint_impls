@@ -21,6 +21,8 @@ pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
             if &trait_.ident != item_trait_ident {
                 abort!(item_trait_ident, "Doesn't match trait definition");
             }
+        } else {
+            abort!(item_impl, "Expected trait impl, found inherent impl");
         }
 
         if trait_.unsafety != item_impl.unsafety {

@@ -30,11 +30,19 @@ impl Dispatch for u32 {
 pub struct Wrapper<'a, T, const N: usize>(&'a T);
 
 disjoint_impls! {
-    impl<'a, T: A> Wrapper<'a, T, 12> where T: Dispatch<Group = GroupA> + Dispatch<Group = GroupA> {
+    impl<'a, T: A, U> Wrapper<'a, (T, U), 12> where T: Dispatch<Group = GroupA> + Dispatch<Group = GroupA> {
         pub const NAME: &'static str = "1st Blanket A";
+
+        fn kita(_a: T, _b: U) -> &'static str where T: '_ŠČ0, U: '_ŠČ0 {
+            "1st Blanket A"
+        }
     }
-    impl<'b, T> Wrapper<'b, T, 12> where T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB> + B {
+    impl<'b, T, U> Wrapper<'b, (T, U), 12> where T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB> + B {
         pub const NAME: &'static str = "1st Blanket B";
+
+        fn kita(_a: T, _b: U) -> &'static str where T: '_ŠČ0, U: '_ŠČ0 {
+            "1st Blanket B"
+        }
     }
 
     impl<'c, T: Dispatch<Group = GroupA> + Dispatch<Group = GroupA>> Wrapper<'c, T, 14> {
@@ -79,10 +87,10 @@ const _: () = {
 
 #[test]
 fn disjoint_inherent_impl() {
-    assert_eq!("1st Blanket A", <Wrapper<String, 12>>::NAME);
-    assert_eq!("1st Blanket A", <Wrapper<Vec::<u32>, 12>>::NAME);
-    assert_eq!("1st Blanket B", <Wrapper<u32, 12>>::NAME);
-    assert_eq!("1st Blanket B", <Wrapper<i32, 12>>::NAME);
+    assert_eq!("1st Blanket A", <Wrapper<(String, u32), 12>>::NAME);
+    assert_eq!("1st Blanket A", <Wrapper<(Vec::<u32>, u32), 12>>::NAME);
+    assert_eq!("1st Blanket B", <Wrapper<(u32, u32), 12>>::NAME);
+    assert_eq!("1st Blanket B", <Wrapper<(i32, u32), 12>>::NAME);
 
     assert_eq!("2nd Blanket A", <Wrapper<String, 14>>::NAME);
     assert_eq!("2nd Blanket A", <Wrapper<Vec::<u32>, 14>>::NAME);

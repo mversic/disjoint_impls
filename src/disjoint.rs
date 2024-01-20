@@ -9,10 +9,7 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
 
     if example_impl.trait_.is_none() {
         if let syn::Type::Path(mut self_ty) = (*example_impl.self_ty).clone() {
-            let generics = &example_impl.generics;
-
-            let ty_params = &mut self_ty.path.segments.last_mut().unwrap().arguments;
-            InherentImplGenericArgPruner::new(&generics).visit_path_arguments_mut(ty_params);
+            gen_inherent_self_ty_args(&mut self_ty, &example_impl.generics);
 
             impls.iter_mut().for_each(|syn::ItemImpl { trait_, .. }| {
                 *trait_ = Some((None, parse_quote!(#self_ty), parse_quote![for]));

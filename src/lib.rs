@@ -8,7 +8,6 @@ use proc_macro_error::{abort, proc_macro_error, OptionExt};
 use quote::{format_ident, quote};
 use rustc_hash::{FxHashMap, FxHashSet};
 use syn::visit::Visit;
-use syn::visit_mut::VisitMut;
 use syn::ItemImpl;
 use syn::{
     parse::{Parse, ParseStream},
@@ -448,57 +447,27 @@ impl Parse for ItemImpls {
     }
 }
 
-struct InherentImplGenericArgPruner<'ast> {
-    param_idents: FxHashSet<&'ast syn::Ident>,
-    should_remove_curr_arg: bool,
-}
-impl<'ast> InherentImplGenericArgPruner<'ast> {
-    fn new(generics: &'ast syn::Generics) -> Self {
-        Self {
-            param_idents: generics
-                .params
-                .iter()
-                .filter_map(|param| {
-                    if matches!(param, syn::GenericParam::Lifetime(_)) {
-                        return None;
-                    }
+fn gen_inherent_self_ty_args(self_ty: &mut syn::TypePath, generics: &syn::Generics) {
+    let last_seg = &mut self_ty.path.segments.last_mut().unwrap();
 
-                    Some(param::get_param_ident(param))
-                })
-                .collect(),
-            should_remove_curr_arg: true,
-        }
-    }
-}
-impl VisitMut for InherentImplGenericArgPruner<'_> {
-    fn visit_ident_mut(&mut self, node: &mut syn::Ident) {
-        if self.param_idents.contains(node) {
-            self.should_remove_curr_arg = false;
-        }
-    }
+    if let syn::PathArguments::AngleBracketed(bracketed) = &mut last_seg.arguments {
+        let mut lifetimes = Vec::new();
+        let mut params = Vec::new();
 
-    fn visit_angle_bracketed_generic_arguments_mut(
-        &mut self,
-        node: &mut syn::AngleBracketedGenericArguments,
-    ) {
-        node.args = core::mem::take(&mut node.args)
-            .into_iter()
-            .filter_map(|mut arg| {
-                match &mut arg {
-                    syn::GenericArgument::Lifetime(_) => return Some(arg),
-                    syn::GenericArgument::Type(type_) => self.visit_type_mut(type_),
-                    syn::GenericArgument::Const(const_) => self.visit_expr_mut(const_),
-                    _ => unreachable!(),
-                }
+        generics.params.iter().for_each(|param| match param {
+            syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => {
+                lifetimes.push(lifetime);
+            }
+            syn::GenericParam::Type(syn::TypeParam { ident, .. }) => params.push(ident),
+            syn::GenericParam::Const(syn::ConstParam { ident, .. }) => params.push(ident),
+        });
 
-                if self.should_remove_curr_arg {
-                    return None;
-                }
+        lifetimes.sort();
+        params.sort();
 
-                self.should_remove_curr_arg = true;
-                Some(arg)
-            })
-            .collect();
+        *bracketed = syn::parse_quote!(<#(#lifetimes,)* #(#params),*>);
+    } else {
+        unreachable!()
     }
 }
 
@@ -508,9 +477,13 @@ impl ItemImpls {
         item_impls: FxHashMap<ImplGroupId, Vec<ItemImpl>>,
     ) -> Self {
         if let Some(trait_) = &item_trait_ {
-            validate::validate_trait_impls(trait_, item_impls.values().flatten());
+            for item_impls in item_impls.values() {
+                validate::validate_trait_impls(trait_, item_impls);
+            }
         } else {
-            validate::validate_inherent_impls(item_impls.values().flatten());
+            for item_impls in item_impls.values() {
+                validate::validate_inherent_impls(item_impls);
+            }
         }
 
         Self {
@@ -550,9 +523,6 @@ mod helper_trait {
             let items = gen_inherent_impl_items(&items);
             if let syn::Type::Path(type_path) = &mut *self_ty {
                 type_path.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
-
-                let ty_params = &mut type_path.path.segments.last_mut().unwrap().arguments;
-                InherentImplGenericArgPruner::new(&generics).visit_path_arguments_mut(ty_params);
             }
 
             remove_param_bounds(&mut generics);
