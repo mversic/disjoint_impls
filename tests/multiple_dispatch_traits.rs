@@ -47,7 +47,7 @@ disjoint_impls! {
     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> Kita for T {
         const NAME: &'static str = "Blanket AB";
     }
-    impl<T: Dispatch1<Group = GroupB>> Kita for T {
+    impl<T: Dispatch1<Group = GroupB> + Dispatch2> Kita for T {
         const NAME: &'static str = "Blanket B*";
     }
 }
@@ -68,7 +68,7 @@ const _: () = {
     impl<_0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> _Kita0<GroupB, GroupA> for _0 {
         const NAME: &'static str = "Blanket AB";
     }
-    impl<_0: Dispatch1<Group = GroupB>, _MŠČ0> _Kita0<_MŠČ0, GroupB> for _0 {
+    impl<_0: Dispatch1<Group = GroupB>, _1: Dispatch2> _Kita0<<_1 as Dispatch>::Group, GroupB> for _0 {
         const NAME: &'static str = "Blanket B*";
     }
 

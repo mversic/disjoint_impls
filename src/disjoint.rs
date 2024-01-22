@@ -28,36 +28,41 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
     }
 
     let AssocBounds {
-        type_param_idents,
-        type_params,
+        assoc_bound_idents,
+        assoc_bounds,
     } = AssocBounds::find(&impls);
 
-    let type_params = type_params
+    let assoc_bounds = assoc_bounds
         .iter()
-        .map(|params| {
-            type_param_idents
+        .map(|assoc_bound| {
+            assoc_bound_idents
                 .iter()
-                .map(|param_ident| params.get(param_ident).map(|&param| param.clone()))
+                .map(|param_ident| {
+                    let (param, trait_bound, assoc_type) = &param_ident;
+
+                    assoc_bound
+                        .get(param_ident)
+                        .map(|&payload| quote!(#payload))
+                        .unwrap_or_else(|| quote!(<#param as #trait_bound>::#assoc_type))
+                })
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 
     impls
         .iter_mut()
-        .zip(type_params)
-        .for_each(|(impl_, params)| {
-            let params = update_disjoint_impl_generics(impl_, params);
-
+        .zip(assoc_bounds)
+        .for_each(|(impl_, assoc_bound)| {
             let trait_ = &mut impl_.trait_.as_mut().unwrap().1;
             let path = trait_.segments.last_mut().unwrap();
 
             match &mut path.arguments {
                 syn::PathArguments::None => {
-                    let bracketed = syn::parse_quote! { <#( #params ),*> };
+                    let bracketed = syn::parse_quote! { <#( #assoc_bound ),*> };
                     path.arguments = syn::PathArguments::AngleBracketed(bracketed)
                 }
                 syn::PathArguments::AngleBracketed(bracketed) => {
-                    bracketed.args = params
+                    bracketed.args = assoc_bound
                         .into_iter()
                         .map::<syn::GenericArgument, _>(|param| syn::parse_quote!(#param))
                         .chain(core::mem::take(&mut bracketed.args))
@@ -70,25 +75,4 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
         });
 
     impls
-}
-
-// TODO: Why is this required? Can't I name missing params the same as other params
-fn update_disjoint_impl_generics(
-    impl_: &mut ItemImpl,
-    params: Vec<Option<syn::Type>>,
-) -> Vec<syn::Type> {
-    params
-        .into_iter()
-        .enumerate()
-        .map(|(idx, param)| {
-            if let Some(param) = param {
-                param
-            } else {
-                let missing_param = format_ident!("_MŠČ{idx}");
-                impl_.generics.params.push(parse_quote!(#missing_param));
-
-                parse_quote!(#missing_param)
-            }
-        })
-        .collect()
 }

@@ -50,14 +50,14 @@ pub fn gen(
     )?;
 
     let AssocBounds {
-        type_param_idents, ..
+        assoc_bound_idents, ..
     } = AssocBounds::find(impl_group);
 
-    GenericsResolver::new(example_impl, &helper_trait_ident, &type_param_idents)
+    GenericsResolver::new(example_impl, &helper_trait_ident, &assoc_bound_idents)
         .visit_generics_mut(&mut main_trait_impl.generics);
 
     let mut impl_item_resolver =
-        ImplItemResolver::new(example_impl, &helper_trait_ident, &type_param_idents);
+        ImplItemResolver::new(example_impl, &helper_trait_ident, &assoc_bound_idents);
     main_trait_impl
         .items
         .iter_mut()
@@ -248,13 +248,19 @@ impl VisitMut for GenericsResolver<'_> {
     fn visit_generics_mut(&mut self, node: &mut syn::Generics) {
         let where_clause = node.where_clause.take();
 
-        let node_type_params: FxHashSet<Bounded<'static>> = node
+        let type_params: Vec<_> = node
             .type_params()
-            .map(|type_param| (&type_param.ident).into())
+            .map(|param| &param.ident)
+            .cloned()
+            .collect();
+
+        let type_params: FxHashSet<Bounded> = type_params
+            .iter()
+            .map(|type_param_ident| type_param_ident.into())
             .collect();
 
         for assoc_bound_type_param in &self.assoc_bound_type_params {
-            if !node_type_params.contains(assoc_bound_type_param) {
+            if !type_params.contains(assoc_bound_type_param) {
                 use syn::parse;
 
                 if let Ok(assoc_bound_type_param) = parse(quote!(#assoc_bound_type_param).into()) {

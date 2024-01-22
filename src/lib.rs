@@ -33,10 +33,10 @@ struct ItemImpls {
 struct TraitBound<'ast>(&'ast syn::Path);
 
 /// Bounded param/type
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 enum Bounded<'ast> {
     /// Holds the value of [`syn::TypeParam::ident`]
-    Param(syn::Type),
+    Param(&'ast syn::Ident),
     /// Holds the value of [`syn::PredicateType::bounded_ty`]
     Type(&'ast syn::Type),
 }
@@ -58,8 +58,10 @@ impl PartialEq for Bounded<'_> {
             (Param(x), Param(y)) => x == y,
             (Type(x), Type(y)) => x == y,
 
-            (Param(x), Type(y)) => x == *y,
-            (Type(x), Param(y)) => *x == y,
+            (Param(x), Type(syn::Type::Path(ty))) => ty.path.get_ident() == Some(x),
+            (Type(syn::Type::Path(ty)), Param(y)) => ty.path.get_ident() == Some(y),
+
+            _ => false,
         }
     }
 }
@@ -69,18 +71,22 @@ impl core::hash::Hash for Bounded<'_> {
         use Bounded::*;
 
         match self {
-            Type(ty_) => ty_.hash(state),
-            Param(ident) => {
-                let ty_: syn::Type = syn::parse_quote!(#ident);
-                ty_.hash(state)
+            Param(ident) => ident.hash(state),
+            Type(syn::Type::Path(ty)) => {
+                if let Some(ident) = ty.path.get_ident() {
+                    ident.hash(state);
+                } else {
+                    ty.hash(state);
+                }
             }
+            Type(ty) => ty.hash(state),
         }
     }
 }
 
-impl From<&syn::Ident> for Bounded<'_> {
-    fn from(source: &syn::Ident) -> Self {
-        Self::Param(syn::parse_quote!(#source))
+impl<'ast> From<&'ast syn::Ident> for Bounded<'ast> {
+    fn from(source: &'ast syn::Ident) -> Self {
+        Self::Param(source)
     }
 }
 
@@ -101,10 +107,6 @@ impl quote::ToTokens for Bounded<'_> {
 
 impl PartialEq for TraitBound<'_> {
     fn eq(&self, other: &Self) -> bool {
-        if self.0.leading_colon != other.0.leading_colon {
-            return false;
-        }
-
         let mut first_iter = self.0.segments.iter().rev();
         let mut second_iter = other.0.segments.iter().rev();
 
@@ -117,14 +119,18 @@ impl PartialEq for TraitBound<'_> {
         }
 
         match (&first_elem.arguments, &second_elem.arguments) {
+            (syn::PathArguments::None, syn::PathArguments::None) => true,
+            (syn::PathArguments::AngleBracketed(bracketed), syn::PathArguments::None)
+            | (syn::PathArguments::None, syn::PathArguments::AngleBracketed(bracketed)) => {
+                !bracketed
+                    .args
+                    .iter()
+                    .any(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
+            }
             (
                 syn::PathArguments::AngleBracketed(first_args),
                 syn::PathArguments::AngleBracketed(second_args),
             ) => {
-                if first_args.colon2_token != second_args.colon2_token {
-                    return false;
-                }
-
                 let first_args = first_args
                     .args
                     .iter()
@@ -143,21 +149,18 @@ impl PartialEq for TraitBound<'_> {
                 first_args
                     .iter()
                     .zip(&second_args)
-                    .all(|zipped_args| match zipped_args {
-                        (syn::GenericArgument::AssocType(_), _)
-                        | (_, syn::GenericArgument::AssocType(_)) => unreachable!(),
-                        _ => zipped_args.0 == zipped_args.1,
-                    })
+                    .all(|zipped_args| zipped_args.0 == zipped_args.1)
             }
-            _ => first_elem.arguments == second_elem.arguments,
+            (_, syn::PathArguments::Parenthesized(_))
+            | (syn::PathArguments::Parenthesized(_), _) => {
+                unreachable!()
+            }
         }
     }
 }
 
 impl core::hash::Hash for TraitBound<'_> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.0.leading_colon.hash(state);
-
         let mut iter = self.0.segments.iter().rev();
         let first_elem = iter.next().unwrap();
 
@@ -165,15 +168,14 @@ impl core::hash::Hash for TraitBound<'_> {
         first_elem.ident.hash(state);
 
         match &first_elem.arguments {
+            syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(first_args) => {
-                first_args.colon2_token.hash(state);
-
                 first_args.args.iter().for_each(|args| match args {
                     syn::GenericArgument::AssocType(_) => {}
                     _ => args.hash(state),
                 })
             }
-            _ => first_elem.arguments.hash(state),
+            syn::PathArguments::Parenthesized(_) => unreachable!(),
         }
     }
 }
@@ -196,10 +198,7 @@ impl quote::ToTokens for TraitBound<'_> {
                 first_args
                     .args
                     .iter()
-                    .filter_map(|arg| match arg {
-                        syn::GenericArgument::AssocType(_) => None,
-                        _ => Some(arg),
-                    })
+                    .filter(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
                     .collect::<syn::punctuated::Punctuated<_, syn::Token![,]>>()
                     .to_tokens(tokens);
                 quote!(>).to_tokens(tokens);
@@ -209,53 +208,86 @@ impl quote::ToTokens for TraitBound<'_> {
     }
 }
 
+#[derive(Default)]
 struct AssocBounds<'ast> {
     /// Collection of associated bound identifiers
-    type_param_idents: Vec<AssocBoundIdent<'ast>>,
+    assoc_bound_idents: Vec<AssocBoundIdent<'ast>>,
     /// Collection of associated bounds for every implementation
-    type_params: Vec<FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
+    assoc_bounds: Vec<FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
 }
 
 impl<'ast> AssocBounds<'ast> {
     fn find(impl_group: &'ast [ItemImpl]) -> Self {
-        let (mut type_param_idents, mut type_params) = (FxHashSet::default(), Vec::new());
+        let mut type_param_bounds: FxHashSet<_> = if let Some(first_impl) = impl_group.first() {
+            let mut visitor = TraitBoundsVisitor::new();
+            visitor.visit_generics(&first_impl.generics);
+            visitor.type_param_bounds
+        } else {
+            FxHashSet::default()
+        };
 
-        for impl_ in impl_group {
-            let mut visitor = AssocBoundsVisitor::new();
+        let assoc_bounds: Vec<_> = impl_group
+            .iter()
+            .map(|impl_| {
+                let mut visitor = TraitBoundsVisitor::new();
+                visitor.visit_generics(&impl_.generics);
+                type_param_bounds = &type_param_bounds & &visitor.type_param_bounds;
 
-            visitor.visit_generics(&impl_.generics);
-            type_params.push(visitor.type_params);
+                visitor.assoc_bounds
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|assoc_bounds| {
+                assoc_bounds
+                    .into_iter()
+                    .filter_map(|(id, payload)| {
+                        let (param, trait_bound, _) = id;
 
-            type_param_idents.extend(visitor.type_param_idents);
-        }
+                        if type_param_bounds.contains(&(param, trait_bound)) {
+                            return Some((id, payload));
+                        }
 
-        AssocBounds {
-            type_param_idents: type_param_idents.into_iter().collect(),
-            type_params,
+                        None
+                    })
+                    .collect::<FxHashMap<_, _>>()
+            })
+            .collect();
+
+        let assoc_bound_idents = assoc_bounds
+            .iter()
+            .fold(FxHashSet::default(), |mut acc, e| {
+                acc.extend(e.keys());
+                acc
+            })
+            .into_iter()
+            .collect();
+
+        Self {
+            assoc_bound_idents,
+            assoc_bounds,
         }
     }
 }
 
-struct AssocBoundsVisitor<'ast> {
+struct TraitBoundsVisitor<'ast> {
     /// Type parameter identifier currently being visited
     curr_type_param: Option<Bounded<'ast>>,
     /// Trait bound currently being visited
     curr_trait_bound: Option<TraitBound<'ast>>,
 
-    /// Collection of associated bound identifiers
-    type_param_idents: FxHashSet<AssocBoundIdent<'ast>>,
+    type_param_bounds: FxHashSet<(Bounded<'ast>, TraitBound<'ast>)>,
     /// Collection of associated bounds for every implementation
-    type_params: FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>,
+    assoc_bounds: Vec<(AssocBoundIdent<'ast>, &'ast AssocBoundPayload)>,
 }
 
-impl<'ast> AssocBoundsVisitor<'ast> {
+impl<'ast> TraitBoundsVisitor<'ast> {
     fn new() -> Self {
         Self {
             curr_type_param: None,
             curr_trait_bound: None,
 
-            type_param_idents: FxHashSet::default(),
-            type_params: FxHashMap::default(),
+            type_param_bounds: FxHashSet::default(),
+            assoc_bounds: Vec::default(),
         }
     }
 
@@ -264,14 +296,14 @@ impl<'ast> AssocBoundsVisitor<'ast> {
         assoc_param_name: &'ast syn::Ident,
     ) -> AssocBoundIdent<'ast> {
         (
-            self.curr_type_param.clone().unwrap(),
+            self.curr_type_param.unwrap(),
             self.curr_trait_bound.unwrap(),
             assoc_param_name,
         )
     }
 }
 
-impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
+impl<'ast> Visit<'ast> for TraitBoundsVisitor<'ast> {
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.visit_generics(&node.generics);
     }
@@ -288,12 +320,16 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
     fn visit_trait_bound(&mut self, node: &'ast syn::TraitBound) {
         self.curr_trait_bound = Some(TraitBound(&node.path));
         syn::visit::visit_trait_bound(self, node);
+
+        self.type_param_bounds.insert((
+            self.curr_type_param.unwrap(),
+            self.curr_trait_bound.unwrap(),
+        ));
     }
 
     fn visit_assoc_type(&mut self, node: &'ast syn::AssocType) {
         let assoc_bound_ident = self.make_assoc_param_ident(&node.ident);
-        self.type_params.insert(assoc_bound_ident.clone(), &node.ty);
-        self.type_param_idents.insert(assoc_bound_ident);
+        self.assoc_bounds.push((assoc_bound_ident, &node.ty));
     }
 }
 
@@ -358,7 +394,7 @@ impl<'ast> Visit<'ast> for AssocBoundsVisitor<'ast> {
 ///     {
 ///         const COMPLEX_NAME: &'static str = "Blanket AB";
 ///     }
-///     impl<T: Dispatch<Group = GroupB>, U> ComplexKita for (T, U) {
+///     impl<T: Dispatch<Group = GroupB>, U: Dispatch> ComplexKita for (T, U) {
 ///         const COMPLEX_NAME: &'static str = "Blanket B*";
 ///     }
 ///
@@ -506,7 +542,7 @@ mod helper_trait {
         impl_group_idx: usize,
         impl_group: &[ItemImpl],
     ) -> Option<syn::ItemTrait> {
-        let type_param_idents = AssocBounds::find(impl_group).type_param_idents;
+        let assoc_bound_idents = AssocBounds::find(impl_group).assoc_bound_idents;
 
         let mut helper_trait = if let Some(helper_trait) = main_trait {
             helper_trait.clone()
@@ -543,7 +579,7 @@ mod helper_trait {
 
         let start_idx = helper_trait.generics.params.len();
         helper_trait.generics.params = combine_generic_args(
-            (start_idx..start_idx + type_param_idents.len()).map(param::gen_indexed_param_name),
+            (start_idx..start_idx + assoc_bound_idents.len()).map(param::gen_indexed_param_name),
             &helper_trait.generics,
         )
         .map(|arg| -> syn::GenericParam { syn::parse_quote!(#arg) })

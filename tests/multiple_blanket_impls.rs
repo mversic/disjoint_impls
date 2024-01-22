@@ -42,7 +42,7 @@ disjoint_impls! {
     {
         const NAME: &'static str = "Blanket AB";
     }
-    impl<T: Dispatch<Group = GroupB>, U> Kita for (T, U) {
+    impl<T: Dispatch<Group = GroupB>, U: Dispatch> Kita for (T, U) {
         const NAME: &'static str = "Blanket B*";
     }
 }
@@ -73,7 +73,7 @@ const _: () = {
     impl<_0, _1> _Kita1<GroupB, GroupA> for (_0, _1) where _0: Dispatch<Group = GroupA>, _1: Dispatch<Group = GroupB> {
         const NAME: &'static str = "Blanket AB";
     }
-    impl<_0: Dispatch<Group = GroupB>, _1, _MŠČ0> _Kita1<_MŠČ0, GroupB> for (_0, _1) {
+    impl<_0: Dispatch<Group = GroupB>, _1: Dispatch> _Kita1<<_1 as Dispatch>::Group, GroupB> for (_0, _1) {
         const NAME: &'static str = "Blanket B*";
     }
 

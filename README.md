@@ -62,7 +62,7 @@ disjoint_impls! {
     {
         const COMPLEX_NAME: &'static str = "Blanket AB";
     }
-    impl<T: Dispatch<Group = GroupB>, U> ComplexKita for (T, U) {
+    impl<T: Dispatch<Group = GroupB>, U: Dispatch> ComplexKita for (T, U) {
         const COMPLEX_NAME: &'static str = "Blanket B*";
     }
 
