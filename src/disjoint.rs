@@ -52,17 +52,17 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
     impls
         .iter_mut()
         .zip(assoc_bounds)
-        .for_each(|(impl_, assoc_bound)| {
+        .for_each(|(impl_, assoc_bounds)| {
             let trait_ = &mut impl_.trait_.as_mut().unwrap().1;
             let path = trait_.segments.last_mut().unwrap();
 
             match &mut path.arguments {
                 syn::PathArguments::None => {
-                    let bracketed = syn::parse_quote! { <#( #assoc_bound ),*> };
+                    let bracketed = syn::parse_quote! { <#( #assoc_bounds ),*> };
                     path.arguments = syn::PathArguments::AngleBracketed(bracketed)
                 }
                 syn::PathArguments::AngleBracketed(bracketed) => {
-                    bracketed.args = assoc_bound
+                    bracketed.args = assoc_bounds
                         .into_iter()
                         .map::<syn::GenericArgument, _>(|param| syn::parse_quote!(#param))
                         .chain(core::mem::take(&mut bracketed.args))

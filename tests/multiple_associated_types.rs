@@ -31,14 +31,14 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
+    impl<T: Dispatch<Group1 = GroupB>> Kita for T {
+        const NAME: &'static str = "Blanket B*";
+    }
     impl<T: Dispatch<Group1 = GroupA, Group2 = GroupA>> Kita for T {
         const NAME: &'static str = "Blanket AA";
     }
     impl<T: Dispatch<Group1 = GroupA, Group2 = GroupB>> Kita for T {
         const NAME: &'static str = "Blanket AB";
-    }
-    impl<T: Dispatch<Group1 = GroupB>> Kita for T {
-        const NAME: &'static str = "Blanket B*";
     }
 }
 

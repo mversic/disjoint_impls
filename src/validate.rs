@@ -1,3 +1,5 @@
+use proc_macro_error::OptionExt;
+
 use super::*;
 
 // TODO: Check content of ItemImpl::items, not only idents for impls?

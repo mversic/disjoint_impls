@@ -2,9 +2,10 @@ mod disjoint;
 mod main_trait;
 mod validate;
 
+use param::get_param_ident;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::{abort, proc_macro_error, OptionExt};
+use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote};
 use rustc_hash::{FxHashMap, FxHashSet};
 use syn::visit::Visit;
@@ -218,20 +219,31 @@ struct AssocBounds<'ast> {
 
 impl<'ast> AssocBounds<'ast> {
     fn find(impl_group: &'ast [ItemImpl]) -> Self {
-        let mut type_param_bounds: FxHashSet<_> = if let Some(first_impl) = impl_group.first() {
-            let mut visitor = TraitBoundsVisitor::new();
-            visitor.visit_generics(&first_impl.generics);
-            visitor.type_param_bounds
-        } else {
-            FxHashSet::default()
-        };
+        let first_type_param_bounds = impl_group
+            .first()
+            .map(|first_impl| {
+                let mut visitor = TraitBoundsVisitor::new();
+                visitor.visit_generics(&first_impl.generics);
+                visitor.type_param_bounds
+            })
+            .unwrap_or_default();
 
-        let assoc_bounds: Vec<_> = impl_group
+        let mut type_param_bounds = first_type_param_bounds
+            .iter()
+            .cloned()
+            .collect::<FxHashSet<_>>();
+
+        let assoc_bounds = impl_group
             .iter()
             .map(|impl_| {
                 let mut visitor = TraitBoundsVisitor::new();
                 visitor.visit_generics(&impl_.generics);
-                type_param_bounds = &type_param_bounds & &visitor.type_param_bounds;
+
+                type_param_bounds = &type_param_bounds
+                    & &visitor
+                        .type_param_bounds
+                        .into_iter()
+                        .collect::<FxHashSet<_>>();
 
                 visitor.assoc_bounds
             })
@@ -249,22 +261,41 @@ impl<'ast> AssocBounds<'ast> {
 
                         None
                     })
-                    .collect::<FxHashMap<_, _>>()
+                    .collect::<Vec<_>>()
             })
-            .collect();
+            .collect::<Vec<_>>();
 
-        let assoc_bound_idents = assoc_bounds
-            .iter()
-            .fold(FxHashSet::default(), |mut acc, e| {
-                acc.extend(e.keys());
-                acc
-            })
-            .into_iter()
-            .collect();
+        let assoc_bound_idents = {
+            let mut seen_assoc_bound_idents = FxHashSet::default();
+            let mut seen_type_param_bounds = FxHashSet::default();
+
+            let assoc_bound_idents = assoc_bounds
+                .iter()
+                .flatten()
+                .map(|(id, _)| *id)
+                .filter(|&id| seen_assoc_bound_idents.insert(id))
+                .fold(FxHashMap::<_, Vec<_>>::default(), |mut acc, id| {
+                    acc.entry((id.0, id.1)).or_default().push(id);
+                    acc
+                });
+
+            first_type_param_bounds
+                .into_iter()
+                .filter(|&bound| {
+                    seen_type_param_bounds.insert(bound) && assoc_bound_idents.contains_key(&bound)
+                })
+                .flat_map(|type_param_bound| assoc_bound_idents.get(&type_param_bound).unwrap())
+                .cloned()
+                .collect()
+        };
 
         Self {
             assoc_bound_idents,
-            assoc_bounds,
+
+            assoc_bounds: assoc_bounds
+                .into_iter()
+                .map(|impl_assoc_bounds| impl_assoc_bounds.into_iter().collect())
+                .collect(),
         }
     }
 }
@@ -275,7 +306,7 @@ struct TraitBoundsVisitor<'ast> {
     /// Trait bound currently being visited
     curr_trait_bound: Option<TraitBound<'ast>>,
 
-    type_param_bounds: FxHashSet<(Bounded<'ast>, TraitBound<'ast>)>,
+    type_param_bounds: Vec<(Bounded<'ast>, TraitBound<'ast>)>,
     /// Collection of associated bounds for every implementation
     assoc_bounds: Vec<(AssocBoundIdent<'ast>, &'ast AssocBoundPayload)>,
 }
@@ -286,7 +317,7 @@ impl<'ast> TraitBoundsVisitor<'ast> {
             curr_type_param: None,
             curr_trait_bound: None,
 
-            type_param_bounds: FxHashSet::default(),
+            type_param_bounds: Vec::default(),
             assoc_bounds: Vec::default(),
         }
     }
@@ -308,10 +339,29 @@ impl<'ast> Visit<'ast> for TraitBoundsVisitor<'ast> {
         self.visit_generics(&node.generics);
     }
 
+    fn visit_generics(&mut self, node: &'ast syn::Generics) {
+        let mut params: Vec<_> = node
+            .params
+            .iter()
+            .map(|param| (get_param_ident(param), param))
+            .collect();
+
+        // NOTE: Iterate in predictable order
+        params.sort_by_key(|(ident, _)| *ident);
+
+        for (_, param) in params {
+            self.visit_generic_param(param);
+        }
+        if let Some(where_clause) = &node.where_clause {
+            self.visit_where_clause(where_clause);
+        }
+    }
+
     fn visit_type_param(&mut self, node: &'ast syn::TypeParam) {
         self.curr_type_param = Some((&node.ident).into());
         syn::visit::visit_type_param(self, node);
     }
+
     fn visit_predicate_type(&mut self, node: &'ast syn::PredicateType) {
         self.curr_type_param = Some((&node.bounded_ty).into());
         syn::visit::visit_predicate_type(self, node);
@@ -321,7 +371,7 @@ impl<'ast> Visit<'ast> for TraitBoundsVisitor<'ast> {
         self.curr_trait_bound = Some(TraitBound(&node.path));
         syn::visit::visit_trait_bound(self, node);
 
-        self.type_param_bounds.insert((
+        self.type_param_bounds.push((
             self.curr_type_param.unwrap(),
             self.curr_trait_bound.unwrap(),
         ));
