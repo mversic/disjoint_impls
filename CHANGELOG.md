@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0] - 2024-01-08
+## [0.7.0] - 2024-01-23
+
+### Added
+
+- Predictable ordering of generic arguments
+
+### Changed
+
+- Only dispatch on assoc bounds that are present in all impls
+
+### Fixed
+
+- Fix inherent impls parametrization
+- Fix for const parameters in inherent impls
+
+## [0.6.0] - 2024-01-08
 
 ### Added
 
