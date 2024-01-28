@@ -43,7 +43,7 @@ pub trait Kita<'a, 'b: 'a, U> {
 }
 
 const _: () = {
-    pub trait _Kita0<'a, 'b: 'a, _0: ?Sized, U> {
+    pub trait _Kita0<'a, 'b: 'a, _3: ?Sized, U> {
         fn get_name(&'b self) -> &'a str;
     }
 

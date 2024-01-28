@@ -47,6 +47,7 @@ const _: () = {
     pub trait _Kita0<_0: ?Sized> {
         fn kita(&self) -> String;
     }
+
     impl<_0: Dispatch<Group = GroupA>> _Kita0<GroupA> for _0 {
         fn kita(&self) -> String {
             "Blanket A".to_owned()

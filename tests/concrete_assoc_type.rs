@@ -68,7 +68,7 @@ const _: () = {
         type Item = _0;
 
         fn kita() -> Self::Item {
-            _0::default()
+            <_0>::default()
         }
     }
 

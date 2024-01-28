@@ -52,14 +52,14 @@ const _: () = {
         const NAME: &'static str;
     }
 
+    impl<_0: Dispatch<Group1 = GroupB>> _Kita0<GroupB, <_0 as Dispatch>::Group2> for _0 {
+        const NAME: &'static str = "Blanket B*";
+    }
     impl<_0: Dispatch<Group1 = GroupA, Group2 = GroupA>> _Kita0<GroupA, GroupA> for _0 {
         const NAME: &'static str = "Blanket AA";
     }
     impl<_0: Dispatch<Group1 = GroupA, Group2 = GroupB>> _Kita0<GroupA, GroupB> for _0 {
         const NAME: &'static str = "Blanket AB";
-    }
-    impl<_0: Dispatch<Group1 = GroupB>, _MŠČ1> _Kita0<GroupB, _MŠČ1> for _0 {
-        const NAME: &'static str = "Blanket B*";
     }
 
     impl<_0> Kita for _0 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group1, <_0 as Dispatch>::Group2> {

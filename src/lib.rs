@@ -497,7 +497,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut item_impls = Vec::new();
 
     let main_trait = impls.item_trait_;
-    for (impl_group_idx, (_, impl_group)) in impls.item_impls.into_iter().enumerate() {
+    for (impl_group_idx, impl_group) in impls.item_impls.into_values().enumerate() {
         // TODO: Assoc bounds are computed multiple times
         helper_traits.push(helper_trait::gen(
             main_trait.as_ref(),
@@ -626,7 +626,7 @@ mod helper_trait {
             }
 
             remove_param_bounds(&mut generics);
-            let (impl_generics, _, _) = generics.split_for_impl();
+            let impl_generics = generics.split_for_impl().0;
 
             syn::parse_quote! {
                 #(#attrs)*
@@ -643,7 +643,7 @@ mod helper_trait {
 
         let start_idx = helper_trait.generics.params.len();
         helper_trait.generics.params = combine_generic_args(
-            (start_idx..start_idx + assoc_bound_idents.len()).map(param::gen_indexed_param_name),
+            (start_idx..start_idx + assoc_bound_idents.len()).map(param::gen_indexed_param_ident),
             &helper_trait.generics,
         )
         .map(|arg| -> syn::GenericParam { syn::parse_quote!(#arg) })
@@ -741,6 +741,7 @@ mod helper_trait {
 mod param {
     //! Contains logic related to uniform position based (re-)naming of parameters
 
+    use proc_macro2::Span;
     use rustc_hash::FxHashMap;
 
     use quote::format_ident;
@@ -752,57 +753,135 @@ mod param {
     /// `T` = 0,
     /// `U` = 1,
     /// `V` = undetermined
-    struct NonPredicateParamIndexer {
-        indexed_params: FxHashMap<syn::Ident, (usize, syn::GenericParam)>,
-        unindexed_params: FxHashMap<syn::Ident, syn::GenericParam>,
+    struct NonPredicateParamIndexer<'a> {
+        unindexed_lifetimes: FxHashMap<&'a syn::Ident, &'a syn::LifetimeParam>,
+        unindexed_type_params: FxHashMap<&'a syn::Ident, &'a syn::TypeParam>,
+        unindexed_const_params: FxHashMap<&'a syn::Ident, &'a syn::ConstParam>,
+
+        indexed_lifetimes: FxHashMap<&'a syn::Ident, (usize, &'a syn::LifetimeParam)>,
+        indexed_type_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::TypeParam)>,
+        indexed_const_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::ConstParam)>,
+
         curr_param_pos_idx: usize,
     }
 
-    struct NonPredicateParamResolver {
-        params: FxHashMap<syn::Ident, usize>,
+    pub struct NonPredicateParamResolver<'a> {
+        lifetime_replacements: FxHashMap<syn::Ident, &'a syn::Lifetime>,
+        type_param_replacements: FxHashMap<syn::Ident, &'a syn::Type>,
+        const_param_replacements: FxHashMap<syn::Ident, &'a syn::Expr>,
     }
 
     pub fn resolve_non_predicate_params(item_impl: &mut syn::ItemImpl) {
-        let item_impl_generics = item_impl.generics.params.iter().cloned();
-
         let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(
-            item_impl_generics
-                .map(|param| (get_param_ident(&param).clone(), param))
-                .collect(),
+            item_impl
+                .generics
+                .lifetimes()
+                .map(|param| (&param.lifetime.ident, param)),
+            item_impl
+                .generics
+                .type_params()
+                .map(|param| (&param.ident, param)),
+            item_impl
+                .generics
+                .const_params()
+                .map(|param| (&param.ident, param)),
             0,
         );
 
         non_predicate_param_indexer.visit_item_impl(item_impl);
 
         let mut prev_unindexed_params_count = usize::MAX;
-        let mut indexed_params = non_predicate_param_indexer.indexed_params;
-        let mut curr_unindexed_params_count = non_predicate_param_indexer.unindexed_params.len();
+        let mut curr_unindexed_params_count = non_predicate_param_indexer.len();
+        let indexed_lifetimes = non_predicate_param_indexer.indexed_lifetimes;
+        let mut indexed_type_params = non_predicate_param_indexer.indexed_type_params;
+        let mut indexed_const_params = non_predicate_param_indexer.indexed_const_params;
 
-        while !non_predicate_param_indexer.unindexed_params.is_empty()
+        while prev_unindexed_params_count > 0
             // NOTE: This discards parameters only used in where clause
             && prev_unindexed_params_count != curr_unindexed_params_count
         {
             non_predicate_param_indexer = NonPredicateParamIndexer::new(
-                non_predicate_param_indexer.unindexed_params,
+                non_predicate_param_indexer.unindexed_lifetimes,
+                non_predicate_param_indexer.unindexed_type_params,
+                non_predicate_param_indexer.unindexed_const_params,
                 non_predicate_param_indexer.curr_param_pos_idx,
             );
 
             non_predicate_param_indexer.visit_indexed_params(
-                indexed_params
+                indexed_type_params
                     .iter()
-                    .map(|(_, (idx, param))| (*idx, param))
-                    .collect(),
+                    .map(|(_, (idx, param))| (*idx, *param)),
+                indexed_const_params
+                    .iter()
+                    .map(|(_, (idx, param))| (*idx, *param)),
             );
 
             prev_unindexed_params_count = curr_unindexed_params_count;
-            indexed_params.extend(non_predicate_param_indexer.indexed_params);
-            curr_unindexed_params_count = non_predicate_param_indexer.unindexed_params.len();
+            curr_unindexed_params_count = non_predicate_param_indexer.len();
+            indexed_type_params.extend(non_predicate_param_indexer.indexed_type_params);
+            indexed_const_params.extend(non_predicate_param_indexer.indexed_const_params);
         }
 
+        let lifetimes = indexed_lifetimes
+            .into_iter()
+            .map(|(ident, (idx, _))| (ident.clone(), gen_indexed_param_ident(idx)))
+            .collect::<FxHashMap<_, _>>();
+        let type_params = indexed_type_params
+            .into_iter()
+            .map(|(ident, (idx, _))| (ident.clone(), gen_indexed_param_ident(idx)))
+            .collect::<FxHashMap<_, _>>();
+        let const_params = indexed_const_params
+            .into_iter()
+            .map(|(ident, (idx, _))| (ident.clone(), gen_indexed_param_ident(idx)))
+            .collect::<FxHashMap<_, _>>();
+
+        for param in &mut item_impl.generics.params {
+            match param {
+                syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => {
+                    if let Some(new_lifetime) = lifetimes.get(&lifetime.ident) {
+                        lifetime.ident = new_lifetime.clone();
+                    }
+                }
+                syn::GenericParam::Type(syn::TypeParam { ident, .. }) => {
+                    if let Some(new_ident) = type_params.get(ident) {
+                        *ident = new_ident.clone();
+                    }
+                }
+                syn::GenericParam::Const(syn::ConstParam { ident, .. }) => {
+                    if let Some(new_ident) = const_params.get(ident) {
+                        *ident = new_ident.clone();
+                    }
+                }
+            }
+        }
+
+        let lifetimes = lifetimes
+            .into_iter()
+            .map(|(old_lifetime, new_lifetime)| {
+                let new_lifetime = syn::Lifetime {
+                    apostrophe: Span::call_site(),
+                    ident: new_lifetime,
+                };
+
+                (old_lifetime, new_lifetime)
+            })
+            .collect::<FxHashMap<_, _>>();
+        let type_params = type_params
+            .into_iter()
+            .map(|(old_type_param, new_type_param)| {
+                (old_type_param, syn::parse_quote!(#new_type_param))
+            })
+            .collect::<FxHashMap<_, _>>();
+        let const_params = const_params
+            .into_iter()
+            .map(|(old_const_param, new_const_param)| {
+                (old_const_param, syn::parse_quote!(#new_const_param))
+            })
+            .collect::<FxHashMap<_, _>>();
         NonPredicateParamResolver::new(
-            indexed_params
-                .into_iter()
-                .map(|(ident, (idx, _))| (ident, idx)),
+            lifetimes.iter().map(|(old, new)| (old.clone(), new)),
+            type_params.iter().map(|(old, new)| (old.clone(), new)),
+            const_params.iter().map(|(old, new)| (old.clone(), new)),
         )
         .visit_item_impl_mut(item_impl);
 
@@ -825,28 +904,79 @@ mod param {
         //    .collect();
     }
 
-    pub(super) fn gen_indexed_param_name(idx: usize) -> syn::Ident {
+    pub(super) fn gen_indexed_param_ident(idx: usize) -> syn::Ident {
         format_ident!("_ŠČ{idx}")
     }
 
-    impl NonPredicateParamIndexer {
+    impl<'a> NonPredicateParamIndexer<'a> {
         fn new(
-            unindexed_params: FxHashMap<syn::Ident, syn::GenericParam>,
+            unindexed_lifetimes: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::LifetimeParam)>,
+            unindexed_type_params: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::TypeParam)>,
+            unindexed_const_params: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::ConstParam)>,
             curr_param_pos_idx: usize,
         ) -> Self {
-            let indexed_params = FxHashMap::default();
-
             Self {
-                indexed_params,
-                unindexed_params,
+                indexed_lifetimes: FxHashMap::default(),
+                indexed_type_params: FxHashMap::default(),
+                indexed_const_params: FxHashMap::default(),
+                unindexed_lifetimes: unindexed_lifetimes.into_iter().collect(),
+                unindexed_type_params: unindexed_type_params.into_iter().collect(),
+                unindexed_const_params: unindexed_const_params.into_iter().collect(),
                 curr_param_pos_idx,
             }
         }
 
-        fn visit_param_ident(&mut self, param_ident: &syn::Ident) -> bool {
-            if let Some(removed) = self.unindexed_params.remove(param_ident) {
-                self.indexed_params
-                    .insert(param_ident.clone(), (self.curr_param_pos_idx, removed));
+        fn len(&self) -> usize {
+            self.unindexed_lifetimes.len()
+                + self.unindexed_type_params.len()
+                + self.unindexed_const_params.len()
+        }
+
+        fn visit_indexed_params(
+            &mut self,
+            indexed_type_params: impl IntoIterator<Item = (usize, &'a syn::TypeParam)>,
+            indexed_const_params: impl IntoIterator<Item = (usize, &'a syn::ConstParam)>,
+        ) {
+            enum GenericParamRef<'a> {
+                Type(&'a syn::TypeParam),
+                Const(&'a syn::ConstParam),
+            }
+
+            let node = indexed_type_params
+                .into_iter()
+                .map(|(idx, type_param)| (idx, GenericParamRef::Type(type_param)))
+                .chain(
+                    indexed_const_params
+                        .into_iter()
+                        .map(|(idx, const_param)| (idx, GenericParamRef::Const(const_param))),
+                )
+                .collect::<FxHashMap<_, _>>();
+
+            let mut indexed_params = node.into_iter().collect::<Vec<_>>();
+            indexed_params.sort_by_key(|(k, _)| *k);
+
+            for (_, param) in indexed_params {
+                match param {
+                    GenericParamRef::Type(type_param) => self.visit_type_param(type_param),
+                    GenericParamRef::Const(const_param) => self.visit_const_param(const_param),
+                }
+            }
+        }
+
+        fn visit_lifetime_ident(&mut self, lifetime_ident: &'a syn::Ident) -> bool {
+            if let Some(removed) = self.unindexed_lifetimes.remove(lifetime_ident) {
+                self.indexed_lifetimes
+                    .insert(lifetime_ident, (self.curr_param_pos_idx, removed));
+                self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+            }
+
+            false
+        }
+
+        fn visit_type_param_ident(&mut self, param_ident: &'a syn::Ident) -> bool {
+            if let Some(removed) = self.unindexed_type_params.remove(param_ident) {
+                self.indexed_type_params
+                    .insert(param_ident, (self.curr_param_pos_idx, removed));
                 self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
 
                 return true;
@@ -855,118 +985,129 @@ mod param {
             false
         }
 
-        fn visit_indexed_params(&mut self, node: FxHashMap<usize, &syn::GenericParam>) {
-            let mut indexed_params = node.into_iter().collect::<Vec<_>>();
-            indexed_params.sort_by_key(|(k, _)| *k);
+        fn visit_const_param_ident(&mut self, param_ident: &'a syn::Ident) -> bool {
+            if let Some(removed) = self.unindexed_const_params.remove(param_ident) {
+                self.indexed_const_params
+                    .insert(param_ident, (self.curr_param_pos_idx, removed));
+                self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
 
-            for (_, param) in indexed_params {
-                self.visit_generic_param(param);
+                return true;
+            }
+
+            false
+        }
+    }
+
+    impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
+        fn visit_lifetime(&mut self, node: &'a syn::Lifetime) {
+            self.visit_lifetime_ident(&node.ident);
+        }
+
+        fn visit_type(&mut self, node: &'a syn::Type) {
+            match node {
+                syn::Type::Path(ty) => {
+                    if let Some(qself) = &ty.qself {
+                        self.visit_qself(qself);
+                    }
+
+                    let first_seg = ty.path.segments.first().unwrap();
+                    self.visit_type_param_ident(&first_seg.ident);
+                    syn::visit::visit_path(self, &ty.path);
+                }
+                _ => syn::visit::visit_type(self, node),
+            }
+        }
+
+        fn visit_expr(&mut self, node: &'a syn::Expr) {
+            match node {
+                syn::Expr::Path(ty) => {
+                    if let Some(qself) = &ty.qself {
+                        self.visit_qself(qself);
+                    }
+
+                    let first_seg = ty.path.segments.first().unwrap();
+                    if !self.visit_type_param_ident(&first_seg.ident) {
+                        self.visit_const_param_ident(&first_seg.ident);
+                    }
+
+                    syn::visit::visit_path(self, &ty.path);
+                }
+                _ => syn::visit::visit_expr(self, node),
             }
         }
     }
 
-    impl Visit<'_> for NonPredicateParamIndexer {
-        fn visit_item_impl(&mut self, node: &syn::ItemImpl) {
-            if let Some((_, trait_, _)) = &node.trait_ {
-                let path = trait_.segments.last().unwrap();
-                self.visit_path_arguments(&path.arguments);
-            }
-
-            self.visit_type(&node.self_ty);
-        }
-
-        fn visit_lifetime(&mut self, node: &syn::Lifetime) {
-            self.visit_param_ident(&node.ident);
-        }
-
-        fn visit_path(&mut self, node: &syn::Path) {
-            if !self.visit_param_ident(&node.segments.first().unwrap().ident) {
-                syn::visit::visit_path(self, node);
-            }
-        }
-
-        fn visit_trait_bound(&mut self, node: &syn::TraitBound) {
-            self.visit_trait_bound_modifier(&node.modifier);
-
-            if let Some(lifetime) = &node.lifetimes {
-                self.visit_bound_lifetimes(lifetime);
-            }
-
-            let path = node.path.segments.last().unwrap();
-            self.visit_path_arguments(&path.arguments);
-        }
-    }
-
-    impl NonPredicateParamResolver {
-        fn new(params: impl IntoIterator<Item = (syn::Ident, usize)>) -> Self {
+    impl<'a> NonPredicateParamResolver<'a> {
+        pub fn new(
+            lifetime_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Lifetime)>,
+            type_param_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Type)>,
+            const_param_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Expr)>,
+        ) -> Self {
             Self {
-                params: params.into_iter().collect(),
+                lifetime_replacements: lifetime_replacements.into_iter().collect(),
+                type_param_replacements: type_param_replacements.into_iter().collect(),
+                const_param_replacements: const_param_replacements.into_iter().collect(),
+            }
+        }
+
+        fn try_replace_type_path_with_type(&self, path: &syn::Path) -> Option<syn::Type> {
+            let mut segments = path.segments.iter();
+            let ident = &segments.next().unwrap().ident;
+
+            if let Some(&replacement) = self.type_param_replacements.get(ident) {
+                return Some(if path.segments.len() > 1 {
+                    syn::parse_quote!(<#replacement> #(::#segments)*)
+                } else {
+                    syn::parse_quote!(#replacement)
+                });
+            }
+
+            None
+        }
+
+        fn try_replace_expr_path_with_type(&self, path: &mut syn::Path) {
+            let first_seg = path.segments.first_mut().unwrap();
+
+            if let Some(replacement) = self.const_param_replacements.get(&first_seg.ident) {
+                *first_seg = syn::parse_quote!(#replacement);
             }
         }
     }
 
-    impl VisitMut for NonPredicateParamResolver {
-        fn visit_item_impl_mut(&mut self, node: &mut syn::ItemImpl) {
-            for attr in &mut node.attrs {
-                self.visit_attribute_mut(attr);
-            }
-
-            self.visit_generics_mut(&mut node.generics);
-            if let Some((_, trait_, _)) = &mut node.trait_ {
-                let path = trait_.segments.last_mut().unwrap();
-                self.visit_path_arguments_mut(&mut path.arguments);
-            }
-
-            self.visit_type_mut(&mut node.self_ty);
-
-            for item in &mut node.items {
-                self.visit_impl_item_mut(item);
-            }
-        }
-
+    impl VisitMut for NonPredicateParamResolver<'_> {
         fn visit_lifetime_mut(&mut self, node: &mut syn::Lifetime) {
-            if let Some(&idx) = self.params.get(&node.ident) {
-                node.ident = gen_indexed_param_name(idx);
-            }
-
-            syn::visit_mut::visit_lifetime_mut(self, node);
-        }
-
-        fn visit_type_param_mut(&mut self, node: &mut syn::TypeParam) {
-            if let Some(&idx) = self.params.get(&node.ident) {
-                node.ident = gen_indexed_param_name(idx);
-            }
-
-            syn::visit_mut::visit_type_param_mut(self, node);
-        }
-
-        fn visit_const_param_mut(&mut self, node: &mut syn::ConstParam) {
-            if let Some(&idx) = self.params.get(&node.ident) {
-                node.ident = gen_indexed_param_name(idx);
-            }
-
-            syn::visit_mut::visit_const_param_mut(self, node);
-        }
-
-        fn visit_path_mut(&mut self, node: &mut syn::Path) {
-            let path = node.segments.first_mut().unwrap();
-
-            if let Some(&idx) = self.params.get(&path.ident) {
-                path.ident = gen_indexed_param_name(idx);
-            } else {
-                syn::visit_mut::visit_path_mut(self, node);
+            if let Some(&replace_with) = self.lifetime_replacements.get(&node.ident) {
+                *node = replace_with.clone();
             }
         }
 
-        fn visit_trait_bound_mut(&mut self, node: &mut syn::TraitBound) {
-            self.visit_trait_bound_modifier_mut(&mut node.modifier);
+        fn visit_type_mut(&mut self, node: &mut syn::Type) {
+            match node {
+                syn::Type::Path(ty) => {
+                    syn::visit_mut::visit_type_path_mut(self, ty);
 
-            if let Some(lifetime) = &mut node.lifetimes {
-                self.visit_bound_lifetimes_mut(lifetime);
+                    if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
+                        *node = new_ty;
+                    }
+                }
+                _ => syn::visit_mut::visit_type_mut(self, node),
             }
+        }
 
-            let path = node.path.segments.last_mut().unwrap();
-            self.visit_path_arguments_mut(&mut path.arguments);
+        fn visit_expr_mut(&mut self, node: &mut syn::Expr) {
+            match node {
+                syn::Expr::Path(ty) => {
+                    syn::visit_mut::visit_expr_path_mut(self, ty);
+
+                    // TODO: struct name can clash with type/const param name
+                    if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
+                        *ty = syn::parse_quote!(#new_ty);
+                    } else {
+                        self.try_replace_expr_path_with_type(&mut ty.path);
+                    }
+                }
+                _ => syn::visit_mut::visit_expr_mut(self, node),
+            }
         }
     }
 

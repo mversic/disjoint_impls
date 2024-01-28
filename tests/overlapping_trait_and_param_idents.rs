@@ -34,26 +34,26 @@ disjoint_impls! {
 }
 
 /*
-pub trait U<U> where U: From<u8> + From<bool> {
+pub trait U<U> where U: From<u8> {
     const NAME: &'static str;
 }
+
 const _: () = {
-    pub trait _U0<_0: ?Sized, U> where U: From<u8> + From<bool> {
+    pub trait _U0<_1: ?Sized, U> where U: From<u8> {
         const NAME: &'static str;
     }
 
-    impl<_0, _1: Dispatch<Group = GroupA>> _U0<GroupA, _0> for _1 where _0: From<u8> + From<bool> {
+    impl<_0, _1: Dispatch<Group = GroupA>> _U0<GroupA, _0> for _1 where _0: From<u8> {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0, _1: Dispatch<Group = GroupB>> _U0<GroupB, _0> for _1 where _0: From<u8> + From<bool> {
+    impl<_0, _1: Dispatch<Group = GroupB>> _U0<GroupB, _0> for _1 where _0: From<u8> {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<_0, _1> U<_0> for _1 where _0: From<u8> + From<bool>, _1: Dispatch, Self: _U0<<_1 as Dispatch>::Group, _0> {
+    impl<_0, _1> U<_0> for _1 where _0: From<u8>, _1: Dispatch, Self: _U0<<_1 as Dispatch>::Group, _0> {
         const NAME: &'static str = <Self as _U0<<_1 as Dispatch>::Group, _0>>::NAME;
     }
 };
-
 */
 
 #[test]

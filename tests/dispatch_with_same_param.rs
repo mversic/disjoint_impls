@@ -44,15 +44,15 @@ const _: () = {
         const NAME: &'static str;
     }
 
-    impl<'_2, '_0, _1: Dispatch<'_2, (), Group = GroupA>> _Kita0<GroupA> for &'_0 _1 {
+    impl<'_0, '_1, _2: Dispatch<'_0, (), Group = GroupA>> _Kita0<GroupA> for &'_1 _2 {
         const NAME: &'static str = "Blanket A";
     }
-    impl<'_2, '_0, _1: Dispatch<'_2, (), Group = GroupB>> _Kita0<GroupB> for &'_0 _1 {
+    impl<'_0, '_1, _2: Dispatch<'_0, (), Group = GroupB>> _Kita0<GroupB> for &'_1 _2 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<'_2, '_0, _1> Kita for &'_0 _1 where _1: Dispatch<'_2, ()>, Self: _Kita0<<_1 as Dispatch<'_2, ()>>::Group> {
-        const NAME: &'static str = <Self as _Kita0<<_1 as Dispatch<'_2, ()>>::Group>>::NAME;
+    impl<'_0, '_1, _2> Kita for &'_1 _2 where _2: Dispatch<'_0, ()>, Self: _Kita0<<_2 as Dispatch<'_0, ()>>::Group> {
+        const NAME: &'static str = <Self as _Kita0<<_2 as Dispatch<'_0, ()>>::Group>>::NAME;
     }
 };
 */

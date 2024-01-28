@@ -50,6 +50,7 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
+
 const _: () = {
     pub trait _Kita0<_ŠČ0: ?Sized> {
         const NAME: &'static str;

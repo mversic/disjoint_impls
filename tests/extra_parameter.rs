@@ -34,12 +34,12 @@ disjoint_impls! {
 }
 
 /*
-pub trait Kita<U> where U: From<u8> + From<bool> {
+pub trait Kita<U>: Dispatch where U: From<u8> + From<bool> {
     const NAME: &'static str;
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized, U> where U: From<u8> + From<bool> {
+    pub trait _Kita0<_1: ?Sized, U>: Dispatch where U: From<u8> + From<bool> {
         const NAME: &'static str;
     }
 

@@ -43,7 +43,7 @@ pub trait Kita<U: From<u8> = u32> {
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized, U: From<u8> = u32> {
+    pub trait _Kita0<_1: ?Sized, U: From<u8> = u32> {
         const NAME: &'static str;
     }
 

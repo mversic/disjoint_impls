@@ -11,8 +11,8 @@ keywords = ["disjoint", "exclusive", "associated", "impl", "implementation"]
 proc-macro = true
 
 [dependencies]
-syn = {version = "2.0.14", features = ["full", "extra-traits", "visit", "visit-mut"]}
+syn = {version = "2.0.48", features = ["full", "extra-traits", "visit", "visit-mut"]}
 proc-macro-error = "1.0.4"
-proc-macro2 = "1.0.56"
+proc-macro2 = "1.0.78"
 rustc-hash = "1.1.0"
-quote = "1.0.26"
+quote = "1.0.35"
