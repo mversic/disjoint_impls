@@ -1,9 +1,10 @@
 //! Contains logic related to generating impl of the main trait
 
+use proc_macro2::Span;
 use rustc_hash::FxHashSet;
-use syn::{parse_quote, punctuated::Punctuated, visit_mut::VisitMut};
+use syn::{parse_quote, visit_mut::VisitMut};
 
-use crate::helper_trait::remove_param_bounds;
+use crate::{helper_trait::remove_param_bounds, param::NonPredicateParamIndexer};
 
 use super::*;
 
@@ -58,6 +59,48 @@ pub fn gen(
             &assoc_bound_idents,
         ));
 
+    // Remove unused params begin
+    let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(
+        example_impl
+            .generics
+            .lifetimes()
+            .map(|param| (&param.lifetime.ident, param)),
+        example_impl
+            .generics
+            .type_params()
+            .map(|param| (&param.ident, param)),
+        example_impl
+            .generics
+            .const_params()
+            .map(|param| (&param.ident, param)),
+        0,
+    );
+
+    non_predicate_param_indexer.visit_item_impl(&main_trait_impl);
+    if let Some(where_clause) = &main_trait_impl.generics.where_clause {
+        non_predicate_param_indexer.visit_where_clause(where_clause);
+    }
+
+    main_trait_impl.generics.params = non_predicate_param_indexer
+        .indexed_lifetimes
+        .keys()
+        .map(|&ident| {
+            syn::LifetimeParam::new(syn::Lifetime {
+                apostrophe: Span::call_site(),
+                ident: ident.clone(),
+            })
+            .into()
+        })
+        .chain(
+            non_predicate_param_indexer
+                .indexed_type_params
+                .keys()
+                .chain(non_predicate_param_indexer.indexed_const_params.keys())
+                .map(|param_ident| -> syn::GenericParam { syn::parse_quote!(#param_ident) }),
+        )
+        .collect();
+    // Remove unused params end
+
     let mut impl_item_resolver =
         ImplItemResolver::new(example_impl, &helper_trait_ident, &assoc_bound_idents);
     main_trait_impl
@@ -82,28 +125,10 @@ fn gen_dummy_impl_from_trait_definition(
     example_impl: &ItemImpl,
 ) -> syn::ItemImpl {
     let mut main_trait = main_trait.clone();
-    let self_ty = &*example_impl.self_ty;
 
+    let self_ty = &*example_impl.self_ty;
     let trait_ = &example_impl.trait_.as_ref().unwrap().1;
     param::resolve_main_trait_params(&mut main_trait, trait_);
-
-    main_trait.generics.params = example_impl
-        .generics
-        .params
-        .iter()
-        .cloned()
-        .map(|param| match param {
-            syn::GenericParam::Lifetime(param) => syn::GenericParam::from(syn::LifetimeParam {
-                bounds: Punctuated::new(),
-                ..param
-            }),
-            syn::GenericParam::Type(param) => syn::GenericParam::from(syn::TypeParam {
-                bounds: Punctuated::new(),
-                ..param
-            }),
-            syn::GenericParam::Const(param) => syn::GenericParam::from(param),
-        })
-        .collect();
 
     let ItemTrait {
         unsafety,
@@ -323,10 +348,7 @@ mod param {
         }
     }
 
-    pub fn resolve_main_trait_params(
-        main_trait: &mut syn::ItemTrait,
-        trait_: &syn::Path,
-    ) {
+    pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, trait_: &syn::Path) {
         match &trait_.segments.last().unwrap().arguments {
             syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(bracketed) => {

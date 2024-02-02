@@ -34,14 +34,14 @@ disjoint_impls! {
         pub const NAME: &'static str = "1st Blanket A";
 
         fn kita(_a: T, _b: U) -> &'static str where T: 'a, U: 'a {
-            "1st Blanket A"
+            Self::NAME
         }
     }
     impl<'b, T, U> Wrapper<'b, (T, U), 12> where T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB> + B {
         pub const NAME: &'static str = "1st Blanket B";
 
         fn kita(_a: T, _b: U) -> &'static str where T: 'b, U: 'b {
-            "1st Blanket B"
+            Self::NAME
         }
     }
 
@@ -90,7 +90,7 @@ const _: () = {
         pub const NAME: &'static str = <Self as _Wrapper0<'_0, <_1 as Dispatch>::Group, _1, _2>>::NAME;
 
         fn kita(_a: _1, _b: _2) -> &'static str where _1: '_0, _2: '_0 {
-            <Self as _Wrapper0<'_0, <_1 as Dispatch>::Group, _1, _2, >>::kita(_a, _b)
+            <Self as _Wrapper0<'_0, <_1 as Dispatch>::Group, _1, _2>>::kita(_a, _b)
         }
     }
     impl<'_0, _1> Wrapper<'_0, _1, 14> where _1: Dispatch, Self: _Wrapper1<'_0, <_1 as Dispatch>::Group, _1> {

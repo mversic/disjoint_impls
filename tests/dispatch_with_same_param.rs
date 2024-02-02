@@ -4,6 +4,10 @@ pub trait Dispatch<'a, T> {
     type Group;
 }
 
+trait T<'a> {}
+impl T<'_> for String {}
+impl T<'_> for Vec<u32> {}
+
 pub enum GroupA {}
 impl Dispatch<'_, ()> for String {
     type Group = GroupA;
@@ -26,7 +30,7 @@ disjoint_impls! {
     }
 
     // NOTE: Dispatch trait parameters must be the same
-    impl<'b, 'a, T: Dispatch<'b, (), Group = GroupA>> Kita for &'a T {
+    impl<'b, 'k, 'a, T: Dispatch<'b, (), Group = GroupA>> Kita for &'a T where T: T<'k> {
         const NAME: &'static str = "Blanket A";
     }
     impl<'a, 'c, T: Dispatch<'a, (), Group = GroupB>> Kita for &'c T {
@@ -44,20 +48,21 @@ const _: () = {
         const NAME: &'static str;
     }
 
-    impl<'_0, '_1, _2: Dispatch<'_0, (), Group = GroupA>> _Kita0<GroupA> for &'_1 _2 {
+    impl<'_2, '_3, '_0, _1: Dispatch<'_2, (), Group = GroupA>> _Kita0<GroupA> for &'_0 _1 where _1: T<'_3> {
         const NAME: &'static str = "Blanket A";
     }
-    impl<'_0, '_1, _2: Dispatch<'_0, (), Group = GroupB>> _Kita0<GroupB> for &'_1 _2 {
+    impl<'_2, '_0, _1: Dispatch<'_2, (), Group = GroupB>> _Kita0<GroupB> for &'_0 _1 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<'_0, '_1, _2> Kita for &'_1 _2 where _2: Dispatch<'_0, ()>, Self: _Kita0<<_2 as Dispatch<'_0, ()>>::Group> {
-        const NAME: &'static str = <Self as _Kita0<<_2 as Dispatch<'_0, ()>>::Group>>::NAME;
+    impl<'_0, '_2, _1> Kita for &'_0 _1 where _1: Dispatch<'_2, ()>, Self: _Kita0<<_1 as Dispatch<'_2, ()>>::Group> {
+        const NAME: &'static str = <Self as _Kita0<<_1 as Dispatch<'_2, ()>>::Group>>::NAME;
     }
 };
 */
 
-fn main() {
+#[test]
+fn dispatch_with_same_param() {
     assert_eq!("Blanket A", <&String>::NAME);
     assert_eq!("Blanket A", <&Vec::<u32>>::NAME);
     assert_eq!("Blanket B", <&u32>::NAME);

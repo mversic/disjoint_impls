@@ -742,6 +742,7 @@ mod param {
     //! Contains logic related to uniform position based (re-)naming of parameters
 
     use proc_macro2::Span;
+    use proc_macro_error::abort_call_site;
     use rustc_hash::FxHashMap;
 
     use quote::format_ident;
@@ -753,14 +754,14 @@ mod param {
     /// `T` = 0,
     /// `U` = 1,
     /// `V` = undetermined
-    struct NonPredicateParamIndexer<'a> {
+    pub struct NonPredicateParamIndexer<'a> {
         unindexed_lifetimes: FxHashMap<&'a syn::Ident, &'a syn::LifetimeParam>,
         unindexed_type_params: FxHashMap<&'a syn::Ident, &'a syn::TypeParam>,
         unindexed_const_params: FxHashMap<&'a syn::Ident, &'a syn::ConstParam>,
 
-        indexed_lifetimes: FxHashMap<&'a syn::Ident, (usize, &'a syn::LifetimeParam)>,
-        indexed_type_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::TypeParam)>,
-        indexed_const_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::ConstParam)>,
+        pub indexed_lifetimes: FxHashMap<&'a syn::Ident, (usize, &'a syn::LifetimeParam)>,
+        pub indexed_type_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::TypeParam)>,
+        pub indexed_const_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::ConstParam)>,
 
         curr_param_pos_idx: usize,
     }
@@ -792,7 +793,7 @@ mod param {
 
         let mut prev_unindexed_params_count = usize::MAX;
         let mut curr_unindexed_params_count = non_predicate_param_indexer.len();
-        let indexed_lifetimes = non_predicate_param_indexer.indexed_lifetimes;
+        let mut indexed_lifetimes = non_predicate_param_indexer.indexed_lifetimes;
         let mut indexed_type_params = non_predicate_param_indexer.indexed_type_params;
         let mut indexed_const_params = non_predicate_param_indexer.indexed_const_params;
 
@@ -814,10 +815,12 @@ mod param {
                 indexed_const_params
                     .iter()
                     .map(|(_, (idx, param))| (*idx, *param)),
+                item_impl.generics.where_clause.as_ref(),
             );
 
             prev_unindexed_params_count = curr_unindexed_params_count;
             curr_unindexed_params_count = non_predicate_param_indexer.len();
+            indexed_lifetimes.extend(non_predicate_param_indexer.indexed_lifetimes);
             indexed_type_params.extend(non_predicate_param_indexer.indexed_type_params);
             indexed_const_params.extend(non_predicate_param_indexer.indexed_const_params);
         }
@@ -909,7 +912,7 @@ mod param {
     }
 
     impl<'a> NonPredicateParamIndexer<'a> {
-        fn new(
+        pub fn new(
             unindexed_lifetimes: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::LifetimeParam)>,
             unindexed_type_params: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::TypeParam)>,
             unindexed_const_params: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::ConstParam)>,
@@ -932,10 +935,11 @@ mod param {
                 + self.unindexed_const_params.len()
         }
 
-        fn visit_indexed_params(
+        pub fn visit_indexed_params(
             &mut self,
             indexed_type_params: impl IntoIterator<Item = (usize, &'a syn::TypeParam)>,
             indexed_const_params: impl IntoIterator<Item = (usize, &'a syn::ConstParam)>,
+            where_clause: Option<&'a syn::WhereClause>,
         ) {
             enum GenericParamRef<'a> {
                 Type(&'a syn::TypeParam),
@@ -959,6 +963,18 @@ mod param {
                 match param {
                     GenericParamRef::Type(type_param) => self.visit_type_param(type_param),
                     GenericParamRef::Const(const_param) => self.visit_const_param(const_param),
+                }
+            }
+
+            if let Some(where_clause) = where_clause {
+                let prev_unindexed_param_count =
+                    self.unindexed_type_params.len() + self.unindexed_const_params.len();
+                syn::visit::visit_where_clause(self, where_clause);
+                let curr_unindexed_param_count =
+                    self.unindexed_type_params.len() + self.unindexed_const_params.len();
+
+                if prev_unindexed_param_count < curr_unindexed_param_count {
+                    abort_call_site!("Generics bounded only in where clause are not supported");
                 }
             }
         }
@@ -999,6 +1015,8 @@ mod param {
     }
 
     impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
+        fn visit_generics(&mut self, _: &syn::Generics) {}
+
         fn visit_lifetime(&mut self, node: &'a syn::Lifetime) {
             self.visit_lifetime_ident(&node.ident);
         }
