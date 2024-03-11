@@ -16,9 +16,9 @@ struct ImplItemResolver {
 pub fn gen(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
-    impl_group: &[ItemImpl],
+    impl_group: &ImplGroup,
 ) -> Option<ItemImpl> {
-    let example_impl = impl_group.first()?;
+    let example_impl = impl_group.item_impls.first()?;
 
     let mut main_trait_impl = main_trait
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, example_impl))
@@ -45,10 +45,6 @@ pub fn gen(
         },
     )?;
 
-    let AssocBounds {
-        assoc_bound_idents, ..
-    } = AssocBounds::find(impl_group);
-
     main_trait_impl
         .generics
         .make_where_clause()
@@ -56,7 +52,7 @@ pub fn gen(
         .extend(gen_assoc_bound_predicates(
             example_impl,
             &helper_trait_ident,
-            &assoc_bound_idents,
+            &impl_group.assoc_bounds,
         ));
 
     // Remove unused params begin
@@ -102,7 +98,7 @@ pub fn gen(
     // Remove unused params end
 
     let mut impl_item_resolver =
-        ImplItemResolver::new(example_impl, &helper_trait_ident, &assoc_bound_idents);
+        ImplItemResolver::new(example_impl, &helper_trait_ident, &impl_group.assoc_bounds);
     main_trait_impl
         .items
         .iter_mut()
@@ -186,16 +182,16 @@ fn gen_dummy_impl_from_trait_definition(
     }
 }
 
-fn combine_generic_args(
-    assoc_bound_idents: &[AssocBoundIdent],
+fn combine_generic_args<'a>(
+    assoc_bound_idents: impl IntoIterator<Item = AssocBoundIdent<'a>>,
     path: &syn::Path,
 ) -> impl Iterator<Item = syn::GenericArgument> {
     let arguments = &path.segments.last().unwrap().arguments;
 
     let mut generic_args: Vec<_> = assoc_bound_idents
-        .iter()
-        .map(|(param_ident, trait_bound, assoc_param_name)| {
-            syn::parse_quote! { <#param_ident as #trait_bound>::#assoc_param_name }
+        .into_iter()
+        .map(|((param, trait_bound), assoc_param_name)| {
+            syn::parse_quote! { <#param as #trait_bound>::#assoc_param_name }
         })
         .collect();
 
@@ -213,10 +209,10 @@ fn combine_generic_args(
     lifetimes.into_iter().chain(generic_args)
 }
 
-fn gen_helper_trait_bound(
+fn gen_helper_trait_bound<'a>(
     example_impl: &ItemImpl,
     helper_trait_ident: &syn::Ident,
-    assoc_bound_idents: &[AssocBoundIdent],
+    assoc_bound_idents: impl IntoIterator<Item = AssocBoundIdent<'a>>,
 ) -> syn::Path {
     let generic_args = if let Some((_, impl_trait, _)) = &example_impl.trait_ {
         combine_generic_args(assoc_bound_idents, impl_trait)
@@ -234,10 +230,10 @@ impl ImplItemResolver {
     fn new(
         example_impl: &ItemImpl,
         helper_trait_ident: &syn::Ident,
-        assoc_bound_idents: &[AssocBoundIdent],
+        assoc_bounds: &AssocBoundsGroup,
     ) -> Self {
         let helper_trait_bound =
-            gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bound_idents);
+            gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bounds.idents());
 
         Self {
             self_as_helper_trait: quote! {
@@ -250,14 +246,14 @@ impl ImplItemResolver {
 fn gen_assoc_bound_predicates<'a>(
     example_impl: &ItemImpl,
     helper_trait_ident: &syn::Ident,
-    assoc_bound_idents: &'a [AssocBoundIdent],
+    assoc_bounds: &'a AssocBoundsGroup,
 ) -> impl Iterator<Item = syn::WherePredicate> + 'a {
     let helper_trait_bound =
-        gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bound_idents);
+        gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bounds.idents());
 
-    let type_param_trait_bounds = assoc_bound_idents.iter().fold(
+    let type_param_trait_bounds = assoc_bounds.idents().fold(
         FxHashMap::<_, FxHashSet<_>>::default(),
-        |mut acc, (param_ident, trait_bound, _)| {
+        |mut acc, ((param_ident, trait_bound), _)| {
             acc.entry(param_ident).or_default().insert(trait_bound);
 
             acc

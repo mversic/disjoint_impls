@@ -2,8 +2,10 @@ use syn::parse_quote;
 
 use super::*;
 
-pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
-    let Some(example_impl) = impls.first() else {
+pub fn gen(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImpl> {
+    let assoc_bounds_idents = impl_group.assoc_bounds.idents().collect::<Vec<_>>();
+
+    let Some(example_impl) = impl_group.item_impls.first() else {
         return Vec::new();
     };
 
@@ -11,48 +13,47 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
         if let syn::Type::Path(mut self_ty) = (*example_impl.self_ty).clone() {
             gen_inherent_self_ty_args(&mut self_ty, &example_impl.generics);
 
-            impls.iter_mut().for_each(|syn::ItemImpl { trait_, .. }| {
-                *trait_ = Some((None, parse_quote!(#self_ty), parse_quote![for]));
-            });
+            impl_group
+                .item_impls
+                .iter_mut()
+                .for_each(|syn::ItemImpl { trait_, .. }| {
+                    *trait_ = Some((None, parse_quote!(#self_ty), parse_quote![for]));
+                });
 
-            impls
+            impl_group
+                .item_impls
                 .iter_mut()
                 .flat_map(|impl_| &mut impl_.items)
-                .for_each(|item| match item {
-                    syn::ImplItem::Const(item) => item.vis = syn::Visibility::Inherited,
-                    syn::ImplItem::Type(item) => item.vis = syn::Visibility::Inherited,
-                    syn::ImplItem::Fn(item) => item.vis = syn::Visibility::Inherited,
-                    _ => {}
+                .for_each(|item| {
+                    let vis = match item {
+                        syn::ImplItem::Const(syn::ImplItemConst { vis, .. }) => vis,
+                        syn::ImplItem::Type(syn::ImplItemType { vis, .. }) => vis,
+                        syn::ImplItem::Fn(syn::ImplItemFn { vis, .. }) => vis,
+                        _ => return,
+                    };
+
+                    *vis = syn::Visibility::Inherited;
                 });
         }
     }
 
-    let AssocBounds {
-        assoc_bound_idents,
-        assoc_bounds,
-        ..
-    } = AssocBounds::find(&impls);
-
-    let assoc_bounds = assoc_bounds
-        .iter()
-        .map(|assoc_bound| {
-            assoc_bound_idents
-                .iter()
-                .map(|param_ident| {
-                    let (param, trait_bound, assoc_type) = &param_ident;
-
-                    assoc_bound
-                        .get(param_ident)
-                        .map(|&payload| quote!(#payload))
-                        .unwrap_or_else(|| quote!(<#param as #trait_bound>::#assoc_type))
+    let impl_assoc_bounds = impl_group.assoc_bounds.payloads().map(|impl_payloads| {
+        impl_payloads
+            .iter()
+            .enumerate()
+            .map(|(i, payload)| {
+                payload.map(|payload| quote!(#payload)).unwrap_or_else(|| {
+                    let ((param, trait_bound), assoc_type) = assoc_bounds_idents[i];
+                    quote!(<#param as #trait_bound>::#assoc_type)
                 })
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>()
+    });
 
-    impls
+    impl_group
+        .item_impls
         .iter_mut()
-        .zip(assoc_bounds)
+        .zip(impl_assoc_bounds)
         .for_each(|(impl_, assoc_bounds)| {
             let trait_ = &mut impl_.trait_.as_mut().unwrap().1;
             let path = trait_.segments.last_mut().unwrap();
@@ -75,5 +76,5 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
             path.ident = helper_trait::gen_ident(&path.ident, impl_group_idx);
         });
 
-    impls
+    impl_group.item_impls
 }
