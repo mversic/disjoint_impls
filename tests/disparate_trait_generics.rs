@@ -77,7 +77,7 @@ const _: () = {
 */
 
 #[test]
-fn trait_param_with_extra_bound() {
+fn disparate_trait_generics() {
     assert_eq!("1st Blanket A", <u32 as Kita<(u16, u32)>>::NAME);
     assert_eq!("1st Blanket A", <i32 as Kita<(i16, i32)>>::NAME);
     assert_eq!("1st Blanket B", <String as Kita<(i32, String)>>::NAME);

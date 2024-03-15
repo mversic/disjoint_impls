@@ -70,7 +70,7 @@ const _: () = {
 */
 
 #[test]
-fn multiple_dispatch_traits() {
+fn ignored_assoc_bound() {
     assert_eq!("Blanket A", String::NAME);
     assert_eq!("Blanket B", u32::NAME);
     assert_eq!("Blanket B", i32::NAME);

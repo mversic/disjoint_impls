@@ -2,6 +2,8 @@ mod disjoint;
 mod main_trait;
 mod validate;
 
+use core::iter::zip;
+
 use indexmap::{IndexMap, IndexSet};
 use param::get_param_ident;
 use proc_macro::TokenStream;
@@ -336,8 +338,8 @@ impl AssocBoundsGroup {
             .any(|(a1, a2)| {
                 assert_eq!(a1.len(), a2.len());
 
-                core::iter::zip(a1, a2).all(|(e1, e2)| match (e1, e2) {
-                    (Some(e1), Some(e2)) => e1.is_superset(e2),
+                zip(a1, a2).all(|(e1, e2)| match (e1, e2) {
+                    (Some(e1), Some(e2)) => e1.is_superset(e2).is_some(),
                     (None, _) => true,
                     _ => false,
                 })
@@ -659,18 +661,66 @@ struct ImplGroup {
 }
 
 trait IsSuperset {
-    fn is_superset(&self, other: &Self) -> bool;
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions>;
+}
+
+#[derive(PartialEq, Eq)]
+enum SubstitutionValue<'a> {
+    Type(&'a syn::Type),
+    Expr(&'a syn::Expr),
+}
+
+impl<'a> From<&'a syn::Type> for SubstitutionValue<'a> {
+    fn from(value: &'a syn::Type) -> Self {
+        Self::Type(value)
+    }
+}
+
+impl<'a> From<&'a syn::Expr> for SubstitutionValue<'a> {
+    fn from(value: &'a syn::Expr) -> Self {
+        Self::Expr(value)
+    }
+}
+
+#[derive(Default)]
+struct Substitutions<'a>(IndexMap<&'a syn::Ident, SubstitutionValue<'a>>);
+
+impl<'a> Substitutions<'a> {
+    fn new(source: &'a syn::Ident, dest: impl Into<SubstitutionValue<'a>>) -> Self {
+        let mut substitutions = IndexMap::new();
+        substitutions.insert(source, dest.into());
+
+        Self(substitutions)
+    }
+
+    #[must_use]
+    fn merge(mut self, other: Self) -> Option<Self> {
+        for (ident, dest) in other.0.into_iter() {
+            match self.0.entry(ident) {
+                indexmap::map::Entry::Occupied(val) => {
+                    if dest != *val.get() {
+                        return None;
+                    }
+                }
+                indexmap::map::Entry::Vacant(entry) => {
+                    entry.insert(dest);
+                }
+            }
+        }
+
+        Some(self)
+    }
 }
 
 impl IsSuperset for syn::Type {
-    fn is_superset(&self, other: &Self) -> bool {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
         use syn::Type::*;
 
         match (self, other) {
             (Ptr(x1), Ptr(x2)) => {
                 if x1.const_token != x2.const_token || x1.mutability != x2.mutability {
                     // TODO: Can *mut T be considered a superset of *const T? Make a test
-                    return false;
+                    return None;
                 }
 
                 x1.elem.is_superset(&x2.elem)
@@ -679,59 +729,63 @@ impl IsSuperset for syn::Type {
                 if x1.lifetime != x2.lifetime {
                     // TODO: Can &mut T be considered a superset of &T? Make a test
                     // TODO: How do lifetimes come into picture for supersets? Make a test
-                    return false;
+                    return None;
                 }
                 if x1.mutability != x2.mutability {
-                    return false;
+                    return None;
                 }
 
                 x1.elem.is_superset(&x2.elem)
             }
             (Tuple(x1), Tuple(x2)) => {
                 if x1.elems.len() != x2.elems.len() {
-                    return false;
+                    return None;
                 }
 
-                core::iter::zip(&x1.elems, &x2.elems).all(|(x1, x2)| x1.is_superset(x2))
+                zip(&x1.elems, &x2.elems).try_fold(Substitutions::default(), |acc, (x1, x2)| {
+                    acc.merge(x1.is_superset(x2)?)
+                })
             }
             (Array(x1), Array(x2)) => {
                 if x1.len != x2.len {
-                    return false;
+                    return None;
                 }
 
                 x1.elem.is_superset(&x2.elem)
             }
             (Path(x1), x2) => {
-                if is_generic_param(&x1.path) {
-                    return true;
+                if let Some(ident) = matches_param_ident(&x1.path) {
+                    return Some(Substitutions::new(ident, x2));
                 }
 
                 if let syn::Type::Path(x2) = x2 {
-                    // TODO: Equality is not be well defined (for example `syn::TypeParen` or `syn::TypeGroup`)
+                    // TODO: Equality is not well defined (for example `syn::TypeParen` or `syn::TypeGroup`)
                     if x1.qself != x2.qself {
-                        return false;
+                        // NOTE: It's not possible to tell whether 2 associated types overlap or not
+                        // Is <Vec<T> as Deref>::Target a superset of <Option<T> as Deref>::Target?
+                        return None;
                     }
 
                     return x1.path.is_superset(&x2.path);
                 }
 
-                false
+                None
             }
             (BareFn(x1), BareFn(x2)) => {
                 // TODO: compare properly
                 if x1 == x2 {
-                    return true;
+                    return Some(Substitutions::default());
                 }
 
-                false
+                None
             }
             (TraitObject(x1), TraitObject(x2)) => {
                 // TODO: How to compare trait objects?
                 if x1 == x2 {
-                    return true;
+                    return Some(Substitutions::default());
                 }
 
-                false
+                None
             }
             (Slice(x1), Slice(x2)) => x1.elem.is_superset(&x2.elem),
             (Paren(x1), x2) => x1.elem.is_superset(x2),
@@ -742,135 +796,185 @@ impl IsSuperset for syn::Type {
                 // NOTE: Not possible in impl declaration
                 unreachable!()
             }
-            (x1, x2) => x1 == x2,
+            (x1, x2) => (x1 == x2).then_some(Substitutions::default()),
         }
     }
+}
+
+fn matches_param_ident(path: &syn::Path) -> Option<&syn::Ident> {
+    if let Some(ident) = path.get_ident() {
+        if ident.to_string().starts_with("_ŠČ") {
+            return Some(ident);
+        }
+    }
+
+    None
 }
 
 impl IsSuperset for syn::Path {
-    fn is_superset(&self, other: &Self) -> bool {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
         if self.segments.len() != other.segments.len() {
-            return false;
+            return None;
         }
 
-        core::iter::zip(&self.segments, &other.segments).all(|(x1, x2)| {
+        let mut substitutions = Substitutions::default();
+        for (x1, x2) in zip(&self.segments, &other.segments) {
             if x1.ident != x2.ident {
-                return false;
+                return None;
             }
 
-            use syn::PathArguments::*;
+            use syn::PathArguments;
             match (&x1.arguments, &x2.arguments) {
-                (None, None) => true,
-                (Parenthesized(x1), Parenthesized(x2)) => {
+                (PathArguments::None, PathArguments::None) => {}
+                (PathArguments::Parenthesized(x1), PathArguments::Parenthesized(x2)) => {
                     if x1.inputs.len() != x2.inputs.len() {
-                        return false;
+                        return None;
                     }
 
-                    if !core::iter::zip(&x1.inputs, &x2.inputs).all(|(x1, x2)| x1.is_superset(x2)) {
-                        return false;
-                    }
+                    substitutions = zip(&x1.inputs, &x2.inputs)
+                        .try_fold(substitutions, |acc, (x1, x2)| {
+                            acc.merge(x1.is_superset(x2)?)
+                        })?;
 
                     match (&x1.output, &x2.output) {
-                        (syn::ReturnType::Default, syn::ReturnType::Default) => true,
+                        (syn::ReturnType::Default, syn::ReturnType::Default) => {}
                         (syn::ReturnType::Type(_, x1), syn::ReturnType::Type(_, x2)) => {
-                            x1.is_superset(x2)
+                            substitutions = substitutions.merge(x1.is_superset(x2)?)?;
                         }
-                        _ => false,
+                        _ => return None,
                     }
                 }
-                (AngleBracketed(x1), AngleBracketed(x2)) => {
+                (PathArguments::AngleBracketed(x1), PathArguments::AngleBracketed(x2)) => {
                     if x1.args.len() != x2.args.len() {
-                        return false;
+                        return None;
                     }
 
                     use syn::GenericArgument::*;
-                    core::iter::zip(&x1.args, &x2.args).all(|(x1, x2)| match (x1, x2) {
-                        (Lifetime(x1), Lifetime(x2)) => x1 == x2,
-                        (Type(x1), Type(x2)) => x1.is_superset(x2),
-                        (Type(syn::Type::Path(x1)), Const(_)) => is_generic_param(&x1.path),
-                        // TODO: Equality might not be well defined
-                        (Const(x1), Const(x2)) => x1.is_superset(x2),
-                        _ => false,
-                    })
+                    substitutions = zip(&x1.args, &x2.args).try_fold(
+                        substitutions,
+                        |acc, (x1, x2)| match (x1, x2) {
+                            (Const(x1), Const(x2)) => acc.merge(x1.is_superset(x2)?),
+                            (Lifetime(x1), Lifetime(x2)) => (x1 == x2).then_some(acc),
+                            (Type(x1), Type(x2)) => acc.merge(x1.is_superset(x2)?),
+                            (Type(syn::Type::Path(x1)), Const(x2)) => {
+                                if let Some(ident) = matches_param_ident(&x1.path) {
+                                    return acc.merge(Substitutions::new(ident, x2));
+                                }
+
+                                None
+                            }
+                            (AssocType(_), _)
+                            | (_, AssocType(_))
+                            | (AssocConst(_), _)
+                            | (_, AssocConst(_))
+                            | (Constraint(_), _)
+                            | (_, Constraint(_)) => unreachable!(),
+                            _ => return None,
+                        },
+                    )?;
                 }
-                _ => false,
+                _ => return None,
             }
-        })
-    }
-}
+        }
 
-fn is_generic_param(path: &syn::Path) -> bool {
-    if let Some(ident) = path.get_ident() {
-        return ident.to_string().starts_with("_ŠČ");
+        Some(substitutions)
     }
-
-    false
 }
 
 impl IsSuperset for syn::Expr {
-    fn is_superset(&self, other: &Self) -> bool {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
         use syn::Expr::*;
 
         match (self, other) {
             (Array(x1), Array(x2)) => {
                 if x1.elems.len() != x2.elems.len() {
-                    return false;
+                    return None;
                 }
 
-                core::iter::zip(&x1.elems, &x2.elems).all(|(x1, x2)| x1.is_superset(x2))
+                zip(&x1.elems, &x2.elems).try_fold(Substitutions::default(), |acc, (x1, x2)| {
+                    acc.merge(x1.is_superset(x2)?)
+                })
             }
-            (Assign(x1), Assign(x2)) => {
-                x1.left.is_superset(&x2.left) && x1.right.is_superset(&x2.right)
-            }
+            (Assign(x1), Assign(x2)) => x1
+                .left
+                .is_superset(&x2.left)?
+                .merge(x1.right.is_superset(&x2.right)?),
             (Binary(x1), Binary(x2)) => {
-                x1.op == x2.op && x1.left.is_superset(&x2.left) && x1.right.is_superset(&x2.right)
+                if x1.op != x2.op {
+                    return None;
+                }
+
+                x1.left
+                    .is_superset(&x2.left)?
+                    .merge(x1.right.is_superset(&x2.right)?)
             }
             (Break(x1), Break(x2)) => match (&x1.expr, &x2.expr) {
                 (Some(x1), Some(x2)) => x1.is_superset(x2),
-                (None, None) => true,
-                _ => false,
+                (None, None) => Some(Substitutions::default()),
+                _ => None,
             },
             (Call(x1), Call(x2)) => {
-                if !x1.func.is_superset(&x2.func) {
-                    return false;
-                }
-
                 if x1.args.len() != x2.args.len() {
-                    return false;
+                    return None;
                 }
 
-                core::iter::zip(&x1.args, &x2.args).all(|(x1, x2)| x1.is_superset(x2))
+                zip(&x1.args, &x2.args).try_fold(x1.func.is_superset(&x2.func)?, |acc, (x1, x2)| {
+                    acc.merge(x1.is_superset(x2)?)
+                })
             }
-            (Cast(x1), Cast(x2)) => x1.expr.is_superset(&x2.expr) && x1.ty.is_superset(&x2.ty),
-            (Path(x1), Path(x2)) => {
-                if x1.qself != x2.qself {
-                    return false;
+            (Cast(x1), Cast(x2)) => x1
+                .expr
+                .is_superset(&x2.expr)?
+                .merge(x1.ty.is_superset(&x2.ty)?),
+            (Path(x1), x2) => {
+                if let Some(ident) = matches_param_ident(&x1.path) {
+                    return Some(Substitutions::new(ident, x2));
                 }
 
-                return x1.path.is_superset(&x2.path);
+                if let syn::Expr::Path(x2) = x2 {
+                    // TODO: Equality is not well defined (for example `syn::TypeParen` or `syn::TypeGroup`)
+                    if x1.qself != x2.qself {
+                        // NOTE: It's not possible to tell whether 2 associated types overlap or not
+                        // Is <Vec<T> as Deref>::Target a superset of <Option<T> as Deref>::Target?
+                        return None;
+                    }
+
+                    return x1.path.is_superset(&x2.path);
+                }
+
+                None
             }
             (Return(x1), Return(x2)) => match (&x1.expr, &x2.expr) {
+                (None, None) => Some(Substitutions::default()),
                 (Some(x1), Some(x2)) => x1.is_superset(x2),
-                (None, None) => true,
-                _ => false,
+                _ => None,
             },
             (Tuple(x1), Tuple(x2)) => {
                 if x1.elems.len() != x2.elems.len() {
-                    return false;
+                    return None;
                 }
 
-                core::iter::zip(&x1.elems, &x2.elems).all(|(x1, x2)| x1.is_superset(x2))
+                zip(&x1.elems, &x2.elems).try_fold(Substitutions::default(), |acc, (x1, x2)| {
+                    acc.merge(x1.is_superset(x2)?)
+                })
             }
-            (Continue(x1), Continue(x2)) => x1.label == x2.label,
+            (Continue(x1), Continue(x2)) => {
+                if x1.label == x2.label {
+                    return Some(Substitutions::default());
+                }
+
+                None
+            }
             (Group(x1), x2) => x1.expr.is_superset(x2),
             (x1, Group(x2)) => x1.is_superset(&x2.expr),
-            (Index(x1), Index(x2)) => {
-                x1.expr.is_superset(&x2.expr) && x1.index.is_superset(&x2.index)
-            }
+            (Index(x1), Index(x2)) => x1
+                .expr
+                .is_superset(&x2.expr)?
+                .merge(x1.index.is_superset(&x2.index)?),
+            (Infer(x1), Infer(x2)) => Some(Substitutions::default()),
             (Field(x1), Field(x2)) => unimplemented!(),
             (ForLoop(x1), ForLoop(x2)) => unimplemented!(),
             (If(x1), If(x2)) => unimplemented!(),
-            (Infer(x1), Infer(x2)) => true,
             (Let(x1), Let(x2)) => unimplemented!(),
             (Loop(x1), Loop(x2)) => unimplemented!(),
             (Macro(x1), Macro(x2)) => unimplemented!(),
@@ -893,23 +997,18 @@ impl IsSuperset for syn::Expr {
             (Yield(x1), Yield(x2)) => unimplemented!(),
             (Async(x1), Async(x2)) => unimplemented!(),
             (Await(x1), Await(x2)) => unimplemented!(),
-            (x1, x2) => x1 == x2,
+            (x1, x2) => (x1 == x2).then_some(Substitutions::default()),
         }
     }
 }
 impl IsSuperset for ImplGroupId {
-    fn is_superset(&self, other: &Self) -> bool {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
         match (&self.0, &other.0) {
-            (Some(x1), Some(x2)) => {
-                if !x1.is_superset(x2) {
-                    return false;
-                }
-            }
-            (None, None) => {}
-            _ => return false,
+            (Some(x1), Some(x2)) => x1.is_superset(x2)?,
+            (None, None) => Substitutions::default(),
+            _ => return None,
         }
-
-        self.1.is_superset(&other.1)
+        .merge(self.1.is_superset(&other.1)?)
     }
 }
 
@@ -942,7 +1041,7 @@ impl Parse for ImplGroups {
             .keys()
             .flat_map(|g1| impl_groups.keys().map(move |g2| (g1, g2)))
             // TODO: Equality is not well defined (for example `syn::TypeParen`)
-            .filter(|(g1, g2)| g1 != g2 && g1.is_superset(g2))
+            .filter(|(g1, g2)| g1 != g2 && g1.is_superset(g2).is_some())
             .fold(
                 (
                     impl_groups

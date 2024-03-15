@@ -4,7 +4,7 @@ version = "0.7.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/mversic/disjoint_impls"
-description = "Support for a variety of mutually disjoint implementations"
+description = "Support for mutually disjoint impls"
 keywords = ["disjoint", "exclusive", "associated", "impl", "implementation"]
 
 [lib]
