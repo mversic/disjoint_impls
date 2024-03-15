@@ -39,7 +39,7 @@ pub trait Kita<U> {
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized, U> {
+    pub trait _Kita0<_1: ?Sized, U> {
         const NAME: &'static str;
     }
 
@@ -50,7 +50,7 @@ const _: () = {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<_1, _0> Kita<_0> for _1 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group, _0> {
+    impl<_0, _1> Kita<_0> for _1 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group, _0> {
         const NAME: &'static str = <Self as _Kita0<<_0 as Dispatch>::Group, _0>>::NAME;
     }
 };

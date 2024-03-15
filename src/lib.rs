@@ -2,13 +2,12 @@ mod disjoint;
 mod main_trait;
 mod validate;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use param::get_param_ident;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote, ToTokens};
-use rustc_hash::{FxHashMap, FxHashSet};
 use syn::visit::Visit;
 use syn::ItemImpl;
 use syn::{
@@ -38,7 +37,7 @@ struct ImplGroups {
     /// Collection of [`ItemImpl`] blocks grouped by [`ImplGroupId`]
     /// Each impl group is dispatched on a set of associated bounds
     // TODO: Can it be a Vec?
-    impl_groups: FxHashMap<ImplGroupId, ImplGroup>,
+    impl_groups: IndexMap<ImplGroupId, ImplGroup>,
 }
 
 /// Bounded param/type
@@ -287,54 +286,18 @@ type AssocBounds = Vec<(TraitBoundIdent, Vec<(syn::Ident, AssocBoundPayload)>)>;
 
 #[derive(Debug, Clone)]
 struct AssocBoundsGroup {
-    bounds: IndexMap<TraitBoundIdent, Vec<Vec<(syn::Ident, AssocBoundPayload)>>>,
-}
-
-struct AssocBoundsGroupPayloadIter<'a>{
-    iter: <&'a IndexMap<TraitBoundIdent, Vec<Vec<(syn::Ident, AssocBoundPayload)>>> as IntoIterator>::IntoIter,
-    assoc_bound_idents: Vec<AssocBoundIdent<'a>>,
-    impl_item_idx: usize,
-}
-
-impl<'a> Iterator for AssocBoundsGroupPayloadIter<'a> {
-    type Item = Vec<Option<&'a AssocBoundPayload>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut assoc_bounds_map = FxHashMap::default();
-
-        for (trait_bound_id, impl_assoc_bounds) in self.iter.clone() {
-            if self.impl_item_idx >= impl_assoc_bounds.len() {
-                return None;
-            }
-
-            assoc_bounds_map.extend(
-                impl_assoc_bounds[self.impl_item_idx]
-                    .iter()
-                    .map(|(ident, payload)| ((trait_bound_id, ident), Some(payload))),
-            );
-        }
-
-        self.impl_item_idx += 1;
-        let impl_payloads = self
-            .assoc_bound_idents
-            .iter()
-            .map(|assoc_bound_ident| {
-                assoc_bounds_map
-                    .remove(assoc_bound_ident)
-                    .unwrap_or_default()
-            })
-            .collect::<Vec<_>>();
-
-        Some(impl_payloads)
-    }
+    bounds: IndexMap<TraitBoundIdent, Vec<IndexMap<syn::Ident, AssocBoundPayload>>>,
 }
 
 impl AssocBoundsGroup {
     fn new(impl_bounds: AssocBounds) -> Self {
         let bounds = impl_bounds.into_iter().fold(
-            IndexMap::<_, Vec<_>>::default(),
+            IndexMap::<_, Vec<_>>::new(),
             |mut acc, (trait_bound_id, assoc_bounds)| {
-                acc.entry(trait_bound_id).or_insert_with(|| vec![vec![]])[0].extend(assoc_bounds);
+                acc.entry(trait_bound_id)
+                    .or_insert_with(|| vec![IndexMap::new()])[0]
+                    .extend(assoc_bounds);
+
                 acc
             },
         );
@@ -373,7 +336,7 @@ impl AssocBoundsGroup {
             .any(|(a1, a2)| {
                 assert_eq!(a1.len(), a2.len());
 
-                a1.iter().zip(a2).all(|(e1, e2)| match (e1, e2) {
+                core::iter::zip(a1, a2).all(|(e1, e2)| match (e1, e2) {
                     (Some(e1), Some(e2)) => e1.is_superset(e2),
                     (None, _) => true,
                     _ => false,
@@ -385,27 +348,15 @@ impl AssocBoundsGroup {
         self.bounds.is_empty()
     }
 
-    fn payloads(&self) -> AssocBoundsGroupPayloadIter {
-        AssocBoundsGroupPayloadIter {
-            assoc_bound_idents: self.idents().collect(),
-            iter: self.bounds.iter(),
-            impl_item_idx: 0,
-        }
-    }
-
     fn idents(&self) -> impl Iterator<Item = AssocBoundIdent> {
         self.bounds
             .iter()
             .flat_map(|(trait_bound, impl_assoc_bounds)| {
-                let mut seen_assoc_bounds = FxHashSet::default();
-
                 impl_assoc_bounds
                     .iter()
-                    .fold(Vec::new(), |mut acc, assoc_bounds| {
+                    .fold(IndexSet::new(), |mut acc, assoc_bounds| {
                         assoc_bounds.iter().for_each(|assoc_bound| {
-                            if seen_assoc_bounds.insert(&assoc_bound.0) {
-                                acc.push(&assoc_bound.0);
-                            }
+                            acc.insert(assoc_bound.0);
                         });
 
                         acc
@@ -415,20 +366,52 @@ impl AssocBoundsGroup {
             })
     }
 
+    fn payloads(&self) -> impl Iterator<Item = Vec<Option<&AssocBoundPayload>>> {
+        let mut impl_item_idx = 0;
+
+        core::iter::from_fn(move || {
+            let mut assoc_bounds_map = IndexMap::new();
+
+            for (trait_bound_id, impl_assoc_bounds) in &self.bounds {
+                if impl_item_idx >= impl_assoc_bounds.len() {
+                    return None;
+                }
+
+                assoc_bounds_map.extend(
+                    impl_assoc_bounds[impl_item_idx]
+                        .iter()
+                        .map(|(ident, payload)| ((trait_bound_id, ident), Some(payload))),
+                );
+            }
+
+            impl_item_idx += 1;
+            let impl_payloads = self.idents().map(|assoc_bound_ident| {
+                assoc_bounds_map
+                    .swap_remove(&assoc_bound_ident)
+                    .unwrap_or_default()
+            });
+
+            // TODO: Can I avoid collecting here?
+            Some(impl_payloads).map(Iterator::collect::<Vec<_>>)
+        })
+    }
+
     fn intersection(&self, other: &AssocBounds) -> Option<Self> {
         let other = other.into_iter().fold(
-            FxHashMap::<_, Vec<_>>::default(),
+            IndexMap::<_, IndexMap<_, _>>::new(),
             |mut acc, (trait_bound_id, assoc_bounds)| {
-                acc.entry(trait_bound_id).or_default().extend(assoc_bounds);
+                let entry = acc.entry(trait_bound_id).or_default();
+                entry.extend(assoc_bounds.iter().map(|(k, v)| (k, v)));
+
                 acc
             },
         );
 
-        let set1 = self.bounds.keys().collect::<FxHashSet<_>>();
+        let set1 = self.bounds.keys().collect::<IndexSet<_>>();
         let set2 = other
             .iter()
             .map(|(&trait_bound_ident, _)| trait_bound_ident)
-            .collect::<FxHashSet<_>>();
+            .collect::<IndexSet<_>>();
 
         let bounds = (&set1 & &set2)
             .into_iter()
@@ -438,7 +421,7 @@ impl AssocBoundsGroup {
                 impl_assoc_bounds.push(
                     other[trait_bound]
                         .iter()
-                        .map(|(trait_bound_ident, assoc_bounds)| {
+                        .map(|(&trait_bound_ident, &assoc_bounds)| {
                             (trait_bound_ident.clone(), assoc_bounds.clone())
                         })
                         .collect(),
@@ -670,6 +653,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
 
 #[derive(Debug)]
 struct ImplGroup {
+    // NOTE: The first impl is the ID of the group
     item_impls: Vec<syn::ItemImpl>,
     assoc_bounds: AssocBoundsGroup,
 }
@@ -708,10 +692,7 @@ impl IsSuperset for syn::Type {
                     return false;
                 }
 
-                x1.elems
-                    .iter()
-                    .zip(&x2.elems)
-                    .all(|(x1, x2)| x1.is_superset(x2))
+                core::iter::zip(&x1.elems, &x2.elems).all(|(x1, x2)| x1.is_superset(x2))
             }
             (Array(x1), Array(x2)) => {
                 if x1.len != x2.len {
@@ -772,7 +753,7 @@ impl IsSuperset for syn::Path {
             return false;
         }
 
-        self.segments.iter().zip(&other.segments).all(|(x1, x2)| {
+        core::iter::zip(&self.segments, &other.segments).all(|(x1, x2)| {
             if x1.ident != x2.ident {
                 return false;
             }
@@ -785,12 +766,7 @@ impl IsSuperset for syn::Path {
                         return false;
                     }
 
-                    if !x1
-                        .inputs
-                        .iter()
-                        .zip(&x2.inputs)
-                        .all(|(x1, x2)| x1.is_superset(x2))
-                    {
+                    if !core::iter::zip(&x1.inputs, &x2.inputs).all(|(x1, x2)| x1.is_superset(x2)) {
                         return false;
                     }
 
@@ -808,7 +784,7 @@ impl IsSuperset for syn::Path {
                     }
 
                     use syn::GenericArgument::*;
-                    x1.args.iter().zip(&x2.args).all(|(x1, x2)| match (x1, x2) {
+                    core::iter::zip(&x1.args, &x2.args).all(|(x1, x2)| match (x1, x2) {
                         (Lifetime(x1), Lifetime(x2)) => x1 == x2,
                         (Type(x1), Type(x2)) => x1.is_superset(x2),
                         (Type(syn::Type::Path(x1)), Const(_)) => is_generic_param(&x1.path),
@@ -841,10 +817,7 @@ impl IsSuperset for syn::Expr {
                     return false;
                 }
 
-                x1.elems
-                    .iter()
-                    .zip(&x2.elems)
-                    .all(|(x1, x2)| x1.is_superset(x2))
+                core::iter::zip(&x1.elems, &x2.elems).all(|(x1, x2)| x1.is_superset(x2))
             }
             (Assign(x1), Assign(x2)) => {
                 x1.left.is_superset(&x2.left) && x1.right.is_superset(&x2.right)
@@ -866,10 +839,7 @@ impl IsSuperset for syn::Expr {
                     return false;
                 }
 
-                x1.args
-                    .iter()
-                    .zip(&x2.args)
-                    .all(|(x1, x2)| x1.is_superset(x2))
+                core::iter::zip(&x1.args, &x2.args).all(|(x1, x2)| x1.is_superset(x2))
             }
             (Cast(x1), Cast(x2)) => x1.expr.is_superset(&x2.expr) && x1.ty.is_superset(&x2.ty),
             (Path(x1), Path(x2)) => {
@@ -889,10 +859,7 @@ impl IsSuperset for syn::Expr {
                     return false;
                 }
 
-                x1.elems
-                    .iter()
-                    .zip(&x2.elems)
-                    .all(|(x1, x2)| x1.is_superset(x2))
+                core::iter::zip(&x1.elems, &x2.elems).all(|(x1, x2)| x1.is_superset(x2))
             }
             (Continue(x1), Continue(x2)) => x1.label == x2.label,
             (Group(x1), x2) => x1.expr.is_superset(x2),
@@ -948,7 +915,7 @@ impl IsSuperset for ImplGroupId {
 
 impl Parse for ImplGroups {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
-        let mut impl_groups = FxHashMap::<_, FxHashMap<_, _>>::default();
+        let mut impl_groups = IndexMap::<_, IndexMap<_, _>>::new();
 
         let main_trait = input.parse::<ItemTrait>().ok();
         while let Ok(mut item) = input.parse::<ItemImpl>() {
@@ -981,11 +948,11 @@ impl Parse for ImplGroups {
                     impl_groups
                         .keys()
                         .map(|id| (id, 0))
-                        .collect::<FxHashMap<_, _>>(),
+                        .collect::<IndexMap<_, _>>(),
                     impl_groups
                         .keys()
                         .map(|id| (id, Vec::new()))
-                        .collect::<FxHashMap<_, _>>(),
+                        .collect::<IndexMap<_, _>>(),
                 ),
                 |(mut supersets, mut subsets), (g1, g2)| {
                     let superset_entry = supersets.get_mut(g2).unwrap();
@@ -999,7 +966,7 @@ impl Parse for ImplGroups {
             );
 
         let impl_groups = {
-            let impl_groups = impl_groups.iter().collect::<FxHashMap<_, _>>();
+            let impl_groups = impl_groups.iter().collect::<IndexMap<_, _>>();
 
             supersets
                 .iter()
@@ -1058,17 +1025,17 @@ impl Parse for ImplGroups {
 fn find_impl_group_candidates<'a, 'b>(
     curr_impl_group: (&'a ImplGroupId, &[&'b ItemImpl]),
 
-    impl_group_id_subsets: &FxHashMap<&ImplGroupId, Vec<&'a ImplGroupId>>,
-    impl_group_id_supersets: &mut FxHashMap<&ImplGroupId, usize>,
+    impl_group_id_subsets: &IndexMap<&ImplGroupId, Vec<&'a ImplGroupId>>,
+    impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b FxHashMap<&ImplGroupId, &FxHashMap<ItemImpl, AssocBounds>>,
-) -> impl Iterator<Item = FxHashMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+    item_impls: &'b IndexMap<&ImplGroupId, &IndexMap<ItemImpl, AssocBounds>>,
+) -> impl Iterator<Item = IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     find_impl_group_candidates_rec(
         curr_impl_group,
         impl_group_id_subsets,
         impl_group_id_supersets,
         item_impls,
-        &mut FxHashMap::default(),
+        &mut IndexMap::new(),
     )
     .into_iter()
     .filter_map(|mut impl_groups| {
@@ -1091,21 +1058,21 @@ fn find_impl_group_candidates<'a, 'b>(
 fn find_impl_group_candidates_rec<'a, 'b>(
     curr_impl_group: (&'a ImplGroupId, &[&'b ItemImpl]),
 
-    impl_group_id_subsets: &FxHashMap<&ImplGroupId, Vec<&'a ImplGroupId>>,
-    impl_group_id_supersets: &mut FxHashMap<&ImplGroupId, usize>,
+    impl_group_id_subsets: &IndexMap<&ImplGroupId, Vec<&'a ImplGroupId>>,
+    impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b FxHashMap<&ImplGroupId, &FxHashMap<ItemImpl, AssocBounds>>,
-    impl_groups: &mut FxHashMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
-) -> Vec<FxHashMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+    item_impls: &'b IndexMap<&ImplGroupId, &IndexMap<ItemImpl, AssocBounds>>,
+    impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
+) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     let curr_impl_group_id = curr_impl_group.0;
 
     if let Some((&curr_impl, other)) = curr_impl_group.1.split_first() {
-        let mut new_supersets = FxHashMap::default();
+        let mut new_supersets = IndexMap::new();
 
         let curr_impl_type_param_bounds = &item_impls[curr_impl_group_id][curr_impl];
         let impl_group_ids = impl_groups.keys().cloned().collect::<Vec<_>>();
 
-        let mut acc = Vec::default();
+        let mut acc = Vec::new();
         for impl_group_id in impl_group_ids {
             let impl_group = impl_groups.get_mut(impl_group_id).unwrap();
 
@@ -1162,7 +1129,7 @@ fn find_impl_group_candidates_rec<'a, 'b>(
             }
 
             // NOTE: Restore changes to impl groups
-            impl_groups.remove(curr_impl_group_id);
+            impl_groups.swap_remove(curr_impl_group_id);
         }
 
         if !new_supersets.is_empty() {
@@ -1184,12 +1151,12 @@ fn find_impl_group_candidates_rec<'a, 'b>(
 fn unlock_subset_impl_groups<'a, 'b>(
     curr_impl_group_id: &'a ImplGroupId,
 
-    impl_group_id_subsets: &FxHashMap<&ImplGroupId, Vec<&'a ImplGroupId>>,
-    impl_group_id_supersets: &mut FxHashMap<&ImplGroupId, usize>,
+    impl_group_id_subsets: &IndexMap<&ImplGroupId, Vec<&'a ImplGroupId>>,
+    impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b FxHashMap<&ImplGroupId, &FxHashMap<ItemImpl, AssocBounds>>,
-    impl_groups: &mut FxHashMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
-) -> Vec<FxHashMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+    item_impls: &'b IndexMap<&ImplGroupId, &IndexMap<ItemImpl, AssocBounds>>,
+    impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
+) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     let mut acc = vec![impl_groups.clone()];
 
     for &subset_impl_group_id in &impl_group_id_subsets[curr_impl_group_id] {
@@ -1244,7 +1211,7 @@ fn gen_inherent_self_ty_args(self_ty: &mut syn::TypePath, generics: &syn::Generi
 }
 
 impl ImplGroups {
-    fn new(item_trait_: Option<ItemTrait>, impl_groups: FxHashMap<ImplGroupId, ImplGroup>) -> Self {
+    fn new(item_trait_: Option<ItemTrait>, impl_groups: IndexMap<ImplGroupId, ImplGroup>) -> Self {
         if let Some(trait_) = &item_trait_ {
             for ImplGroup { item_impls, .. } in impl_groups.values() {
                 validate::validate_trait_impls(trait_, item_impls);
@@ -1410,9 +1377,9 @@ mod helper_trait {
 mod param {
     //! Contains logic related to uniform position based (re-)naming of parameters
 
+    use indexmap::IndexMap;
     use proc_macro2::Span;
     use proc_macro_error::abort_call_site;
-    use rustc_hash::FxHashMap;
 
     use quote::format_ident;
     use syn::{visit::Visit, visit_mut::VisitMut};
@@ -1424,21 +1391,21 @@ mod param {
     /// `U` = 1,
     /// `V` = undetermined
     pub struct NonPredicateParamIndexer<'a> {
-        unindexed_lifetimes: FxHashMap<&'a syn::Ident, &'a syn::LifetimeParam>,
-        unindexed_type_params: FxHashMap<&'a syn::Ident, &'a syn::TypeParam>,
-        unindexed_const_params: FxHashMap<&'a syn::Ident, &'a syn::ConstParam>,
+        unindexed_lifetimes: IndexMap<&'a syn::Ident, &'a syn::LifetimeParam>,
+        unindexed_type_params: IndexMap<&'a syn::Ident, &'a syn::TypeParam>,
+        unindexed_const_params: IndexMap<&'a syn::Ident, &'a syn::ConstParam>,
 
-        pub indexed_lifetimes: FxHashMap<&'a syn::Ident, (usize, &'a syn::LifetimeParam)>,
-        pub indexed_type_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::TypeParam)>,
-        pub indexed_const_params: FxHashMap<&'a syn::Ident, (usize, &'a syn::ConstParam)>,
+        pub indexed_lifetimes: IndexMap<&'a syn::Ident, (usize, &'a syn::LifetimeParam)>,
+        pub indexed_type_params: IndexMap<&'a syn::Ident, (usize, &'a syn::TypeParam)>,
+        pub indexed_const_params: IndexMap<&'a syn::Ident, (usize, &'a syn::ConstParam)>,
 
         curr_param_pos_idx: usize,
     }
 
     pub struct NonPredicateParamResolver<'a> {
-        lifetime_replacements: FxHashMap<syn::Ident, &'a syn::Lifetime>,
-        type_param_replacements: FxHashMap<syn::Ident, &'a syn::Type>,
-        const_param_replacements: FxHashMap<syn::Ident, &'a syn::Expr>,
+        lifetime_replacements: IndexMap<syn::Ident, &'a syn::Lifetime>,
+        type_param_replacements: IndexMap<syn::Ident, &'a syn::Type>,
+        const_param_replacements: IndexMap<syn::Ident, &'a syn::Expr>,
     }
 
     pub fn resolve_non_predicate_params(item_impl: &mut syn::ItemImpl) {
@@ -1497,15 +1464,15 @@ mod param {
         let lifetimes = indexed_lifetimes
             .into_iter()
             .map(|(ident, (idx, _))| (ident.clone(), gen_indexed_param_ident(idx)))
-            .collect::<FxHashMap<_, _>>();
+            .collect::<IndexMap<_, _>>();
         let type_params = indexed_type_params
             .into_iter()
             .map(|(ident, (idx, _))| (ident.clone(), gen_indexed_param_ident(idx)))
-            .collect::<FxHashMap<_, _>>();
+            .collect::<IndexMap<_, _>>();
         let const_params = indexed_const_params
             .into_iter()
             .map(|(ident, (idx, _))| (ident.clone(), gen_indexed_param_ident(idx)))
-            .collect::<FxHashMap<_, _>>();
+            .collect::<IndexMap<_, _>>();
 
         for param in &mut item_impl.generics.params {
             match param {
@@ -1537,19 +1504,19 @@ mod param {
 
                 (old_lifetime, new_lifetime)
             })
-            .collect::<FxHashMap<_, _>>();
+            .collect::<IndexMap<_, _>>();
         let type_params = type_params
             .into_iter()
             .map(|(old_type_param, new_type_param)| {
                 (old_type_param, syn::parse_quote!(#new_type_param))
             })
-            .collect::<FxHashMap<_, _>>();
+            .collect::<IndexMap<_, _>>();
         let const_params = const_params
             .into_iter()
             .map(|(old_const_param, new_const_param)| {
                 (old_const_param, syn::parse_quote!(#new_const_param))
             })
-            .collect::<FxHashMap<_, _>>();
+            .collect::<IndexMap<_, _>>();
         NonPredicateParamResolver::new(
             lifetimes.iter().map(|(old, new)| (old.clone(), new)),
             type_params.iter().map(|(old, new)| (old.clone(), new)),
@@ -1588,9 +1555,9 @@ mod param {
             curr_param_pos_idx: usize,
         ) -> Self {
             Self {
-                indexed_lifetimes: FxHashMap::default(),
-                indexed_type_params: FxHashMap::default(),
-                indexed_const_params: FxHashMap::default(),
+                indexed_lifetimes: IndexMap::new(),
+                indexed_type_params: IndexMap::new(),
+                indexed_const_params: IndexMap::new(),
                 unindexed_lifetimes: unindexed_lifetimes.into_iter().collect(),
                 unindexed_type_params: unindexed_type_params.into_iter().collect(),
                 unindexed_const_params: unindexed_const_params.into_iter().collect(),
@@ -1623,7 +1590,7 @@ mod param {
                         .into_iter()
                         .map(|(idx, const_param)| (idx, GenericParamRef::Const(const_param))),
                 )
-                .collect::<FxHashMap<_, _>>();
+                .collect::<IndexMap<_, _>>();
 
             let mut indexed_params = node.into_iter().collect::<Vec<_>>();
             indexed_params.sort_by_key(|(k, _)| *k);
@@ -1649,7 +1616,7 @@ mod param {
         }
 
         fn visit_lifetime_ident(&mut self, lifetime_ident: &'a syn::Ident) -> bool {
-            if let Some(removed) = self.unindexed_lifetimes.remove(lifetime_ident) {
+            if let Some(removed) = self.unindexed_lifetimes.swap_remove(lifetime_ident) {
                 self.indexed_lifetimes
                     .insert(lifetime_ident, (self.curr_param_pos_idx, removed));
                 self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
@@ -1659,7 +1626,7 @@ mod param {
         }
 
         fn visit_type_param_ident(&mut self, param_ident: &'a syn::Ident) -> bool {
-            if let Some(removed) = self.unindexed_type_params.remove(param_ident) {
+            if let Some(removed) = self.unindexed_type_params.swap_remove(param_ident) {
                 self.indexed_type_params
                     .insert(param_ident, (self.curr_param_pos_idx, removed));
                 self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
@@ -1671,7 +1638,7 @@ mod param {
         }
 
         fn visit_const_param_ident(&mut self, param_ident: &'a syn::Ident) -> bool {
-            if let Some(removed) = self.unindexed_const_params.remove(param_ident) {
+            if let Some(removed) = self.unindexed_const_params.swap_remove(param_ident) {
                 self.indexed_const_params
                     .insert(param_ident, (self.curr_param_pos_idx, removed));
                 self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();

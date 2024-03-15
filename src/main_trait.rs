@@ -1,7 +1,6 @@
 //! Contains logic related to generating impl of the main trait
 
 use proc_macro2::Span;
-use rustc_hash::FxHashSet;
 use syn::{parse_quote, visit_mut::VisitMut};
 
 use crate::{helper_trait::remove_param_bounds, param::NonPredicateParamIndexer};
@@ -252,7 +251,7 @@ fn gen_assoc_bound_predicates<'a>(
         gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bounds.idents());
 
     let type_param_trait_bounds = assoc_bounds.idents().fold(
-        FxHashMap::<_, FxHashSet<_>>::default(),
+        IndexMap::<_, IndexSet<_>>::new(),
         |mut acc, ((param_ident, trait_bound), _)| {
             acc.entry(param_ident).or_default().insert(trait_bound);
 
@@ -348,9 +347,9 @@ mod param {
         match &trait_.segments.last().unwrap().arguments {
             syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(bracketed) => {
-                let mut lifetimes = FxHashMap::default();
-                let mut type_params = FxHashMap::default();
-                let mut const_params = FxHashMap::default();
+                let mut lifetimes = IndexMap::new();
+                let mut type_params = IndexMap::new();
+                let mut const_params = IndexMap::new();
 
                 main_trait
                     .generics

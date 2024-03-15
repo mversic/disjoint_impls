@@ -72,7 +72,7 @@ const _: () = {
         const NAME: &'static str = "Blanket B*";
     }
 
-    impl<_0> Kita for _0 where _0: Dispatch2 + Dispatch1, Self: _Kita0<<_0 as Dispatch1>::Group, <_0 as Dispatch2>::Group>, {
+    impl<_0> Kita for _0 where _0: Dispatch1 + Dispatch2, Self: _Kita0<<_0 as Dispatch1>::Group, <_0 as Dispatch2>::Group> {
         const NAME: &'static str = <Self as _Kita0<<_0 as Dispatch1>::Group, <_0 as Dispatch2>::Group>>::NAME;
     }
 };

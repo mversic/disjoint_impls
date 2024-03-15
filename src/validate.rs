@@ -57,9 +57,9 @@ where
 }
 
 fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem]) {
-    let mut second_consts = FxHashMap::default();
-    let mut second_types = FxHashMap::default();
-    let mut second_fns = FxHashMap::default();
+    let mut second_consts = IndexMap::new();
+    let mut second_types = IndexMap::new();
+    let mut second_fns = IndexMap::new();
 
     second.iter().for_each(|item| match item {
         syn::ImplItem::Const(item) => {
@@ -77,7 +77,7 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
     for trait_item in trait_items {
         match trait_item {
             syn::TraitItem::Const(trait_item) => {
-                if let Some(second_item) = second_consts.remove(&trait_item.ident) {
+                if let Some(second_item) = second_consts.swap_remove(&trait_item.ident) {
                     if trait_item.generics.params.len() != second_item.generics.params.len() {
                         abort!(trait_item.generics, "Doesn't match trait definition");
                     }
@@ -86,13 +86,13 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
                 }
             }
             syn::TraitItem::Type(trait_item) => {
-                if second_types.remove(&trait_item.ident).is_none() && trait_item.default.is_none()
+                if second_types.swap_remove(&trait_item.ident).is_none() && trait_item.default.is_none()
                 {
                     abort!(trait_item, "Missing in one of the impls");
                 }
             }
             syn::TraitItem::Fn(trait_item) => {
-                if second_fns.remove(&trait_item.sig.ident).is_none()
+                if second_fns.swap_remove(&trait_item.sig.ident).is_none()
                     && trait_item.default.is_none()
                 {
                     abort!(trait_item, "Missing in one of the impls");
@@ -114,9 +114,9 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
 }
 
 fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
-    let mut second_consts = FxHashMap::default();
-    let mut second_types = FxHashMap::default();
-    let mut second_fns = FxHashMap::default();
+    let mut second_consts = IndexMap::new();
+    let mut second_types = IndexMap::new();
+    let mut second_fns = IndexMap::new();
 
     second.iter().for_each(|item| match item {
         syn::ImplItem::Const(item) => {
@@ -134,7 +134,7 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
     for first_item in first {
         match first_item {
             syn::ImplItem::Const(first_item) => {
-                if let Some(second_item) = second_consts.remove(&first_item.ident) {
+                if let Some(second_item) = second_consts.swap_remove(&first_item.ident) {
                     if first_item.generics.params.len() != second_item.generics.params.len() {
                         abort!(first_item.generics, "Generics don't match between impls");
                     }
@@ -143,12 +143,12 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
                 }
             }
             syn::ImplItem::Type(first_item) => {
-                if second_types.remove(&first_item.ident).is_none() {
+                if second_types.swap_remove(&first_item.ident).is_none() {
                     abort!(first_item, "Not found in one of the impls");
                 }
             }
             syn::ImplItem::Fn(first_item) => {
-                if second_fns.remove(&first_item.sig.ident).is_none() {
+                if second_fns.swap_remove(&first_item.sig.ident).is_none() {
                     abort!(first_item, "Not found in one of the impls");
                 }
             }
