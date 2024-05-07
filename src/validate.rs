@@ -86,7 +86,8 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
                 }
             }
             syn::TraitItem::Type(trait_item) => {
-                if second_types.swap_remove(&trait_item.ident).is_none() && trait_item.default.is_none()
+                if second_types.swap_remove(&trait_item.ident).is_none()
+                    && trait_item.default.is_none()
                 {
                     abort!(trait_item, "Missing in one of the impls");
                 }
