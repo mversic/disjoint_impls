@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote, ToTokens};
-use substitute::Substitutions;
+use superset::Substitutions;
 use syn::visit::Visit;
 use syn::ItemImpl;
 use syn::{
@@ -15,13 +15,13 @@ use syn::{
     parse_macro_input, ItemTrait,
 };
 
-use crate::substitute::IsSuperset;
+use crate::superset::Superset;
 
 mod disjoint;
 mod helper_trait;
 mod main_trait;
 mod param;
-mod substitute;
+mod superset;
 mod validate;
 
 // TODO: Remove this and implement proper Ord
@@ -698,86 +698,55 @@ impl Parse for ImplGroups {
                 .insert(item, type_param_bounds);
         }
 
-        let (mut supersets, subsets) = impl_groups
-            .keys()
-            .cartesian_product(impl_groups.keys())
-            // TODO: Equality is not well defined (for example `syn::TypeParen`)
-            .filter_map(|(g1, g2)| {
-                if g1 == g2 {
-                    return None;
+        let (mut supersets, subsets) = make_sets(&impl_groups);
+
+        let impl_groups = supersets
+            .iter()
+            .filter_map(|(&impl_group_id, superset_count)| {
+                if *superset_count <= 0 {
+                    return Some(impl_group_id);
                 }
 
-                g1.is_superset(g2).map(|subs| (g1, g2, subs))
+                None
             })
-            .fold(
-                (
-                    impl_groups
-                        .keys()
-                        .map(|id| (id, 0))
-                        .collect::<IndexMap<_, _>>(),
-                    impl_groups
-                        .keys()
-                        .map(|id| (id, IndexMap::new()))
-                        .collect::<IndexMap<_, _>>(),
-                ),
-                |(mut supersets, mut subsets), (g1, g2, subs)| {
-                    subsets.get_mut(g1).unwrap().insert(g2, subs);
-                    *supersets.get_mut(g2).unwrap() += 1;
-                    (supersets, subsets)
-                },
-            );
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flat_map(|impl_group_id| {
+                let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
 
-        let impl_groups = {
-            let impl_groups = impl_groups.iter().collect::<IndexMap<_, _>>();
-
-            supersets
-                .iter()
-                .filter_map(|(&impl_group_id, superset_count)| {
-                    if *superset_count <= 0 {
-                        return Some(impl_group_id);
+                find_impl_group_candidates(
+                    (impl_group_id, &impl_group),
+                    &subsets,
+                    &mut supersets,
+                    &impl_groups,
+                )
+                .reduce(|mut acc, impl_groups| {
+                    // TODO: How to choose minimal impl group set?
+                    // ATM, one of the smallest sets is chosen
+                    if acc.len() >= impl_groups.len() {
+                        acc = impl_groups;
                     }
 
-                    None
+                    acc
                 })
-                .collect::<Vec<_>>()
-                .into_iter()
-                .flat_map(|impl_group_id| {
-                    let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
-
-                    find_impl_group_candidates(
-                        (impl_group_id, &impl_group),
-                        &subsets,
-                        &mut supersets,
-                        &impl_groups,
-                    )
-                    .reduce(|mut acc, impl_groups| {
-                        // TODO: How to choose minimal impl group set?
-                        // ATM, one of the smallest sets is chosen
-                        if acc.len() >= impl_groups.len() {
-                            acc = impl_groups;
-                        }
-
-                        acc
-                    })
-                    // TODO: Handle error properly
-                    .expect(&format!(
-                        "Unable to form impl group for {:?}",
-                        impl_group_id
-                    ))
-                })
-                .into_iter()
-                .map(|(impl_group_id, (assoc_bounds, impl_group))| {
-                    let item_impls = impl_group.into_iter().cloned().collect();
-                    (
-                        impl_group_id.clone(),
-                        ImplGroup {
-                            assoc_bounds,
-                            item_impls,
-                        },
-                    )
-                })
-                .collect()
-        };
+                // TODO: Handle error properly
+                .expect(&format!(
+                    "Unable to form impl group for {:?}",
+                    impl_group_id
+                ))
+            })
+            .into_iter()
+            .map(|(impl_group_id, (assoc_bounds, impl_group))| {
+                let item_impls = impl_group.into_iter().cloned().collect();
+                (
+                    impl_group_id.clone(),
+                    ImplGroup {
+                        assoc_bounds,
+                        item_impls,
+                    },
+                )
+            })
+            .collect();
 
         Ok(ImplGroups::new(main_trait, impl_groups))
     }
@@ -790,7 +759,7 @@ fn find_impl_group_candidates<'a, 'b>(
     impl_group_id_subsets: &IndexMap<&ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions>>,
     impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b IndexMap<&ImplGroupId, &IndexMap<ItemImpl, AssocBounds>>,
+    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>>,
 ) -> impl Iterator<Item = IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     find_impl_group_candidates_rec(
         curr_impl_group,
@@ -823,7 +792,7 @@ fn find_impl_group_candidates_rec<'a, 'b>(
     impl_group_id_subsets: &IndexMap<&ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions>>,
     impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b IndexMap<&ImplGroupId, &IndexMap<ItemImpl, AssocBounds>>,
+    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
 ) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     let curr_impl_group_id = curr_impl_group.0;
@@ -924,9 +893,16 @@ fn unlock_subset_impl_groups<'a, 'b>(
     impl_group_id_subsets: &IndexMap<&ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions>>,
     impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b IndexMap<&ImplGroupId, &IndexMap<ItemImpl, AssocBounds>>,
+    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
 ) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+    //for (item, k) in impl_group_id_supersets {
+    //    let ImplGroupId(a, b) = item;
+    //    println!("  BOUNDED: {}:{}", quote!(#t), quote!(#b));
+    //    for (l, u) in a {
+    //        println!("    ASSOC_BOUND: {} -> {}", quote!(#l), quote!(#u));
+    //    }
+    //}
     let mut acc = vec![impl_groups.clone()];
 
     for (&subset_impl_group_id, _) in &impl_group_id_subsets[curr_impl_group_id] {
@@ -997,4 +973,173 @@ impl ImplGroups {
             impl_groups,
         }
     }
+}
+
+fn make_sets(
+    impl_groups: &IndexMap<
+        ImplGroupId,
+        IndexMap<
+            ItemImpl,
+            Vec<(
+                (Bounded, TraitBound),
+                Vec<(proc_macro2::Ident, AssocBoundPayload)>,
+            )>,
+        >,
+    >,
+) -> (
+    IndexMap<&ImplGroupId, usize>,
+    IndexMap<&ImplGroupId, IndexMap<&ImplGroupId, Substitutions>>,
+) {
+    impl_groups
+        .keys()
+        .cartesian_product(impl_groups.keys())
+        .filter(|(g1, g2)| g1 != g2)
+        .filter_map(|(g1, g2)| g1.is_superset(g2).map(|subs| (g1, g2, subs)))
+        .fold(
+            (
+                impl_groups
+                    .keys()
+                    .map(|id| (id, 0))
+                    .collect::<IndexMap<_, _>>(),
+                impl_groups
+                    .keys()
+                    .map(|id| (id, IndexMap::new()))
+                    .collect::<IndexMap<_, _>>(),
+            ),
+            |(mut supersets, mut subsets), (g1, g2, subs)| {
+                subsets.get_mut(g1).unwrap().insert(g2, subs);
+                *supersets.get_mut(g2).unwrap() += 1;
+                (supersets, subsets)
+            },
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
+
+    use super::*;
+
+    #[test]
+    fn find_impl_group_candidates_works_correctly() {
+        let impl_groups: IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>> = [
+            (
+                ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(_ŠČ)),
+                parse_quote! {
+                    impl<_ŠČ> Kita for _ŠČ where Option<_ŠČ>: Dispatch<Group = GroupA> {
+                        const NAME: &'static str = "Blanket A";
+                    }
+                },
+                vec![(
+                    (
+                        Bounded(parse_quote!(Option<_ŠČ>)),
+                        TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
+                    ),
+                    vec![(parse_quote!(Group), parse_quote!(GroupA))],
+                )],
+            ),
+            (
+                ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(Vec<_ŠČ>)),
+                parse_quote! {
+                    impl<_ŠČ> Kita for Vec<_ŠČ> where Option<Vec<_ŠČ>>: Dispatch<Group = GroupB> {
+                        const NAME: &'static str = "Blanket B";
+                    }
+                },
+                vec![(
+                    (
+                        Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
+                        TraitBound(parse_quote!(Dispatch<Group = GroupB>)),
+                    ),
+                    vec![(parse_quote!(Group), parse_quote!(GroupB))],
+                )],
+            ),
+            (
+                ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(Option<_ŠČ>)),
+                parse_quote! {
+                    impl<_ŠČ> Kita for Option<_ŠČ> where Option<_ŠČ>: Dispatch<Group = GroupA> {
+                        const NAME: &'static str = "Blanket C";
+                    }
+                },
+                vec![(
+                    (
+                        Bounded(parse_quote!(Option<_ŠČ>)),
+                        TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
+                    ),
+                    vec![(parse_quote!(Group), parse_quote!(GroupA))],
+                )],
+            ),
+        ]
+        .into_iter()
+        .map(|(group_id, impl_item, assoc_bounds)| {
+            let mut map = IndexMap::new();
+            map.insert(impl_item, assoc_bounds);
+            (group_id, map)
+        })
+        .collect();
+
+        let (mut supersets, subsets) = make_sets(&impl_groups);
+
+        for (item, k) in &subsets {
+            let ImplGroupId(a, b) = item;
+            println!("  IMPL GROUP ID: {}:{}", quote!(#a), quote!(#b));
+            for (c, _) in k {
+                let ImplGroupId(x, u) = c;
+                println!("    ASSOC_BOUND: {}:{}", quote!(#x), quote!(#u));
+            }
+        }
+        supersets
+            .iter()
+            .filter_map(|(&impl_group_id, superset_count)| {
+                if *superset_count <= 0 {
+                    return Some(impl_group_id);
+                }
+
+                None
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|impl_group_id| {
+                let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
+
+                find_impl_group_candidates(
+                    (impl_group_id, &impl_group),
+                    &subsets,
+                    &mut supersets,
+                    &impl_groups,
+                )
+                .reduce(|mut acc, impl_groups| {
+                    // TODO: How to choose minimal impl group set?
+                    // ATM, one of the smallest sets is chosen
+                    if acc.len() >= impl_groups.len() {
+                        acc = impl_groups;
+                    }
+
+                    acc
+                });
+            });
+    }
+
+    //#[test]
+    //fn intersection_of_t_and_vec_t() {
+    //    let assoc_bounds_group = AssocBoundsGroup::new(vec![(
+    //        (
+    //            Bounded(parse_quote!(Option<_ŠČ>)),
+    //            TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
+    //        ),
+    //        vec![(parse_quote!(Group), parse_quote!(GroupA))],
+    //    )]);
+    //    let mut substitutions = Substitutions::default();
+    //    substitutions.substitute(trait_bound);
+
+    //    assoc_bounds_group.intersection(
+    //        &vec![(
+    //            (
+    //                Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
+    //                TraitBound(parse_quote!(Dispatch<Group = GroupB>)),
+    //            ),
+    //            vec![(parse_quote!(Group), parse_quote!(GroupB))],
+    //        )],
+    //        &substitutions,
+    //    );
+    //}
 }
