@@ -290,19 +290,27 @@ impl quote::ToTokens for Bounded {
 
 type TraitBoundIdent = (Bounded, TraitBound);
 
-// NOTE: Order is preserved as found in the implementation
-type AssocBounds = Vec<(TraitBoundIdent, Vec<(syn::Ident, AssocBoundPayload)>)>;
+#[derive(Debug, Clone, Default)]
+struct ItemImplBounds(
+    /// Param bounds
+    // NOTE: Order is preserved as found in the implementation
+    Vec<(TraitBoundIdent, Vec<(syn::Ident, AssocBoundPayload)>)>,
+    /// Unsized params, i.e. params that implement ?Sized
+    IndexSet<Bounded>,
+);
 
 #[derive(Debug, Clone)]
 struct AssocBoundsGroup {
     // TODO: Move to Vec of payloads
     //bounds: IndexMap<TraitBoundIdent, IndexMap<syn::Ident, Vec<AssocBoundPayload>>>,
     bounds: IndexMap<TraitBoundIdent, Vec<IndexMap<syn::Ident, AssocBoundPayload>>>,
+    /// Params that implement ?Sized
+    unsized_params: IndexSet<Bounded>,
 }
 
 impl AssocBoundsGroup {
-    fn new(impl_bounds: AssocBounds) -> Self {
-        let bounds = impl_bounds.into_iter().fold(
+    fn new(impl_bounds: ItemImplBounds) -> Self {
+        let bounds = impl_bounds.0.into_iter().fold(
             IndexMap::<_, Vec<_>>::new(),
             |mut acc, (trait_bound_id, assoc_bounds)| {
                 acc.entry(trait_bound_id)
@@ -313,7 +321,10 @@ impl AssocBoundsGroup {
             },
         );
 
-        Self { bounds }
+        Self {
+            bounds,
+            unsized_params: impl_bounds.1,
+        }
     }
 
     fn prune_non_assoc(&mut self) {
@@ -403,16 +414,19 @@ impl AssocBoundsGroup {
             });
 
             // TODO: Can I avoid collecting here?
-            Some(impl_payloads).map(Iterator::collect::<Vec<_>>)
+            Some(Iterator::collect::<Vec<_>>(impl_payloads))
         })
     }
 
     fn intersection(
         &self,
-        other: &AssocBounds,
+        other: &ItemImplBounds,
         substitutions: &Substitutions,
     ) -> impl Iterator<Item = Self> {
-        let other = other.iter().fold(
+        let mut unsized_params = self.unsized_params.clone();
+        unsized_params.extend(other.1.clone());
+
+        let other = other.0.iter().fold(
             IndexMap::<_, IndexMap<_, _>>::new(),
             |mut acc, (trait_bound_id, assoc_bounds)| {
                 let entry = acc.entry(trait_bound_id).or_default();
@@ -443,13 +457,18 @@ impl AssocBoundsGroup {
                     .collect::<Vec<_>>()
             })
             .multi_cartesian_product()
-            .filter_map(|bounds| {
-                Some(Self {
-                    bounds: bounds
-                        .into_iter()
-                        .filter_map(core::convert::identity)
-                        .collect(),
-                })
+            .map(move |bounds| {
+                let mut unsized_params = unsized_params.clone();
+
+                let bounds: IndexMap<_, _> = bounds.into_iter().flatten().collect();
+                let params = bounds.keys().map(|(param, _)| param).collect::<Vec<_>>();
+
+                unsized_params.retain(|param| params.contains(&param));
+
+                Self {
+                    bounds,
+                    unsized_params,
+                }
             })
     }
 }
@@ -470,8 +489,16 @@ struct TraitBoundsVisitor {
     /// Trait bound currently being visited
     curr_trait_bound: Option<TraitBound>,
 
-    /// Collection of type param bounds
-    type_param_bounds: AssocBounds,
+    /// Bounds of an impl block
+    param_bounds: ItemImplBounds,
+}
+
+impl TraitBoundsVisitor {
+    fn find(generics: &syn::Generics) -> ItemImplBounds {
+        let mut visitor = TraitBoundsVisitor::default();
+        visitor.visit_generics(generics);
+        visitor.param_bounds
+    }
 }
 
 impl Visit<'_> for TraitBoundsVisitor {
@@ -515,8 +542,15 @@ impl Visit<'_> for TraitBoundsVisitor {
             self.curr_trait_bound.clone().unwrap(),
         );
 
-        self.type_param_bounds
+        self.param_bounds
+            .0
             .push((curr_trait_bound_ident, Vec::new()));
+
+        if let syn::TraitBoundModifier::Maybe(_) = &node.modifier {
+            self.param_bounds
+                .1
+                .insert(self.curr_type_param.clone().unwrap());
+        }
 
         syn::visit::visit_trait_bound(self, node);
     }
@@ -527,7 +561,8 @@ impl Visit<'_> for TraitBoundsVisitor {
             self.curr_trait_bound.take().unwrap(),
         );
 
-        self.type_param_bounds
+        self.param_bounds
+            .0
             .last_mut()
             .unwrap()
             .1
@@ -686,24 +721,20 @@ impl Parse for ImplGroups {
                 (*item.self_ty).clone(),
             );
 
-            let type_param_bounds = {
-                let mut visitor = TraitBoundsVisitor::default();
-                visitor.visit_generics(&item.generics);
-                visitor.type_param_bounds
-            };
+            let param_bounds = TraitBoundsVisitor::find(&item.generics);
 
             impl_groups
                 .entry(impl_group_id)
                 .or_default()
-                .insert(item, type_param_bounds);
+                .insert(item, param_bounds);
         }
 
-        let (mut supersets, subsets) = make_sets(&impl_groups);
+        let (mut supersets, subsets) = make_sets(impl_groups.keys());
 
         let impl_groups = supersets
             .iter()
             .filter_map(|(&impl_group_id, superset_count)| {
-                if *superset_count <= 0 {
+                if *superset_count == 0 {
                     return Some(impl_group_id);
                 }
 
@@ -730,12 +761,8 @@ impl Parse for ImplGroups {
                     acc
                 })
                 // TODO: Handle error properly
-                .expect(&format!(
-                    "Unable to form impl group for {:?}",
-                    impl_group_id
-                ))
+                .unwrap_or_else(|| panic!("Unable to form impl group for {:?}", impl_group_id))
             })
-            .into_iter()
             .map(|(impl_group_id, (assoc_bounds, impl_group))| {
                 let item_impls = impl_group.into_iter().cloned().collect();
                 (
@@ -759,7 +786,7 @@ fn find_impl_group_candidates<'a, 'b>(
     impl_group_id_subsets: &IndexMap<&ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions>>,
     impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>>,
+    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>>,
 ) -> impl Iterator<Item = IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     find_impl_group_candidates_rec(
         curr_impl_group,
@@ -792,7 +819,7 @@ fn find_impl_group_candidates_rec<'a, 'b>(
     impl_group_id_subsets: &IndexMap<&ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions>>,
     impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>>,
+    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
 ) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     let curr_impl_group_id = curr_impl_group.0;
@@ -893,16 +920,9 @@ fn unlock_subset_impl_groups<'a, 'b>(
     impl_group_id_subsets: &IndexMap<&ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions>>,
     impl_group_id_supersets: &mut IndexMap<&ImplGroupId, usize>,
 
-    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>>,
+    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
 ) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
-    //for (item, k) in impl_group_id_supersets {
-    //    let ImplGroupId(a, b) = item;
-    //    println!("  BOUNDED: {}:{}", quote!(#t), quote!(#b));
-    //    for (l, u) in a {
-    //        println!("    ASSOC_BOUND: {} -> {}", quote!(#l), quote!(#u));
-    //    }
-    //}
     let mut acc = vec![impl_groups.clone()];
 
     for (&subset_impl_group_id, _) in &impl_group_id_subsets[curr_impl_group_id] {
@@ -913,7 +933,7 @@ fn unlock_subset_impl_groups<'a, 'b>(
             .unwrap();
 
         *superset_count -= 1;
-        if *superset_count <= 0 {
+        if *superset_count == 0 {
             acc = acc
                 .into_iter()
                 .flat_map(|mut impl_groups| {
@@ -975,34 +995,24 @@ impl ImplGroups {
     }
 }
 
-fn make_sets(
-    impl_groups: &IndexMap<
-        ImplGroupId,
-        IndexMap<
-            ItemImpl,
-            Vec<(
-                (Bounded, TraitBound),
-                Vec<(proc_macro2::Ident, AssocBoundPayload)>,
-            )>,
-        >,
-    >,
+fn make_sets<'a>(
+    impl_groups: impl Iterator<Item = &'a ImplGroupId> + Clone,
 ) -> (
-    IndexMap<&ImplGroupId, usize>,
-    IndexMap<&ImplGroupId, IndexMap<&ImplGroupId, Substitutions>>,
+    IndexMap<&'a ImplGroupId, usize>,
+    IndexMap<&'a ImplGroupId, IndexMap<&'a ImplGroupId, Substitutions<'a>>>,
 ) {
     impl_groups
-        .keys()
-        .cartesian_product(impl_groups.keys())
+        .clone()
+        .cartesian_product(impl_groups.clone())
         .filter(|(g1, g2)| g1 != g2)
         .filter_map(|(g1, g2)| g1.is_superset(g2).map(|subs| (g1, g2, subs)))
         .fold(
             (
                 impl_groups
-                    .keys()
+                    .clone()
                     .map(|id| (id, 0))
                     .collect::<IndexMap<_, _>>(),
                 impl_groups
-                    .keys()
                     .map(|id| (id, IndexMap::new()))
                     .collect::<IndexMap<_, _>>(),
             ),
@@ -1022,7 +1032,7 @@ mod tests {
 
     #[test]
     fn find_impl_group_candidates_works_correctly() {
-        let impl_groups: IndexMap<ImplGroupId, IndexMap<ItemImpl, AssocBounds>> = [
+        let impl_groups: IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>> = [
             (
                 ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(_ŠČ)),
                 parse_quote! {
@@ -1030,13 +1040,16 @@ mod tests {
                         const NAME: &'static str = "Blanket A";
                     }
                 },
-                vec![(
-                    (
-                        Bounded(parse_quote!(Option<_ŠČ>)),
-                        TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
-                    ),
-                    vec![(parse_quote!(Group), parse_quote!(GroupA))],
-                )],
+                ItemImplBounds(
+                    vec![(
+                        (
+                            Bounded(parse_quote!(Option<_ŠČ>)),
+                            TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
+                        ),
+                        vec![(parse_quote!(Group), parse_quote!(GroupA))],
+                    )],
+                    IndexSet::default(),
+                ),
             ),
             (
                 ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(Vec<_ŠČ>)),
@@ -1045,13 +1058,16 @@ mod tests {
                         const NAME: &'static str = "Blanket B";
                     }
                 },
-                vec![(
-                    (
-                        Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-                        TraitBound(parse_quote!(Dispatch<Group = GroupB>)),
-                    ),
-                    vec![(parse_quote!(Group), parse_quote!(GroupB))],
-                )],
+                ItemImplBounds(
+                    vec![(
+                        (
+                            Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
+                            TraitBound(parse_quote!(Dispatch<Group = GroupB>)),
+                        ),
+                        vec![(parse_quote!(Group), parse_quote!(GroupB))],
+                    )],
+                    IndexSet::default(),
+                ),
             ),
             (
                 ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(Option<_ŠČ>)),
@@ -1060,13 +1076,16 @@ mod tests {
                         const NAME: &'static str = "Blanket C";
                     }
                 },
-                vec![(
-                    (
-                        Bounded(parse_quote!(Option<_ŠČ>)),
-                        TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
-                    ),
-                    vec![(parse_quote!(Group), parse_quote!(GroupA))],
-                )],
+                ItemImplBounds(
+                    vec![(
+                        (
+                            Bounded(parse_quote!(Option<_ŠČ>)),
+                            TraitBound(parse_quote!(Dispatch<Group = GroupA>)),
+                        ),
+                        vec![(parse_quote!(Group), parse_quote!(GroupA))],
+                    )],
+                    IndexSet::default(),
+                ),
             ),
         ]
         .into_iter()
@@ -1077,7 +1096,7 @@ mod tests {
         })
         .collect();
 
-        let (mut supersets, subsets) = make_sets(&impl_groups);
+        let (mut supersets, subsets) = make_sets(impl_groups.keys());
 
         for (item, k) in &subsets {
             let ImplGroupId(a, b) = item;
@@ -1090,7 +1109,7 @@ mod tests {
         supersets
             .iter()
             .filter_map(|(&impl_group_id, superset_count)| {
-                if *superset_count <= 0 {
+                if *superset_count == 0 {
                     return Some(impl_group_id);
                 }
 

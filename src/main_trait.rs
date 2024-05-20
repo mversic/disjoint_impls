@@ -54,7 +54,7 @@ pub fn gen(
             &impl_group.assoc_bounds,
         ));
 
-    // Remove unused params begin
+    // Remove unused params
     let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(
         example_impl
             .generics
@@ -263,7 +263,12 @@ fn gen_assoc_bound_predicates<'a>(
         .into_iter()
         .map(|(param_ident, trait_bounds)| -> syn::WherePredicate {
             let trait_bounds = trait_bounds.into_iter();
-            parse_quote! { #param_ident: #(#trait_bounds)+* }
+
+            if assoc_bounds.unsized_params.contains(param_ident) {
+                parse_quote! { #param_ident: ?Sized + #(#trait_bounds)+* }
+            } else {
+                parse_quote! { #param_ident: #(#trait_bounds)+* }
+            }
         })
         .chain(core::iter::once({
             parse_quote! { Self: #helper_trait_bound }
@@ -315,20 +320,20 @@ mod param {
 
     use super::*;
 
-    struct MainTraitParamBoundResolver(Vec<syn::WherePredicate>);
+    struct MainTraitParamBoundResolver<'a>(IndexSet<&'a syn::Ident>, Vec<syn::WherePredicate>);
 
-    impl MainTraitParamBoundResolver {
-        fn new() -> Self {
-            Self(Vec::new())
+    impl<'a> MainTraitParamBoundResolver<'a> {
+        fn new(concrete: impl IntoIterator<Item = &'a syn::Ident>) -> Self {
+            Self(concrete.into_iter().collect(), Vec::new())
         }
     }
 
-    impl Visit<'_> for MainTraitParamBoundResolver {
+    impl Visit<'_> for MainTraitParamBoundResolver<'_> {
         fn visit_lifetime_param(&mut self, node: &syn::LifetimeParam) {
             let ty = &node.lifetime;
 
             let bounds = &node.bounds;
-            self.0.push(syn::parse_quote! {
+            self.1.push(syn::parse_quote! {
                 #ty: #bounds
             });
         }
@@ -336,8 +341,12 @@ mod param {
         fn visit_type_param(&mut self, node: &syn::TypeParam) {
             let ty = &node.ident;
 
+            if self.0.contains(&ty) {
+                return;
+            }
+
             let bounds = &node.bounds;
-            self.0.push(syn::parse_quote! {
+            self.1.push(syn::parse_quote! {
                 #ty: #bounds
             });
         }
@@ -372,19 +381,39 @@ mod param {
                         _ => unreachable!(),
                     });
 
-                let mut maint_trait_param_bound_resolver = MainTraitParamBoundResolver::new();
-                maint_trait_param_bound_resolver.visit_generics(&main_trait.generics);
+                let mut param_resolver = MainTraitParamBoundResolver::new(
+                    type_params.iter().filter_map(|(param, substitute)| {
+                        if let syn::Type::Path(ty) = substitute {
+                            if ty.qself.is_some() {
+                                return Some(param);
+                            }
+
+                            let ident = ty.path.get_ident().map(ToString::to_string);
+                            if ident.map(|ident| ident.starts_with("_ŠČ")).unwrap_or(false) {
+                                return None;
+                            }
+                        }
+
+                        Some(param)
+                    }),
+                );
+                param_resolver.visit_generics(&main_trait.generics);
                 main_trait.generics.params = syn::punctuated::Punctuated::new();
 
                 let where_clause = main_trait.generics.make_where_clause();
                 where_clause.predicates = core::mem::take(&mut where_clause.predicates)
                     .into_iter()
-                    .chain(maint_trait_param_bound_resolver.0)
+                    .chain(param_resolver.1)
                     .collect();
 
                 let mut non_predicate_param_resolver =
                     NonPredicateParamResolver::new(lifetimes, type_params, const_params);
                 non_predicate_param_resolver.visit_item_trait_mut(main_trait);
+                //if let Some(where_clause) = &mut main_trait.generics.where_clause {
+                //    where_clause
+                //        .predicates
+                //        .iter_(|predicate| predicate)
+                //}
             }
             syn::PathArguments::Parenthesized(_) => unreachable!(),
         }
