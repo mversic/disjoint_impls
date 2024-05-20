@@ -12,11 +12,11 @@ impl<T> Dispatch for Vec<T> {
     type Group = GroupA;
 }
 
-pub struct GroupB(str);
+pub struct GroupB;
 impl Dispatch for &str {
     type Group = GroupB;
 }
-impl Dispatch for u32 {
+impl Dispatch for [u8] {
     type Group = GroupB;
 }
 
@@ -58,7 +58,7 @@ const _: () = {
         }
     }
 
-    impl<_0> Kita for _0 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
+    impl<_0> Kita for _0 where _0: ?Sized + Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
         fn kita(&self) -> String {
             <Self as _Kita0<<_0 as Dispatch>::Group>>::kita(self)
         }
@@ -70,6 +70,6 @@ const _: () = {
 fn unsized_type() {
     assert_eq!("Blanket A", String::new().kita());
     assert_eq!("Blanket A", Vec::<u8>::new().kita());
-    assert_eq!("Blanket B", 0_u32.kita());
+    assert_eq!("Blanket B", b"bytestring"[..].kita());
     assert_eq!("Blanket B", "kita".kita());
 }

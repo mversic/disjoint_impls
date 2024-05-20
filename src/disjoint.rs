@@ -30,6 +30,7 @@ pub fn gen(impl_group_idx: usize, mut impls: Vec<ItemImpl>) -> Vec<ItemImpl> {
     let AssocBounds {
         assoc_bound_idents,
         assoc_bounds,
+        ..
     } = AssocBounds::find(&impls);
 
     let assoc_bounds = assoc_bounds

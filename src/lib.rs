@@ -215,10 +215,13 @@ struct AssocBounds<'ast> {
     assoc_bound_idents: Vec<AssocBoundIdent<'ast>>,
     /// Collection of associated bounds for every implementation
     assoc_bounds: Vec<FxHashMap<AssocBoundIdent<'ast>, &'ast AssocBoundPayload>>,
+    unsized_type_params: FxHashSet<Bounded<'ast>>,
 }
 
 impl<'ast> AssocBounds<'ast> {
     fn find(impl_group: &'ast [ItemImpl]) -> Self {
+        let mut unsized_type_params = FxHashSet::default();
+
         let first_type_param_bounds = impl_group
             .first()
             .map(|first_impl| {
@@ -244,6 +247,8 @@ impl<'ast> AssocBounds<'ast> {
                         .type_param_bounds
                         .into_iter()
                         .collect::<FxHashSet<_>>();
+
+                unsized_type_params.extend(visitor.unsized_type_params);
 
                 visitor.assoc_bounds
             })
@@ -291,11 +296,11 @@ impl<'ast> AssocBounds<'ast> {
 
         Self {
             assoc_bound_idents,
-
             assoc_bounds: assoc_bounds
                 .into_iter()
                 .map(|impl_assoc_bounds| impl_assoc_bounds.into_iter().collect())
                 .collect(),
+            unsized_type_params,
         }
     }
 }
@@ -309,6 +314,8 @@ struct TraitBoundsVisitor<'ast> {
     type_param_bounds: Vec<(Bounded<'ast>, TraitBound<'ast>)>,
     /// Collection of associated bounds for every implementation
     assoc_bounds: Vec<(AssocBoundIdent<'ast>, &'ast AssocBoundPayload)>,
+
+    unsized_type_params: FxHashSet<Bounded<'ast>>,
 }
 
 impl<'ast> TraitBoundsVisitor<'ast> {
@@ -319,6 +326,8 @@ impl<'ast> TraitBoundsVisitor<'ast> {
 
             type_param_bounds: Vec::default(),
             assoc_bounds: Vec::default(),
+
+            unsized_type_params: FxHashSet::default(),
         }
     }
 
@@ -370,6 +379,11 @@ impl<'ast> Visit<'ast> for TraitBoundsVisitor<'ast> {
     fn visit_trait_bound(&mut self, node: &'ast syn::TraitBound) {
         self.curr_trait_bound = Some(TraitBound(&node.path));
         syn::visit::visit_trait_bound(self, node);
+
+        if node.modifier == syn::parse_quote!(?) {
+            self.unsized_type_params
+                .insert(self.curr_type_param.unwrap());
+        }
 
         self.type_param_bounds.push((
             self.curr_type_param.unwrap(),

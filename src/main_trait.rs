@@ -10,6 +10,7 @@ use super::*;
 struct GenericsResolver<'ast> {
     assoc_bound_type_params: FxHashSet<Bounded<'ast>>,
     where_clause_predicates: Vec<syn::WherePredicate>,
+    unsized_type_params: FxHashSet<Bounded<'ast>>,
 }
 
 struct ImplItemResolver {
@@ -50,11 +51,18 @@ pub fn gen(
     )?;
 
     let AssocBounds {
-        assoc_bound_idents, ..
+        assoc_bound_idents,
+        unsized_type_params,
+        ..
     } = AssocBounds::find(impl_group);
 
-    GenericsResolver::new(example_impl, &helper_trait_ident, &assoc_bound_idents)
-        .visit_generics_mut(&mut main_trait_impl.generics);
+    GenericsResolver::new(
+        example_impl,
+        &helper_trait_ident,
+        &assoc_bound_idents,
+        unsized_type_params,
+    )
+    .visit_generics_mut(&mut main_trait_impl.generics);
 
     let mut impl_item_resolver =
         ImplItemResolver::new(example_impl, &helper_trait_ident, &assoc_bound_idents);
@@ -145,6 +153,7 @@ impl<'ast> GenericsResolver<'ast> {
         example_impl: &ItemImpl,
         helper_trait_ident: &syn::Ident,
         type_param_idents: &'ast [AssocBoundIdent],
+        unsized_type_params: FxHashSet<Bounded<'ast>>,
     ) -> Self {
         let mut assoc_bounds = FxHashMap::<_, FxHashSet<_>>::default();
 
@@ -179,6 +188,7 @@ impl<'ast> GenericsResolver<'ast> {
         Self {
             assoc_bound_type_params,
             where_clause_predicates,
+            unsized_type_params,
         }
     }
 }
@@ -278,6 +288,22 @@ impl VisitMut for GenericsResolver<'_> {
         self.where_clause_predicates.iter().for_each(|predicate| {
             node_where_clause.predicates.push(parse_quote!(#predicate));
         });
+
+        if let Some(where_clause) = node.where_clause.as_mut() {
+            where_clause.predicates.iter_mut().for_each(|predicate| {
+                if let syn::WherePredicate::Type(predicate) = predicate {
+                    if let syn::Type::Path(syn::TypePath { path, .. }) = &predicate.bounded_ty {
+                        if path.get_ident().is_some()
+                            && self
+                                .unsized_type_params
+                                .contains(&(&predicate.bounded_ty).into())
+                        {
+                            predicate.bounds.push(parse_quote!(?Sized));
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -408,7 +434,7 @@ mod param {
                             }
                         }
                         syn::GenericParam::Type(syn::TypeParam { ident, bounds, .. }) => {
-                            let bounded_ty = self.params[&ident];
+                            let bounded_ty = self.params[ident];
 
                             if !bounds.is_empty() {
                                 node.make_where_clause()
