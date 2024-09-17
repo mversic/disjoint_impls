@@ -111,8 +111,14 @@ fn disjoint_inherent_impl() {
     assert_eq!("2nd Blanket B", <Wrapper<u32, 14>>::NAME);
     assert_eq!("2nd Blanket B", <Wrapper<i32, 14>>::NAME);
 
-    assert_eq!("1st Blanket A", <Wrapper<(String, u32), 12>>::kita(String::new(), 12));
-    assert_eq!("1st Blanket A", <Wrapper<(Vec::<u32>, u32), 12>>::kita(vec![], 12));
+    assert_eq!(
+        "1st Blanket A",
+        <Wrapper<(String, u32), 12>>::kita(String::new(), 12)
+    );
+    assert_eq!(
+        "1st Blanket A",
+        <Wrapper<(Vec::<u32>, u32), 12>>::kita(vec![], 12)
+    );
     assert_eq!("1st Blanket B", <Wrapper<(u32, u32), 12>>::kita(12, 12));
     assert_eq!("1st Blanket B", <Wrapper<(i32, u32), 12>>::kita(12, 12));
 }

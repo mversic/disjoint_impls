@@ -93,7 +93,7 @@ impl<'a> Substitutions<'a> {
     }
 
     /// Return `true` if no substitution is required, i.e. this is an identity mapping
-    pub fn is_eq(&self) -> bool {
+    fn is_eq(&self) -> bool {
         self.0.values().all(|&v| v == SubstitutionValue::Identity)
     }
 

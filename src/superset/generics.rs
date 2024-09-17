@@ -110,21 +110,34 @@ impl Substitute for syn::TypeParam {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        self.default
-            .substitute(substitutions)
-            .into_iter()
-            .cartesian_product(
-                self.bounds
-                    .iter()
-                    .map(|bound| bound.substitute(substitutions))
-                    .multi_cartesian_product(),
-            )
-            .map(|(default, bounds)| Self {
-                default,
-                bounds: bounds.into_iter().collect(),
-                ..self.clone()
-            })
-            .collect()
+        let default = self.default.substitute(substitutions);
+
+        if self.bounds.is_empty() {
+            default
+                .into_iter()
+                .map(|default| Self {
+                    default,
+                    bounds: self.bounds.clone(),
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            let bounds = self
+                .bounds
+                .iter()
+                .map(|bound| bound.substitute(substitutions))
+                .multi_cartesian_product();
+
+            default
+                .into_iter()
+                .cartesian_product(bounds)
+                .map(|(default, bounds)| Self {
+                    default,
+                    bounds: bounds.into_iter().collect(),
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 

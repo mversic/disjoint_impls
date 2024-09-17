@@ -157,6 +157,10 @@ impl Substitute for syn::PatOr {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.cases.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.cases
             .iter()
             .map(|case| case.substitute(substitutions))
@@ -261,6 +265,10 @@ impl Substitute for syn::PatSlice {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.elems.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.elems
             .iter()
             .map(|elem| elem.substitute(substitutions))
@@ -289,6 +297,10 @@ impl Substitute for syn::PatTuple {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.elems.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.elems
             .iter()
             .map(|elem| elem.substitute(substitutions))

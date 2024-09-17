@@ -51,6 +51,10 @@ impl Substitute for syn::Type {
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
         if let Some(subs) = substitutions.get(&SubstitutionValue::Type(self)) {
+            if subs.is_empty() {
+                return vec![self.clone()];
+            }
+
             return subs.iter().map(|sub| syn::parse_quote!(#sub)).collect();
         }
 
@@ -189,21 +193,33 @@ impl Substitute for syn::TypeBareFn {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        iproduct!(
-            self.lifetimes.substitute(substitutions),
-            self.inputs
+        let lifetimes = self.lifetimes.substitute(substitutions);
+        let output = self.output.substitute(substitutions);
+
+        if self.inputs.is_empty() {
+            iproduct!(lifetimes, output)
+                .map(|(lifetimes, output)| Self {
+                    lifetimes,
+                    output,
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            let inputs = self
+                .inputs
                 .iter()
                 .map(|input| input.substitute(substitutions))
-                .multi_cartesian_product(),
-            self.output.substitute(substitutions)
-        )
-        .map(|(lifetimes, inputs, output)| Self {
-            lifetimes,
-            inputs: inputs.into_iter().collect(),
-            output,
-            ..self.clone()
-        })
-        .collect()
+                .multi_cartesian_product();
+
+            iproduct!(lifetimes, inputs, output)
+                .map(|(lifetimes, inputs, output)| Self {
+                    lifetimes,
+                    inputs: inputs.into_iter().collect(),
+                    output,
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 
@@ -267,6 +283,10 @@ impl Substitute for syn::TypeImplTrait {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.bounds.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.bounds
             .iter()
             .map(|x| x.substitute(substitutions))
@@ -488,6 +508,10 @@ impl Substitute for syn::TypeTraitObject {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.bounds.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.bounds
             .iter()
             .map(|bounds| bounds.substitute(substitutions))
@@ -517,6 +541,10 @@ impl Substitute for syn::TypeTuple {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.elems.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.elems
             .iter()
             .map(|elem| elem.substitute(substitutions))

@@ -77,6 +77,10 @@ impl Substitute for syn::Expr {
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
         if let Some(subs) = substitutions.get(&SubstitutionValue::Expr(self)) {
+            if subs.is_empty() {
+                return vec![self.clone()];
+            }
+
             return subs.iter().map(|sub| syn::parse_quote!(#sub)).collect();
         }
 
@@ -256,6 +260,10 @@ impl Substitute for syn::ExprArray {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.elems.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.elems
             .iter()
             .map(|elem| elem.substitute(substitutions))
@@ -470,21 +478,30 @@ impl Substitute for syn::ExprCall {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        self.func
-            .substitute(substitutions)
-            .into_iter()
-            .cartesian_product(
-                self.args
-                    .iter()
-                    .map(|args| args.substitute(substitutions))
-                    .multi_cartesian_product(),
-            )
-            .map(|(func, args)| Self {
-                args: args.into_iter().collect(),
-                func: Box::new(func),
-                ..self.clone()
-            })
-            .collect()
+        let func = self.func.substitute(substitutions);
+
+        if self.args.is_empty() {
+            func.into_iter()
+                .map(|func| Self {
+                    func: Box::new(func),
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            func.into_iter()
+                .cartesian_product(
+                    self.args
+                        .iter()
+                        .map(|args| args.substitute(substitutions))
+                        .multi_cartesian_product(),
+                )
+                .map(|(func, args)| Self {
+                    args: args.into_iter().collect(),
+                    func: Box::new(func),
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 
@@ -545,23 +562,36 @@ impl Substitute for syn::ExprClosure {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        iproduct!(
-            self.lifetimes.substitute(substitutions),
-            self.inputs
+        let lifetimes = self.lifetimes.substitute(substitutions);
+        let output = self.output.substitute(substitutions);
+        let body = self.body.substitute(substitutions);
+
+        if self.inputs.is_empty() {
+            iproduct!(lifetimes, output, body)
+                .map(|(lifetimes, output, body)| Self {
+                    lifetimes,
+                    output,
+                    body: Box::new(body),
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            let inputs = self
+                .inputs
                 .iter()
                 .map(|input| input.substitute(substitutions))
-                .multi_cartesian_product(),
-            self.output.substitute(substitutions),
-            self.body.substitute(substitutions)
-        )
-        .map(|(lifetimes, inputs, output, body)| Self {
-            lifetimes,
-            inputs: inputs.into_iter().collect(),
-            output,
-            body: Box::new(body),
-            ..self.clone()
-        })
-        .collect()
+                .multi_cartesian_product();
+
+            iproduct!(lifetimes, inputs, output, body)
+                .map(|(lifetimes, inputs, output, body)| Self {
+                    lifetimes,
+                    inputs: inputs.into_iter().collect(),
+                    output,
+                    body: Box::new(body),
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 
@@ -903,21 +933,30 @@ impl Substitute for syn::ExprMatch {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        self.expr
-            .substitute(substitutions)
-            .into_iter()
-            .cartesian_product(
-                self.arms
-                    .iter()
-                    .map(|arm| arm.substitute(substitutions))
-                    .multi_cartesian_product(),
-            )
-            .map(|(expr, arms)| Self {
-                expr: Box::new(expr),
-                arms,
-                ..self.clone()
-            })
-            .collect()
+        let expr = self.expr.substitute(substitutions);
+
+        if self.arms.is_empty() {
+            expr.into_iter()
+                .map(|expr| Self {
+                    expr: Box::new(expr),
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            expr.into_iter()
+                .cartesian_product(
+                    self.arms
+                        .iter()
+                        .map(|arm| arm.substitute(substitutions))
+                        .multi_cartesian_product(),
+                )
+                .map(|(expr, arms)| Self {
+                    expr: Box::new(expr),
+                    arms,
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 
@@ -948,23 +987,38 @@ impl Substitute for syn::ExprMethodCall {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        self.receiver
-            .substitute(substitutions)
-            .into_iter()
-            .cartesian_product(self.turbofish.substitute(substitutions))
-            .cartesian_product(
-                self.args
-                    .iter()
-                    .map(|arg| arg.substitute(substitutions))
-                    .multi_cartesian_product(),
-            )
-            .map(|((receiver, turbofish), args)| Self {
-                receiver: Box::new(receiver),
-                turbofish,
-                args: args.into_iter().collect(),
-                ..self.clone()
-            })
-            .collect()
+        let receiver = self.receiver.substitute(substitutions);
+        let turbofish = self.turbofish.substitute(substitutions);
+
+        if self.args.is_empty() {
+            receiver
+                .into_iter()
+                .cartesian_product(turbofish)
+                .map(|(receiver, turbofish)| Self {
+                    receiver: Box::new(receiver),
+                    turbofish,
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            let args = self
+                .args
+                .iter()
+                .map(|arg| arg.substitute(substitutions))
+                .multi_cartesian_product();
+
+            receiver
+                .into_iter()
+                .cartesian_product(turbofish)
+                .cartesian_product(args)
+                .map(|((receiver, turbofish), args)| Self {
+                    receiver: Box::new(receiver),
+                    turbofish,
+                    args: args.into_iter().collect(),
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 
@@ -1188,28 +1242,41 @@ impl Substitute for syn::ExprStruct {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        iproduct!(
-            self.qself.substitute(substitutions),
-            self.path.substitute(substitutions),
-            self.fields
-                .iter()
-                .map(|field| field.substitute(substitutions))
-                .multi_cartesian_product(),
-            self.rest.as_ref().map_or(vec![None], |rest| rest
-                .substitute(substitutions)
+        let qself = self.qself.substitute(substitutions);
+        let path = self.path.substitute(substitutions);
+        let rest = self.rest.as_ref().map_or(vec![None], |rest| {
+            rest.substitute(substitutions)
                 .into_iter()
                 .map(Box::new)
                 .map(Some)
-                .collect())
-        )
-        .map(|(qself, path, fields, rest)| Self {
-            qself,
-            path,
-            fields: fields.into_iter().collect(),
-            rest,
-            ..self.clone()
-        })
-        .collect()
+                .collect()
+        });
+
+        if self.fields.is_empty() {
+            iproduct!(qself, path, rest)
+                .map(|(qself, path, rest)| Self {
+                    qself,
+                    path,
+                    rest,
+                    ..self.clone()
+                })
+                .collect()
+        } else {
+            let fields = self
+                .fields
+                .iter()
+                .map(|field| field.substitute(substitutions))
+                .multi_cartesian_product();
+            iproduct!(qself, path, fields, rest)
+                .map(|(qself, path, fields, rest)| Self {
+                    qself,
+                    path,
+                    fields: fields.into_iter().collect(),
+                    rest,
+                    ..self.clone()
+                })
+                .collect()
+        }
     }
 }
 
@@ -1281,6 +1348,10 @@ impl Substitute for syn::ExprTuple {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.elems.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.elems
             .iter()
             .map(|elem| elem.substitute(substitutions))

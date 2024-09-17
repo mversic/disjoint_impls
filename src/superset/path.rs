@@ -56,6 +56,10 @@ impl Substitute for syn::Path {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.segments.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.segments
             .iter()
             .map(|segment| {
@@ -64,37 +68,49 @@ impl Substitute for syn::Path {
                 match &segment.arguments {
                     PathArguments::None => vec![PathArguments::None],
                     PathArguments::Parenthesized(x1) => {
-                        let inputs = x1
-                            .inputs
-                            .iter()
-                            .map(|input| input.substitute(substitutions))
-                            .multi_cartesian_product();
-
                         let output = if let syn::ReturnType::Type(r_arrow, output) = &x1.output {
                             output
                                 .substitute(substitutions)
                                 .into_iter()
                                 .map(|output| syn::ReturnType::Type(*r_arrow, Box::new(output)))
-                                .collect::<Vec<_>>()
+                                .collect()
                         } else {
                             vec![syn::ReturnType::Default]
                         };
 
-                        inputs
-                            .cartesian_product(output)
-                            .map(|(inputs, output)| syn::ParenthesizedGenericArguments {
-                                paren_token: x1.paren_token,
-                                inputs: inputs.into_iter().collect(),
-                                output,
-                            })
-                            .map(PathArguments::Parenthesized)
-                            .collect::<Vec<_>>()
+                        if x1.inputs.is_empty() {
+                            output
+                                .into_iter()
+                                .map(|output| syn::ParenthesizedGenericArguments {
+                                    paren_token: x1.paren_token,
+                                    inputs: x1.inputs.clone(),
+                                    output,
+                                })
+                                .map(PathArguments::Parenthesized)
+                                .collect()
+                        } else {
+                            let inputs = x1
+                                .inputs
+                                .iter()
+                                .map(|input| input.substitute(substitutions))
+                                .multi_cartesian_product();
+
+                            inputs
+                                .cartesian_product(output)
+                                .map(|(inputs, output)| syn::ParenthesizedGenericArguments {
+                                    paren_token: x1.paren_token,
+                                    inputs: inputs.into_iter().collect(),
+                                    output,
+                                })
+                                .map(PathArguments::Parenthesized)
+                                .collect()
+                        }
                     }
                     PathArguments::AngleBracketed(x1) => x1
                         .substitute(substitutions)
                         .into_iter()
                         .map(PathArguments::AngleBracketed)
-                        .collect::<Vec<_>>(),
+                        .collect(),
                 }
                 .into_iter()
                 .map(|arguments| syn::PathSegment {
@@ -182,6 +198,10 @@ impl Substitute for syn::AngleBracketedGenericArguments {
     ) -> Vec<Self> {
         use syn::GenericArgument::*;
 
+        if self.args.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.args
             .iter()
             .map(|arg| match arg {
@@ -218,7 +238,7 @@ impl Substitute for syn::AngleBracketedGenericArguments {
                 args: args.into_iter().collect(),
                 ..self.clone()
             })
-            .collect::<Vec<_>>()
+            .collect()
     }
 }
 
@@ -418,6 +438,38 @@ mod tests {
         let p3: syn::Path = syn::parse_quote!(Vec<[i32; 2]>::Target);
         assert!(p3
             .is_superset(&p3)
+            .unwrap()
+            .substitute(&substituted)
+            .eq([substituted.clone()]));
+    }
+
+    #[test]
+    fn identity_path_substitute_trait_with_generic_param() {
+        let substituted = (
+            Bounded(parse_quote!(_ŠČ1)),
+            TraitBound(parse_quote!(Dispatch<_ŠČ1>)),
+        );
+
+        let p1: syn::Path = syn::parse_quote!(_ŠČ1);
+
+        assert!(p1
+            .is_superset(&p1)
+            .unwrap()
+            .substitute(&substituted)
+            .eq([substituted.clone()]));
+    }
+
+    #[test]
+    fn identity_path_substitute_trait_with_concrete_param() {
+        let substituted = (
+            Bounded(parse_quote!(_ŠČ1)),
+            TraitBound(parse_quote!(Dispatch<()>)),
+        );
+
+        let p1: syn::Path = syn::parse_quote!(_ŠČ1);
+
+        assert!(p1
+            .is_superset(&p1)
             .unwrap()
             .substitute(&substituted)
             .eq([substituted.clone()]));

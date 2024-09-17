@@ -141,6 +141,10 @@ impl Substitute for syn::Block {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.stmts.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.stmts
             .iter()
             .map(|stmt| stmt.substitute(substitutions))
