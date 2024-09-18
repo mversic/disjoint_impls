@@ -7,11 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2024-09-18
+
+### Added
+
+- Implement Substitute for every type in syn
+- Implement Superset for every type in syn
+- Add support for overlapping impl groups
+- Add support for dispatch on generic type
+- Add support for complex generic argument types
+
+### Changed
+
+- transition to using IndexMap instead of FxHashMap
+
+### Fixed
+
+- Add ?Sized bound on main trait params
+
 ## [0.7.1] - 2024-05-20
 
 ### Fixed
 
-- Add ?Sized bound to `main_trait` type parameters
+- Add ?Sized bound to main trait type parameters
 
 ## [0.7.0] - 2024-01-23
 
