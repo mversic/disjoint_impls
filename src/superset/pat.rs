@@ -1,7 +1,7 @@
 use super::*;
 
 impl Superset for syn::Pat {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::Pat::*;
 
         match (self, other) {
@@ -99,7 +99,7 @@ impl Substitute for syn::Pat {
 }
 
 impl Superset for syn::PatIdent {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.by_ref != other.by_ref
             || self.mutability != other.mutability
             || self.ident != other.ident
@@ -142,7 +142,7 @@ impl Substitute for syn::PatIdent {
 }
 
 impl Superset for syn::PatOr {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs.is_superset(&other.attrs)?.merge(
             zip(&self.cases, &other.cases)
                 .try_fold(Substitutions::default(), |acc, (x1, x2)| {
@@ -174,7 +174,7 @@ impl Substitute for syn::PatOr {
 }
 
 impl Superset for syn::PatParen {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.pat.is_superset(&other.pat)?)
@@ -198,7 +198,7 @@ impl Substitute for syn::PatParen {
 }
 
 impl Superset for syn::PatReference {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.mutability != other.mutability {
             return None;
         }
@@ -226,7 +226,7 @@ impl Substitute for syn::PatReference {
 }
 
 impl Superset for syn::PatRest {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs.is_superset(&other.attrs)
     }
 }
@@ -238,7 +238,7 @@ impl Substitute for syn::PatRest {
 }
 
 impl Superset for syn::PatStruct {
-    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
         unimplemented!()
     }
 }
@@ -250,7 +250,7 @@ impl Substitute for syn::PatStruct {
 }
 
 impl Superset for syn::PatSlice {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs.is_superset(&other.attrs)?.merge(
             zip(&self.elems, &other.elems)
                 .try_fold(Substitutions::default(), |acc, (x1, x2)| {
@@ -282,7 +282,7 @@ impl Substitute for syn::PatSlice {
 }
 
 impl Superset for syn::PatTuple {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs.is_superset(&other.attrs)?.merge(
             zip(&self.elems, &other.elems)
                 .try_fold(Substitutions::default(), |acc, (x1, x2)| {
@@ -314,7 +314,7 @@ impl Substitute for syn::PatTuple {
 }
 
 impl Superset for syn::PatTupleStruct {
-    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
         unimplemented!()
     }
 }
@@ -326,7 +326,7 @@ impl Substitute for syn::PatTupleStruct {
 }
 
 impl Superset for syn::PatType {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.pat.is_superset(&other.pat)?)?
@@ -353,7 +353,7 @@ impl Substitute for syn::PatType {
 }
 
 impl Superset for syn::PatWild {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs.is_superset(&other.attrs)
     }
 }

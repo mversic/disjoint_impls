@@ -2,7 +2,7 @@ use syn::parse_quote;
 
 use super::*;
 
-pub fn gen(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImpl> {
+pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImpl> {
     let assoc_bounds_idents = impl_group.assoc_bounds.idents().collect::<Vec<_>>();
 
     let Some(example_impl) = impl_group.item_impls.first() else {

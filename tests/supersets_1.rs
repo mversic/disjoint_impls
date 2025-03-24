@@ -64,6 +64,7 @@ const _: () = {
 };
  */
 
+#[test]
 fn supersets() {
     assert_eq!("Blanket A", String::NAME);
     assert_eq!("Blanket B", Vec::<u8>::NAME);

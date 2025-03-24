@@ -4,15 +4,16 @@ use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use param::get_param_ident;
 use proc_macro::TokenStream;
+use proc_macro_error2::{abort, proc_macro_error};
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro_error::{abort, proc_macro_error};
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use superset::Substitutions;
-use syn::visit::Visit;
 use syn::ItemImpl;
+use syn::visit::Visit;
 use syn::{
+    ItemTrait,
     parse::{Parse, ParseStream},
-    parse_macro_input, ItemTrait,
+    parse_macro_input,
 };
 
 use crate::superset::Superset;
@@ -422,7 +423,7 @@ impl AssocBoundsGroup {
         &self,
         other: &ItemImplBounds,
         substitutions: &Substitutions,
-    ) -> impl Iterator<Item = Self> {
+    ) -> impl Iterator<Item = Self> + use<> {
         let mut unsized_params = self.unsized_params.clone();
         unsized_params.extend(other.1.clone());
 
@@ -674,19 +675,19 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
 
     let main_trait = impls.item_trait_;
     for (impl_group_idx, impl_group) in impls.impl_groups.into_values().enumerate() {
-        helper_traits.push(helper_trait::gen(
+        helper_traits.push(helper_trait::generate(
             main_trait.as_ref(),
             impl_group_idx,
             &impl_group,
         ));
 
-        main_trait_impls.push(main_trait::gen(
+        main_trait_impls.push(main_trait::generate(
             main_trait.as_ref(),
             impl_group_idx,
             &impl_group,
         ));
 
-        item_impls.extend(disjoint::gen(impl_group_idx, impl_group));
+        item_impls.extend(disjoint::generate(impl_group_idx, impl_group));
     }
 
     quote! {
@@ -1054,7 +1055,10 @@ mod tests {
 
         assert_eq!(
             supersets,
-            expected_supersets.into_iter().collect::<IndexMap<_, _>>()
+            expected_supersets
+                .iter()
+                .cloned()
+                .collect::<IndexMap<_, _>>()
         );
 
         (supersets, subsets)
@@ -1088,7 +1092,7 @@ mod tests {
                 "Blanket D",
             ),
         ]
-        .into_iter()
+        .iter()
         .map(|(ty, bounded_ty, assoc_ty, msg)| {
             (
                 ImplGroupId(Some(syn::parse_quote!(Kita)), parse_quote!(#ty)),

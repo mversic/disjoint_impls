@@ -12,7 +12,7 @@ struct ImplItemResolver {
 }
 
 /// Generate main trait impl
-pub fn gen(
+pub fn generate(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
     impl_group: &ImplGroup,
@@ -181,10 +181,10 @@ fn gen_dummy_impl_from_trait_definition(
     }
 }
 
-fn combine_generic_args<'a>(
-    assoc_bound_idents: impl IntoIterator<Item = AssocBoundIdent<'a>>,
+fn combine_generic_args<'a, T: IntoIterator<Item = AssocBoundIdent<'a>>>(
+    assoc_bound_idents: T,
     path: &syn::Path,
-) -> impl Iterator<Item = syn::GenericArgument> {
+) -> impl Iterator<Item = syn::GenericArgument> + use<T> {
     let arguments = &path.segments.last().unwrap().arguments;
 
     let mut generic_args: Vec<_> = assoc_bound_idents
@@ -261,7 +261,7 @@ fn gen_assoc_bound_predicates<'a>(
 
     type_param_trait_bounds
         .into_iter()
-        .map(|(param_ident, trait_bounds)| -> syn::WherePredicate {
+        .map(move |(param_ident, trait_bounds)| -> syn::WherePredicate {
             let trait_bounds = trait_bounds.into_iter();
 
             if assoc_bounds.unsized_params.contains(param_ident) {

@@ -1,7 +1,7 @@
 use super::*;
 
 impl Superset for syn::Path {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.segments.len() != other.segments.len() {
             return None;
         }
@@ -113,7 +113,7 @@ impl Substitute for syn::Path {
                         .collect(),
                 }
                 .into_iter()
-                .map(|arguments| syn::PathSegment {
+                .map(move |arguments| syn::PathSegment {
                     ident: segment.ident.clone(),
                     arguments,
                 })
@@ -128,7 +128,7 @@ impl Substitute for syn::Path {
 }
 
 impl Superset for syn::QSelf {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         let substitutions = self.ty.is_superset(&other.ty)?;
 
         if self.position != other.position || self.as_token != other.as_token {
@@ -162,7 +162,7 @@ impl Substitute for syn::QSelf {
 }
 
 impl Superset for syn::AngleBracketedGenericArguments {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.args.len() != other.args.len() {
             return None;
         }
@@ -243,7 +243,7 @@ impl Substitute for syn::AngleBracketedGenericArguments {
 }
 
 impl Superset for syn::AssocType {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.ident != other.ident {
             return None;
         }
@@ -290,7 +290,7 @@ impl Substitute for syn::AssocType {
 }
 
 impl Superset for syn::AssocConst {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.ident != other.ident {
             return None;
         }
@@ -338,7 +338,7 @@ impl Substitute for syn::AssocConst {
 }
 
 impl Superset for syn::Constraint {
-    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
         unimplemented!()
     }
 }
@@ -392,25 +392,28 @@ mod tests {
         );
 
         let p1: syn::Path = syn::parse_quote!(_ŠČ);
-        assert!(p1
-            .is_superset(&p1)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p1.is_superset(&p1)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let p2: syn::Path = syn::parse_quote!(Vec<[_ŠČ; 2]>);
-        assert!(p2
-            .is_superset(&p2)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p2.is_superset(&p2)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let p3: syn::Path = syn::parse_quote!(Vec<[_ŠČ; 2]>::Target);
-        assert!(p3
-            .is_superset(&p3)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p3.is_superset(&p3)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
     }
 
     #[test]
@@ -422,25 +425,28 @@ mod tests {
 
         let p1: syn::Path = syn::parse_quote!(i32);
 
-        assert!(p1
-            .is_superset(&p1)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p1.is_superset(&p1)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let p2: syn::Path = syn::parse_quote!(Vec<[i32; 2]>);
-        assert!(p2
-            .is_superset(&p2)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p2.is_superset(&p2)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let p3: syn::Path = syn::parse_quote!(Vec<[i32; 2]>::Target);
-        assert!(p3
-            .is_superset(&p3)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p3.is_superset(&p3)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
     }
 
     #[test]
@@ -452,11 +458,12 @@ mod tests {
 
         let p1: syn::Path = syn::parse_quote!(_ŠČ1);
 
-        assert!(p1
-            .is_superset(&p1)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p1.is_superset(&p1)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
     }
 
     #[test]
@@ -468,10 +475,11 @@ mod tests {
 
         let p1: syn::Path = syn::parse_quote!(_ŠČ1);
 
-        assert!(p1
-            .is_superset(&p1)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            p1.is_superset(&p1)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
     }
 }

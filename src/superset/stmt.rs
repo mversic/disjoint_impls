@@ -1,7 +1,7 @@
 use super::*;
 
 impl Superset for syn::Stmt {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::Stmt::*;
 
         match (self, other) {
@@ -35,7 +35,7 @@ impl Substitute for syn::Stmt {
 }
 
 impl Superset for syn::Local {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.pat.is_superset(&other.pat)?)?
@@ -62,7 +62,7 @@ impl Substitute for syn::Local {
 }
 
 impl Superset for syn::StmtMacro {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.mac.is_superset(&other.mac)?)
@@ -86,7 +86,7 @@ impl Substitute for syn::StmtMacro {
 }
 
 impl Superset for syn::LocalInit {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.expr
             .is_superset(&other.expr)?
             .merge(match (&self.diverge, &other.diverge) {
@@ -125,7 +125,7 @@ impl Substitute for syn::LocalInit {
 }
 
 impl Superset for syn::Block {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.stmts.len() != other.stmts.len() {
             return None;
         }

@@ -5,7 +5,7 @@ use super::*;
 /// Helper trait contains all items of the main trait but is parametrized with
 /// type parameters corresponding to a minimal set of associated bounds
 /// required to uniquely identify all of the disjoint impls
-pub fn gen(
+pub fn generate(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
     impl_group: &ImplGroup,

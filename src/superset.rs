@@ -17,7 +17,7 @@ pub trait Superset: Eq {
     /// returned substitutions contain identity mappings of type parameters (e.g. `T` -> `T`).
     ///
     /// If the substitutions are empty, `self` and `other are identical concrete types.
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions>;
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>>;
 }
 
 trait Substitute {
@@ -122,13 +122,13 @@ impl<'a> Substitutions<'a> {
 
         let bounded = trait_bound
             .0
-             .0
+            .0
             .substitute(&reverse_map)
             .into_iter()
             .map(Bounded);
         let trait_ = trait_bound
             .1
-             .0
+            .0
             .substitute(&reverse_map)
             .into_iter()
             .map(TraitBound);
@@ -138,7 +138,7 @@ impl<'a> Substitutions<'a> {
 }
 
 impl Superset for ImplGroupId {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         match (&self.0, &other.0) {
             (Some(x1), Some(x2)) => x1.is_superset(x2)?,
             (None, None) => Substitutions::default(),
@@ -173,7 +173,7 @@ impl Substitute for ImplGroupId {
 }
 
 impl<T: Superset> Superset for Option<T> {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         match (self, other) {
             (None, None) => Some(Substitutions::default()),
             (Some(x1), Some(x2)) => x1.is_superset(x2),
@@ -194,7 +194,7 @@ impl<T: Substitute> Substitute for Option<T> {
 }
 
 impl Superset for Vec<syn::Attribute> {
-    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
         Some(Substitutions::default())
     }
 }
@@ -218,7 +218,7 @@ impl Substitute for syn::Macro {
 }
 
 impl Superset for syn::Lifetime {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
         const UNDERSCORE: &str = "_";
 
         if self.ident == UNDERSCORE || other.ident == UNDERSCORE {
@@ -236,7 +236,7 @@ impl Substitute for syn::Lifetime {
 }
 
 impl Superset for syn::BoundLifetimes {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.lifetimes.len() != other.lifetimes.len() {
             return None;
         }
@@ -266,7 +266,7 @@ impl Substitute for syn::BoundLifetimes {
 }
 
 impl Superset for syn::Lit {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
         (self == other).then_some(Substitutions::default())
     }
 }
@@ -285,7 +285,7 @@ impl Substitute for syn::Lit {
 }
 
 impl Superset for syn::LitStr {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
         (self == other).then_some(Substitutions::default())
     }
 }

@@ -1,8 +1,8 @@
 //! Contains logic related to uniform position based (re-)naming of parameters
 
 use indexmap::IndexMap;
+use proc_macro_error2::abort_call_site;
 use proc_macro2::Span;
-use proc_macro_error::abort_call_site;
 
 use quote::format_ident;
 use syn::{visit::Visit, visit_mut::VisitMut};

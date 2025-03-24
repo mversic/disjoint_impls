@@ -1,7 +1,7 @@
 use super::*;
 
 impl Superset for syn::Expr {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::Expr::*;
 
         match (self, other) {
@@ -241,7 +241,7 @@ impl Substitute for syn::Expr {
 }
 
 impl Superset for syn::ExprArray {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.elems.len() != other.elems.len() {
             return None;
         }
@@ -277,7 +277,7 @@ impl Substitute for syn::ExprArray {
 }
 
 impl Superset for syn::ExprAssign {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.left.is_superset(&other.left)?)?
@@ -304,7 +304,7 @@ impl Substitute for syn::ExprAssign {
 }
 
 impl Superset for syn::ExprAsync {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.capture != other.capture {
             return None;
         }
@@ -332,7 +332,7 @@ impl Substitute for syn::ExprAsync {
 }
 
 impl Superset for syn::ExprAwait {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.base.is_superset(&other.base)?)
@@ -357,7 +357,7 @@ impl Substitute for syn::ExprAwait {
 }
 
 impl Superset for syn::ExprBinary {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.op != other.op {
             return None;
         }
@@ -392,7 +392,7 @@ impl Substitute for syn::ExprBinary {
 }
 
 impl Superset for syn::ExprBlock {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.label.is_superset(&other.label)?)?
@@ -419,7 +419,7 @@ impl Substitute for syn::ExprBlock {
 }
 
 impl Superset for syn::ExprBreak {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.label.is_superset(&other.label)?)?
@@ -456,7 +456,7 @@ impl Substitute for syn::ExprBreak {
 }
 
 impl Superset for syn::ExprCall {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.args.len() != other.args.len() {
             return None;
         }
@@ -506,7 +506,7 @@ impl Substitute for syn::ExprCall {
 }
 
 impl Superset for syn::ExprCast {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.expr.is_superset(&other.expr)?)?
@@ -533,7 +533,7 @@ impl Substitute for syn::ExprCast {
 }
 
 impl Superset for syn::ExprClosure {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.constness != other.constness
             || self.movability != other.movability
             || self.asyncness != other.asyncness
@@ -596,7 +596,7 @@ impl Substitute for syn::ExprClosure {
 }
 
 impl Superset for syn::ExprConst {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.block.is_superset(&other.block)?)
@@ -620,7 +620,7 @@ impl Substitute for syn::ExprConst {
 }
 
 impl Superset for syn::ExprContinue {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.label.is_superset(&other.label)?)
@@ -644,7 +644,7 @@ impl Substitute for syn::ExprContinue {
 }
 
 impl Superset for syn::ExprField {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.member != other.member {
             return None;
         }
@@ -672,7 +672,7 @@ impl Substitute for syn::ExprField {
 }
 
 impl Superset for syn::ExprForLoop {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.label.is_superset(&other.label)?)?
@@ -705,7 +705,7 @@ impl Substitute for syn::ExprForLoop {
 }
 
 impl Superset for syn::ExprGroup {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.expr.is_superset(&other.expr)?)
@@ -730,7 +730,7 @@ impl Substitute for syn::ExprGroup {
 }
 
 impl Superset for syn::ExprIf {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.cond.is_superset(&other.cond)?)?
@@ -770,7 +770,7 @@ impl Substitute for syn::ExprIf {
 }
 
 impl Superset for syn::ExprIndex {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.expr.is_superset(&other.expr)?)?
@@ -797,7 +797,7 @@ impl Substitute for syn::ExprIndex {
 }
 
 impl Superset for syn::ExprInfer {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs.is_superset(&other.attrs)
     }
 }
@@ -809,7 +809,7 @@ impl Substitute for syn::ExprInfer {
 }
 
 impl Superset for syn::ExprLet {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.pat.is_superset(&other.pat)?)?
@@ -836,7 +836,7 @@ impl Substitute for syn::ExprLet {
 }
 
 impl Superset for syn::ExprLit {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.lit.is_superset(&other.lit)?)
@@ -860,7 +860,7 @@ impl Substitute for syn::ExprLit {
 }
 
 impl Superset for syn::ExprLoop {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.label.is_superset(&other.label)?)?
@@ -887,7 +887,7 @@ impl Substitute for syn::ExprLoop {
 }
 
 impl Superset for syn::ExprMacro {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.mac.is_superset(&other.mac)?)
@@ -911,7 +911,7 @@ impl Substitute for syn::ExprMacro {
 }
 
 impl Superset for syn::ExprMatch {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.arms.len() != other.arms.len() {
             return None;
         }
@@ -961,7 +961,7 @@ impl Substitute for syn::ExprMatch {
 }
 
 impl Superset for syn::ExprMethodCall {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.method != other.method || self.args.len() != other.args.len() {
             return None;
         }
@@ -1023,7 +1023,7 @@ impl Substitute for syn::ExprMethodCall {
 }
 
 impl Superset for syn::ExprParen {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.expr.is_superset(&other.expr)?)
@@ -1047,7 +1047,7 @@ impl Substitute for syn::ExprParen {
 }
 
 impl Superset for syn::ExprPath {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.qself.is_superset(&other.qself)?)?
@@ -1074,7 +1074,7 @@ impl Substitute for syn::ExprPath {
 }
 
 impl Superset for syn::ExprRange {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.limits != other.limits {
             return None;
         }
@@ -1125,7 +1125,7 @@ impl Substitute for syn::ExprRange {
 }
 
 impl Superset for syn::ExprReference {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.mutability != other.mutability {
             return None;
         }
@@ -1153,7 +1153,7 @@ impl Substitute for syn::ExprReference {
 }
 
 impl Superset for syn::ExprRepeat {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.expr.is_superset(&other.expr)?)?
@@ -1180,7 +1180,7 @@ impl Substitute for syn::ExprRepeat {
 }
 
 impl Superset for syn::ExprReturn {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(match (&self.expr, &other.expr) {
@@ -1214,7 +1214,7 @@ impl Substitute for syn::ExprReturn {
 }
 
 impl Superset for syn::ExprStruct {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.fields.len() != other.fields.len() || self.dot2_token != other.dot2_token {
             return None;
         }
@@ -1281,7 +1281,7 @@ impl Substitute for syn::ExprStruct {
 }
 
 impl Superset for syn::ExprTry {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.expr.is_superset(&other.expr)?)
@@ -1305,7 +1305,7 @@ impl Substitute for syn::ExprTry {
 }
 
 impl Superset for syn::ExprTryBlock {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.block.is_superset(&other.block)?)
@@ -1329,7 +1329,7 @@ impl Substitute for syn::ExprTryBlock {
 }
 
 impl Superset for syn::ExprTuple {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.elems.len() != other.elems.len() {
             return None;
         }
@@ -1365,7 +1365,7 @@ impl Substitute for syn::ExprTuple {
 }
 
 impl Superset for syn::ExprUnary {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.op != other.op {
             return None;
         }
@@ -1393,7 +1393,7 @@ impl Substitute for syn::ExprUnary {
 }
 
 impl Superset for syn::ExprUnsafe {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.block.is_superset(&other.block)?)
@@ -1417,7 +1417,7 @@ impl Substitute for syn::ExprUnsafe {
 }
 
 impl Superset for syn::ExprWhile {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.label.is_superset(&other.label)?)?
@@ -1447,7 +1447,7 @@ impl Substitute for syn::ExprWhile {
 }
 
 impl Superset for syn::ExprYield {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(match (&self.expr, &other.expr) {
@@ -1481,7 +1481,7 @@ impl Substitute for syn::ExprYield {
 }
 
 impl Superset for syn::Label {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.name.is_superset(&other.name)
     }
 }
@@ -1503,7 +1503,7 @@ impl Substitute for syn::Label {
 }
 
 impl Superset for syn::Arm {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.pat.is_superset(&other.pat)?)?
@@ -1544,7 +1544,7 @@ impl Substitute for syn::Arm {
 }
 
 impl Superset for syn::FieldValue {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.member != other.member {
             return None;
         }

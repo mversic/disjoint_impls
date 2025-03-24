@@ -1,7 +1,7 @@
 use super::*;
 
 impl Superset for syn::TraitBound {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.modifier != other.modifier {
             return None;
         }
@@ -31,7 +31,7 @@ impl Substitute for syn::TraitBound {
 }
 
 impl Superset for syn::GenericParam {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::GenericParam::*;
 
         match (self, other) {
@@ -63,7 +63,7 @@ impl Substitute for syn::GenericParam {
 }
 
 impl Superset for syn::LifetimeParam {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.attrs
             .is_superset(&other.attrs)?
             .merge(self.lifetime.is_superset(&other.lifetime)?)
@@ -87,7 +87,7 @@ impl Substitute for syn::LifetimeParam {
 }
 
 impl Superset for syn::TypeParam {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.ident != other.ident || self.bounds.len() != other.bounds.len() {
             return None;
         }
@@ -142,7 +142,7 @@ impl Substitute for syn::TypeParam {
 }
 
 impl Superset for syn::ConstParam {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.ident != other.ident {
             return None;
         }

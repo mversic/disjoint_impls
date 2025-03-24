@@ -1,4 +1,4 @@
-use proc_macro_error::OptionExt;
+use proc_macro_error2::OptionExt;
 
 use super::*;
 

@@ -1,7 +1,7 @@
 use super::*;
 
 impl Superset for syn::Type {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::Type::*;
 
         match (self, other) {
@@ -128,7 +128,7 @@ impl Substitute for syn::Type {
 }
 
 impl Superset for syn::TypeArray {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.elem
             .is_superset(&other.elem)?
             .merge(self.len.is_superset(&other.len)?)
@@ -154,7 +154,7 @@ impl Substitute for syn::TypeArray {
 }
 
 impl Superset for syn::TypeBareFn {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.unsafety != other.unsafety
             || self.variadic != other.variadic
             || self.inputs.len() != other.inputs.len()
@@ -224,7 +224,7 @@ impl Substitute for syn::TypeBareFn {
 }
 
 impl Superset for syn::TypeGroup {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.elem.is_superset(&other.elem)
     }
 }
@@ -247,7 +247,7 @@ impl Substitute for syn::TypeGroup {
 }
 
 impl Superset for syn::TypeInfer {
-    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
         Some(Substitutions::default())
     }
 }
@@ -259,7 +259,7 @@ impl Substitute for syn::TypeInfer {
 }
 
 impl Superset for syn::TypeImplTrait {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.bounds.len() != other.bounds.len() {
             return None;
         }
@@ -300,7 +300,7 @@ impl Substitute for syn::TypeImplTrait {
 }
 
 impl Superset for syn::TypeMacro {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.mac.is_superset(&other.mac)
     }
 }
@@ -319,7 +319,7 @@ impl Substitute for syn::TypeMacro {
 }
 
 impl Superset for syn::TypeNever {
-    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
         Some(Substitutions::default())
     }
 }
@@ -331,7 +331,7 @@ impl Substitute for syn::TypeNever {
 }
 
 impl Superset for syn::TypeParen {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.elem.is_superset(&other.elem)
     }
 }
@@ -354,7 +354,7 @@ impl Substitute for syn::TypeParen {
 }
 
 impl Superset for syn::TypePath {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.qself
             .is_superset(&other.qself)?
             .merge(self.path.is_superset(&other.path)?)
@@ -376,7 +376,7 @@ impl Substitute for syn::TypePath {
 }
 
 impl Superset for syn::TypePtr {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.const_token != other.const_token || self.mutability != other.mutability {
             return None;
         }
@@ -403,7 +403,7 @@ impl Substitute for syn::TypePtr {
 }
 
 impl Superset for syn::TypeReference {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.mutability != other.mutability {
             return None;
         }
@@ -433,7 +433,7 @@ impl Substitute for syn::TypeReference {
 }
 
 impl Superset for syn::TypeParamBound {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::TypeParamBound::*;
 
         match (self, other) {
@@ -468,7 +468,7 @@ impl Substitute for syn::TypeParamBound {
 }
 
 impl Superset for syn::TypeSlice {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         self.elem.is_superset(&other.elem)
     }
 }
@@ -491,7 +491,7 @@ impl Substitute for syn::TypeSlice {
 }
 
 impl Superset for syn::TypeTraitObject {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.bounds.len() != other.bounds.len() {
             return None;
         }
@@ -525,7 +525,7 @@ impl Substitute for syn::TypeTraitObject {
 }
 
 impl Superset for syn::TypeTuple {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.elems.len() != other.elems.len() {
             return None;
         }
@@ -558,7 +558,7 @@ impl Substitute for syn::TypeTuple {
 }
 
 impl Superset for syn::ReturnType {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         use syn::ReturnType::*;
 
         match (&self, &other) {
@@ -589,7 +589,7 @@ impl Substitute for syn::ReturnType {
 }
 
 impl Superset for syn::BareFnArg {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions> {
+    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
         if self.name != other.name {
             return None;
         }
@@ -689,25 +689,28 @@ mod tests {
         );
 
         let t1: syn::Type = syn::parse_quote!(_ŠČ);
-        assert!(t1
-            .is_superset(&t1)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            t1.is_superset(&t1)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let t2: syn::Type = syn::parse_quote!(Vec<[_ŠČ; 2]>);
-        assert!(t2
-            .is_superset(&t2)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            t2.is_superset(&t2)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let t3: syn::Type = syn::parse_quote!(<Vec<[_ŠČ; 2]> as Deref>::Target);
-        assert!(t3
-            .is_superset(&t3)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            t3.is_superset(&t3)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
     }
 
     #[test]
@@ -718,25 +721,28 @@ mod tests {
         );
 
         let t1: syn::Type = syn::parse_quote!(i32);
-        assert!(t1
-            .is_superset(&t1)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            t1.is_superset(&t1)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let t2: syn::Type = syn::parse_quote!(Vec<[i32; 2]>);
-        assert!(t2
-            .is_superset(&t2)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            t2.is_superset(&t2)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
 
         let t3: syn::Type = syn::parse_quote!(<Vec<[i32; 2]> as Deref>::Target);
-        assert!(t3
-            .is_superset(&t3)
-            .unwrap()
-            .substitute(&substituted)
-            .eq([substituted.clone()]));
+        assert!(
+            t3.is_superset(&t3)
+                .unwrap()
+                .substitute(&substituted)
+                .eq([substituted.clone()])
+        );
     }
 
     #[test]
@@ -744,17 +750,18 @@ mod tests {
         let a: syn::Type = syn::parse_quote!(_ŠČ);
         let b = syn::parse_quote!(Vec<_ŠČ>);
 
-        assert!(a
-            .is_superset(&b)
-            .unwrap()
-            .substitute(&(
-                Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-                TraitBound(parse_quote!(Dispatch)),
-            ))
-            .eq([(
-                Bounded(parse_quote!(Option<_ŠČ>)),
-                TraitBound(parse_quote!(Dispatch)),
-            )]));
+        assert!(
+            a.is_superset(&b)
+                .unwrap()
+                .substitute(&(
+                    Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
+                    TraitBound(parse_quote!(Dispatch)),
+                ))
+                .eq([(
+                    Bounded(parse_quote!(Option<_ŠČ>)),
+                    TraitBound(parse_quote!(Dispatch)),
+                )])
+        );
     }
 
     #[test]
@@ -762,30 +769,31 @@ mod tests {
         let a: syn::Type = syn::parse_quote!((_ŠČ0, _ŠČ1));
         let b = syn::parse_quote!((Vec<_ŠČ>, Vec<_ŠČ>));
 
-        assert!(a
-            .is_superset(&b)
-            .unwrap()
-            .substitute(&(
-                Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-                TraitBound(parse_quote!(Dispatch<Group = Vec<_ŠČ>>)),
-            ))
-            .eq([
-                (
-                    Bounded(parse_quote!(Option<_ŠČ0>)),
-                    TraitBound(parse_quote!(Dispatch<Group = _ŠČ0>)),
-                ),
-                (
-                    Bounded(parse_quote!(Option<_ŠČ0>)),
-                    TraitBound(parse_quote!(Dispatch<Group = _ŠČ1>)),
-                ),
-                (
-                    Bounded(parse_quote!(Option<_ŠČ1>)),
-                    TraitBound(parse_quote!(Dispatch<Group = _ŠČ0>)),
-                ),
-                (
-                    Bounded(parse_quote!(Option<_ŠČ1>)),
-                    TraitBound(parse_quote!(Dispatch<Group = _ŠČ1>)),
-                )
-            ]));
+        assert!(
+            a.is_superset(&b)
+                .unwrap()
+                .substitute(&(
+                    Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
+                    TraitBound(parse_quote!(Dispatch<Group = Vec<_ŠČ>>)),
+                ))
+                .eq([
+                    (
+                        Bounded(parse_quote!(Option<_ŠČ0>)),
+                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ0>)),
+                    ),
+                    (
+                        Bounded(parse_quote!(Option<_ŠČ0>)),
+                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ1>)),
+                    ),
+                    (
+                        Bounded(parse_quote!(Option<_ŠČ1>)),
+                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ0>)),
+                    ),
+                    (
+                        Bounded(parse_quote!(Option<_ŠČ1>)),
+                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ1>)),
+                    )
+                ])
+        );
     }
 }
