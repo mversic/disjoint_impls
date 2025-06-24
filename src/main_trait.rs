@@ -345,10 +345,13 @@ mod param {
                 return;
             }
 
-            let bounds = &node.bounds;
-            self.1.push(syn::parse_quote! {
-                #ty: #bounds
-            });
+            if !node.bounds.is_empty() {
+                let bounds = &node.bounds;
+
+                self.1.push(syn::parse_quote! {
+                    #ty: #bounds
+                });
+            }
         }
     }
 
@@ -409,11 +412,6 @@ mod param {
                 let mut non_predicate_param_resolver =
                     NonPredicateParamResolver::new(lifetimes, type_params, const_params);
                 non_predicate_param_resolver.visit_item_trait_mut(main_trait);
-                //if let Some(where_clause) = &mut main_trait.generics.where_clause {
-                //    where_clause
-                //        .predicates
-                //        .iter_(|predicate| predicate)
-                //}
             }
             syn::PathArguments::Parenthesized(_) => unreachable!(),
         }

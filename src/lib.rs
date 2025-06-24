@@ -395,6 +395,10 @@ impl AssocBoundsGroup {
         core::iter::from_fn(move || {
             let mut assoc_bounds_map = IndexMap::new();
 
+            if impl_item_idx > 0 && self.bounds.is_empty() {
+                return None;
+            }
+
             for (trait_bound_id, impl_assoc_bounds) in &self.bounds {
                 if impl_item_idx >= impl_assoc_bounds.len() {
                     return None;
@@ -801,10 +805,9 @@ fn find_impl_group_candidates<'a, 'b>(
         for (assoc_bounds_group, _) in impl_groups.values_mut() {
             assoc_bounds_group.prune_non_assoc();
 
-            if assoc_bounds_group.is_empty() {
+            if assoc_bounds_group.is_empty() && item_impls.len() > 1 {
                 return None;
             }
-
             if assoc_bounds_group.is_overlapping() {
                 return None;
             }
