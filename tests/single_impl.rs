@@ -5,7 +5,7 @@ disjoint_impls! {
         fn name(_value: u32) -> &'static str;
     }
 
-    impl<T: Default, R> Kita<T> for R {
+    impl<T: Default, R> Kita<T> for R where R: std::ops::Deref<Target = str> {
         fn name(_value: u32) -> &'static str {
             "Blanket"
         }
@@ -15,7 +15,7 @@ disjoint_impls! {
 #[test]
 fn single_impl() {
     assert_eq!("Blanket", <String as Kita<u32>>::name(12));
-    assert_eq!("Blanket", <u32 as Kita<String>>::name(12));
+    assert_eq!("Blanket", <Box<str> as Kita<String>>::name(12));
 }
 
 /*

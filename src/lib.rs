@@ -247,11 +247,11 @@ impl quote::ToTokens for TraitBound {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         self.0.leading_colon.to_tokens(tokens);
 
-        let mut iter = self.0.segments.iter().rev();
-        let last_elem = iter.next().unwrap();
+        let mut iter = self.0.segments.iter();
+        let last_elem = iter.next_back().unwrap();
+        let last_ident = &last_elem.ident;
 
-        iter.rev().for_each(|elem| elem.to_tokens(tokens));
-        last_elem.ident.to_tokens(tokens);
+        quote!(#(#iter::)* #last_ident).to_tokens(tokens);
 
         match &last_elem.arguments {
             syn::PathArguments::AngleBracketed(first_args) => {
