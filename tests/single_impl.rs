@@ -27,12 +27,12 @@ const _: () = {
         fn name(_: u32) -> &'static str;
     }
     impl<_ŠČ0: Default, _ŠČ1> Kita<_ŠČ0> for _ŠČ1 {
-        fn name(_: u32) -> &'static str {
+        fn name(_value: u32) -> &'static str {
             "Blanket"
         }
     }
     impl<_ŠČ0, _ŠČ1> Kita<_ŠČ0> for _ŠČ1 where _ŠČ0: Default, Self: _Kita0<_ŠČ0> {
-        fn name(_: u32) -> &'static str {
+        fn name(_value: u32) -> &'static str {
             <Self as _Kita0<_ŠČ0>>::name(_)
         }
     }
