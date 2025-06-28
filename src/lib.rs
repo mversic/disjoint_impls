@@ -802,10 +802,10 @@ fn find_impl_group_candidates<'a, 'b>(
     )
     .into_iter()
     .filter_map(|mut impl_groups| {
-        for (assoc_bounds_group, _) in impl_groups.values_mut() {
+        for (assoc_bounds_group, impls) in impl_groups.values_mut() {
             assoc_bounds_group.prune_non_assoc();
 
-            if assoc_bounds_group.is_empty() && item_impls.len() > 1 {
+            if assoc_bounds_group.is_empty() && impls.len() > 1 {
                 return None;
             }
             if assoc_bounds_group.is_overlapping() {
