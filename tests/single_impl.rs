@@ -23,17 +23,9 @@ pub trait Kita<T> where T: Default {
     fn name(_: u32) -> &'static str;
 }
 const _: () = {
-    pub trait _Kita0<T> where T: Default {
-        fn name(_: u32) -> &'static str;
-    }
-    impl<_ŠČ0: Default, _ŠČ1> Kita<_ŠČ0> for _ŠČ1 {
+    impl<_0: Default, _1> Kita<_0> for _1 where _1: std::ops::Deref<Target = str> {
         fn name(_value: u32) -> &'static str {
             "Blanket"
-        }
-    }
-    impl<_ŠČ0, _ŠČ1> Kita<_ŠČ0> for _ŠČ1 where _ŠČ0: Default, Self: _Kita0<_ŠČ0> {
-        fn name(_value: u32) -> &'static str {
-            <Self as _Kita0<_ŠČ0>>::name(_)
         }
     }
 };

@@ -678,20 +678,24 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut item_impls = Vec::new();
 
     let main_trait = impls.item_trait_;
-    for (impl_group_idx, impl_group) in impls.impl_groups.into_values().enumerate() {
-        helper_traits.push(helper_trait::generate(
-            main_trait.as_ref(),
-            impl_group_idx,
-            &impl_group,
-        ));
+    for (impl_group_idx, mut impl_group) in impls.impl_groups.into_values().enumerate() {
+        if impl_group.item_impls.len() > 1 {
+            helper_traits.push(helper_trait::generate(
+                main_trait.as_ref(),
+                impl_group_idx,
+                &impl_group,
+            ));
 
-        main_trait_impls.push(main_trait::generate(
-            main_trait.as_ref(),
-            impl_group_idx,
-            &impl_group,
-        ));
+            if let Some(main_trait_impl) =
+                main_trait::generate(main_trait.as_ref(), impl_group_idx, &impl_group)
+            {
+                main_trait_impls.push(main_trait_impl);
+            }
 
-        item_impls.extend(disjoint::generate(impl_group_idx, impl_group));
+            item_impls.extend(disjoint::generate(impl_group_idx, impl_group));
+        } else if let Some(main_trait_impl) = impl_group.item_impls.pop() {
+            main_trait_impls.push(main_trait_impl);
+        }
     }
 
     quote! {
@@ -766,7 +770,7 @@ impl Parse for ImplGroups {
                     acc
                 })
                 // TODO: Handle error properly
-                .unwrap_or_else(|| panic!("Unable to form impl group for {:?}", impl_group_id))
+                .unwrap_or_else(|| panic!("Unable to form impl group for {impl_group_id:?}"))
             })
             .map(|(impl_group_id, (assoc_bounds, impl_group))| {
                 let item_impls = impl_group.into_iter().cloned().collect();

@@ -242,7 +242,7 @@ impl<'a> NonPredicateParamIndexer<'a> {
         if let Some(removed) = self.unindexed_lifetimes.swap_remove(lifetime_ident) {
             self.indexed_lifetimes
                 .insert(lifetime_ident, (self.curr_param_pos_idx, removed));
-            self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+            self.curr_param_pos_idx += 1;
         }
 
         false
@@ -252,7 +252,7 @@ impl<'a> NonPredicateParamIndexer<'a> {
         if let Some(removed) = self.unindexed_type_params.swap_remove(param_ident) {
             self.indexed_type_params
                 .insert(param_ident, (self.curr_param_pos_idx, removed));
-            self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+            self.curr_param_pos_idx += 1;
 
             return true;
         }
@@ -264,7 +264,7 @@ impl<'a> NonPredicateParamIndexer<'a> {
         if let Some(removed) = self.unindexed_const_params.swap_remove(param_ident) {
             self.indexed_const_params
                 .insert(param_ident, (self.curr_param_pos_idx, removed));
-            self.curr_param_pos_idx = self.curr_param_pos_idx.checked_add(1).unwrap();
+            self.curr_param_pos_idx += 1;
 
             return true;
         }
@@ -275,42 +275,33 @@ impl<'a> NonPredicateParamIndexer<'a> {
 
 impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
     fn visit_generics(&mut self, _: &syn::Generics) {}
+    fn visit_impl_item(&mut self, _: &syn::ImplItem) {}
 
     fn visit_lifetime(&mut self, node: &'a syn::Lifetime) {
         self.visit_lifetime_ident(&node.ident);
     }
 
-    fn visit_type(&mut self, node: &'a syn::Type) {
-        match node {
-            syn::Type::Path(ty) => {
-                if let Some(qself) = &ty.qself {
-                    self.visit_qself(qself);
-                }
-
-                let first_seg = ty.path.segments.first().unwrap();
-                self.visit_type_param_ident(&first_seg.ident);
-                syn::visit::visit_path(self, &ty.path);
-            }
-            _ => syn::visit::visit_type(self, node),
+    fn visit_type_path(&mut self, node: &'a syn::TypePath) {
+        if let Some(qself) = &node.qself {
+            self.visit_qself(qself);
         }
+
+        let first_seg = node.path.segments.first().unwrap();
+        self.visit_type_param_ident(&first_seg.ident);
+        syn::visit::visit_path(self, &node.path);
     }
 
-    fn visit_expr(&mut self, node: &'a syn::Expr) {
-        match node {
-            syn::Expr::Path(ty) => {
-                if let Some(qself) = &ty.qself {
-                    self.visit_qself(qself);
-                }
-
-                let first_seg = ty.path.segments.first().unwrap();
-                if !self.visit_type_param_ident(&first_seg.ident) {
-                    self.visit_const_param_ident(&first_seg.ident);
-                }
-
-                syn::visit::visit_path(self, &ty.path);
-            }
-            _ => syn::visit::visit_expr(self, node),
+    fn visit_expr_path(&mut self, node: &'a syn::ExprPath) {
+        if let Some(qself) = &node.qself {
+            self.visit_qself(qself);
         }
+
+        let first_seg = node.path.segments.first().unwrap();
+        if !self.visit_type_param_ident(&first_seg.ident) {
+            self.visit_const_param_ident(&first_seg.ident);
+        }
+
+        syn::visit::visit_path(self, &node.path);
     }
 }
 
@@ -378,7 +369,7 @@ impl VisitMut for NonPredicateParamResolver<'_> {
 
                 // TODO: struct name can clash with type/const param name
                 if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
-                    *ty = syn::parse_quote!(#new_ty);
+                    *node = syn::parse_quote!(#new_ty);
                 } else {
                     self.try_replace_expr_path_with_type(&mut ty.path);
                 }

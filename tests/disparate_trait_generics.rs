@@ -67,10 +67,10 @@ const _: () = {
         const NAME: &'static str = "2nd Blanket B";
     }
 
-    impl<_0, _1, _2> Kita<(_0, _1)> for _2 where (_0, _1):, (_0, _1): Dispatch, Self: _Kita0<<(_0, _1) as Dispatch>::Group, (_0, _1)> {
+    impl<_0, _1, _2> Kita<(_0, _1)> for _2 where (_0, _1): Dispatch, Self: _Kita0<<(_0, _1) as Dispatch>::Group, (_0, _1)> {
         const NAME: &'static str = <Self as _Kita0<<(_0, _1) as Dispatch>::Group, (_0, _1)>>::NAME;
     }
-    impl<_0> Kita<(i32,)> for _0 where (i32,):, _0: Dispatch, Self: _Kita1<<_0 as Dispatch>::Group, (i32,)> {
+    impl<_0> Kita<(i32,)> for _0 where _0: Dispatch, Self: _Kita1<<_0 as Dispatch>::Group, (i32,)> {
         const NAME: &'static str = <Self as _Kita1<<_0 as Dispatch>::Group, (i32,)>>::NAME;
     }
 };
