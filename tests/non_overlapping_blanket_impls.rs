@@ -31,6 +31,6 @@ const _: () = {
 
 #[test]
 fn non_overlapping_blanket_impls() {
-    assert_eq!("Blanket 1", <(String, )>::NAME);
+    assert_eq!("Blanket 1", <(String,)>::NAME);
     assert_eq!("Blanket 2", <Option<Vec::<u32>>>::NAME);
 }

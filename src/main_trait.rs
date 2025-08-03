@@ -3,7 +3,7 @@
 use proc_macro2::Span;
 use syn::{parse_quote, visit_mut::VisitMut};
 
-use crate::{helper_trait::remove_param_bounds, param::NonPredicateParamIndexer};
+use crate::helper_trait::remove_param_bounds;
 
 use super::*;
 
@@ -53,48 +53,7 @@ pub fn generate(
             &helper_trait_ident,
             &impl_group.assoc_bounds,
         ));
-
-    // Remove unused params
-    let mut non_predicate_param_indexer = NonPredicateParamIndexer::new(
-        example_impl
-            .generics
-            .lifetimes()
-            .map(|param| (&param.lifetime.ident, param)),
-        example_impl
-            .generics
-            .type_params()
-            .map(|param| (&param.ident, param)),
-        example_impl
-            .generics
-            .const_params()
-            .map(|param| (&param.ident, param)),
-        0,
-    );
-
-    non_predicate_param_indexer.visit_item_impl(&main_trait_impl);
-    if let Some(where_clause) = &main_trait_impl.generics.where_clause {
-        non_predicate_param_indexer.visit_where_clause(where_clause);
-    }
-
-    main_trait_impl.generics.params = non_predicate_param_indexer
-        .indexed_lifetimes
-        .keys()
-        .map(|&ident| {
-            syn::LifetimeParam::new(syn::Lifetime {
-                apostrophe: Span::call_site(),
-                ident: ident.clone(),
-            })
-            .into()
-        })
-        .chain(
-            non_predicate_param_indexer
-                .indexed_type_params
-                .keys()
-                .chain(non_predicate_param_indexer.indexed_const_params.keys())
-                .map(|param_ident| -> syn::GenericParam { syn::parse_quote!(#param_ident) }),
-        )
-        .collect();
-    // Remove unused params end
+    remove_unused_params(&mut main_trait_impl, example_impl);
 
     let mut impl_item_resolver =
         ImplItemResolver::new(example_impl, &helper_trait_ident, &impl_group.assoc_bounds);
@@ -104,6 +63,28 @@ pub fn generate(
         .for_each(|item| impl_item_resolver.visit_impl_item_mut(item));
 
     Some(main_trait_impl)
+}
+
+fn remove_unused_params(main_trait_impl: &mut ItemImpl, example_impl: &ItemImpl) {
+    let indexed_params = crate::param::index(example_impl);
+    main_trait_impl.generics.params = indexed_params
+        .lifetimes
+        .keys()
+        .map(|ident| {
+            syn::LifetimeParam::new(syn::Lifetime {
+                apostrophe: Span::call_site(),
+                ident: ident.clone(),
+            })
+            .into()
+        })
+        .chain(
+            indexed_params
+                .type_params
+                .keys()
+                .chain(indexed_params.const_params.keys())
+                .map(|param_ident| -> syn::GenericParam { syn::parse_quote!(#param_ident) }),
+        )
+        .collect();
 }
 
 /// Generates main trait implementation with item values set to dummy values

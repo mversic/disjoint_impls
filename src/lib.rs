@@ -9,6 +9,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, format_ident, quote};
 use superset::Substitutions;
 use syn::ItemImpl;
+use syn::parse_quote;
 use syn::visit::Visit;
 use syn::{
     ItemTrait,
@@ -273,7 +274,7 @@ impl quote::ToTokens for TraitBound {
 
 impl From<&syn::Ident> for Bounded {
     fn from(source: &syn::Ident) -> Self {
-        Self(syn::parse_quote!(#source))
+        Self(parse_quote!(#source))
     }
 }
 
@@ -676,6 +677,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut helper_traits = Vec::new();
     let mut main_trait_impls = Vec::new();
     let mut item_impls = Vec::new();
+    let mut constrain_traits = Vec::<syn::Macro>::new();
 
     let main_trait = impls.item_trait_;
     for (impl_group_idx, mut impl_group) in impls.impl_groups.into_values().enumerate() {
@@ -689,6 +691,40 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
             if let Some(main_trait_impl) =
                 main_trait::generate(main_trait.as_ref(), impl_group_idx, &impl_group)
             {
+                if true {
+                    let mut constrain_trait: ItemTrait = parse_quote! {
+                        trait _ŠČConstrain {
+                            type Bound: ?Sized;
+                        }
+                    };
+
+                    constrain_trait.generics = main_trait
+                        .as_ref()
+                        .map(|trait_| trait_.generics.clone())
+                        .unwrap_or_default();
+
+                    let (unconstrained_assoc_param, unconstrained_assoc_param_bound) =
+                        impl_group.assoc_bounds.bounds.last().unwrap().0;
+                    //let item_impls = &mut impl_group.item_impls;
+                    //item_impls.iter_mut().for_each(|item_impl| {
+                    //    item_impl.trait_ =
+                    //        Some((None, parse_quote!(_ŠČConstrain), parse_quote![for]));
+                    //    item_impl.items =
+                    //        vec![parse_quote!(type Bound = #unconstrained_assoc_param;)];
+                    //});
+
+                    let (unconstrained_type_params, unconstrained_const_params) =
+                        find_unconstrained_params(&main_trait_impl);
+
+                    //constrain_traits.push(parse_quote! {
+                    //    disjoint_impls::disjoint_impls! {
+                    //        #constrain_trait
+
+                    //        #( #item_impls )*
+                    //    }
+                    //});
+                }
+
                 main_trait_impls.push(main_trait_impl);
             }
 
@@ -705,9 +741,30 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
             #( #helper_traits )*
             #( #item_impls )*
             #( #main_trait_impls )*
+
+            #( #constrain_traits )*
         };
     }
     .into()
+}
+
+fn find_unconstrained_params(
+    item_impl: &ItemImpl,
+) -> (
+    impl Iterator<Item = &syn::Ident>,
+    impl Iterator<Item = &syn::Ident>,
+) {
+    let indexed_params = param::index(item_impl);
+
+    let unindexed_type_params = item_impl.generics.type_params().filter_map(move |param| {
+        (!indexed_params.type_params.contains_key(&param.ident)).then_some(&param.ident)
+    });
+    // FIX: Can there be non indexed const params, what about lifetimes?
+    let unindexed_const_params = item_impl.generics.const_params().filter_map(move |param| {
+        (!indexed_params.const_params.contains_key(&param.ident)).then_some(&param.ident)
+    });
+
+    (unindexed_type_params, unindexed_const_params)
 }
 
 #[derive(Debug)]
@@ -723,7 +780,7 @@ impl Parse for ImplGroups {
 
         let main_trait = input.parse::<ItemTrait>().ok();
         while let Ok(mut item) = input.parse::<ItemImpl>() {
-            param::resolve_non_predicate_params(&mut item);
+            param::index(&item).resolve(&mut item);
 
             let impl_group_id = ImplGroupId(
                 item.trait_.as_ref().map(|trait_| &trait_.1).cloned(),
@@ -983,7 +1040,7 @@ fn gen_inherent_self_ty_args(self_ty: &mut syn::TypePath, generics: &syn::Generi
         lifetimes.sort();
         params.sort();
 
-        *bracketed = syn::parse_quote!(<#(#lifetimes,)* #(#params),*>);
+        *bracketed = parse_quote!(<#(#lifetimes,)* #(#params),*>);
     } else {
         unreachable!()
     }
@@ -1042,8 +1099,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use syn::parse_quote;
-
     use super::*;
 
     fn make_sets_checked<'a, I>(impl_groups: I) -> (Supersets<'a>, Subsets<'a>)
