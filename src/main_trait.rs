@@ -301,20 +301,20 @@ mod param {
 
     use super::*;
 
-    struct MainTraitParamBoundResolver<'a>(IndexSet<&'a syn::Ident>, Vec<syn::WherePredicate>);
+    struct MainTraitParamBoundResolver(Vec<syn::WherePredicate>);
 
-    impl<'a> MainTraitParamBoundResolver<'a> {
-        fn new(concrete: impl IntoIterator<Item = &'a syn::Ident>) -> Self {
-            Self(concrete.into_iter().collect(), Vec::new())
+    impl MainTraitParamBoundResolver {
+        fn new() -> Self {
+            Self(Vec::new())
         }
     }
 
-    impl Visit<'_> for MainTraitParamBoundResolver<'_> {
+    impl Visit<'_> for MainTraitParamBoundResolver {
         fn visit_lifetime_param(&mut self, node: &syn::LifetimeParam) {
             let ty = &node.lifetime;
 
             let bounds = &node.bounds;
-            self.1.push(syn::parse_quote! {
+            self.0.push(syn::parse_quote! {
                 #ty: #bounds
             });
         }
@@ -322,22 +322,18 @@ mod param {
         fn visit_type_param(&mut self, node: &syn::TypeParam) {
             let ty = &node.ident;
 
-            if self.0.contains(&ty) {
-                return;
-            }
-
             if !node.bounds.is_empty() {
                 let bounds = &node.bounds;
 
-                self.1.push(syn::parse_quote! {
+                self.0.push(syn::parse_quote! {
                     #ty: #bounds
                 });
             }
         }
     }
 
-    pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, trait_: &syn::Path) {
-        match &trait_.segments.last().unwrap().arguments {
+    pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, impl_trait: &syn::Path) {
+        match &impl_trait.segments.last().unwrap().arguments {
             syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(bracketed) => {
                 let mut lifetimes = IndexMap::new();
@@ -365,29 +361,14 @@ mod param {
                         _ => unreachable!(),
                     });
 
-                let mut param_resolver = MainTraitParamBoundResolver::new(
-                    type_params.iter().filter_map(|(param, substitute)| {
-                        if let syn::Type::Path(ty) = substitute {
-                            if ty.qself.is_some() {
-                                return Some(param);
-                            }
+                let mut param_bound_resolver = MainTraitParamBoundResolver::new();
+                param_bound_resolver.visit_generics(&main_trait.generics);
 
-                            let ident = ty.path.get_ident().map(ToString::to_string);
-                            if ident.map(|ident| ident.starts_with("_ŠČ")).unwrap_or(false) {
-                                return None;
-                            }
-                        }
-
-                        Some(param)
-                    }),
-                );
-                param_resolver.visit_generics(&main_trait.generics);
                 main_trait.generics.params = syn::punctuated::Punctuated::new();
-
                 let where_clause = main_trait.generics.make_where_clause();
                 where_clause.predicates = core::mem::take(&mut where_clause.predicates)
                     .into_iter()
-                    .chain(param_resolver.1)
+                    .chain(param_bound_resolver.0)
                     .collect();
 
                 let mut non_predicate_param_resolver =
