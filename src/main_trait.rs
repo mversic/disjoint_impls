@@ -336,7 +336,23 @@ pub mod param {
         let mut param_bound_resolver = MainTraitParamBoundResolver::new();
         param_bound_resolver.visit_generics(generics);
 
-        generics.params = syn::punctuated::Punctuated::new();
+        generics.params = core::mem::take(&mut generics.params)
+            .into_iter()
+            .map(|mut param| {
+                match &mut param {
+                    syn::GenericParam::Lifetime(param) => {
+                        param.bounds = core::iter::empty::<syn::Lifetime>().collect()
+                    }
+                    syn::GenericParam::Type(param) => {
+                        param.bounds = core::iter::empty::<syn::TypeParamBound>().collect();
+                    }
+                    syn::GenericParam::Const(_) => {}
+                }
+
+                param
+            })
+            .collect();
+
         let where_clause = generics.make_where_clause();
         where_clause.predicates = core::mem::take(&mut where_clause.predicates)
             .into_iter()
@@ -345,18 +361,20 @@ pub mod param {
     }
 
     pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, impl_trait: &syn::Path) {
+        rewrite_main_trait_bounds_to_where_clause(&mut main_trait.generics);
+        let mut main_trait_iter = main_trait.generics.params.iter();
+
+        let mut lifetimes = IndexMap::new();
+        let mut type_params = IndexMap::new();
+        let mut const_params = IndexMap::new();
+
         match &impl_trait.segments.last().unwrap().arguments {
             syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(bracketed) => {
-                let mut lifetimes = IndexMap::new();
-                let mut type_params = IndexMap::new();
-                let mut const_params = IndexMap::new();
-
-                main_trait
-                    .generics
-                    .params
-                    .iter()
-                    .zip(&bracketed.args)
+                main_trait_iter
+                    .by_ref()
+                    .take(bracketed.args.len())
+                    .zip_eq(&bracketed.args)
                     .for_each(|(param, arg)| match (param, arg) {
                         (
                             syn::GenericParam::Lifetime(param),
@@ -372,13 +390,31 @@ pub mod param {
                         }
                         _ => unreachable!(),
                     });
-
-                rewrite_main_trait_bounds_to_where_clause(&mut main_trait.generics);
-                let mut non_predicate_param_resolver =
-                    NonPredicateParamResolver::new(lifetimes, type_params, const_params);
-                non_predicate_param_resolver.visit_item_trait_mut(main_trait);
             }
             syn::PathArguments::Parenthesized(_) => unreachable!(),
         }
+
+        main_trait_iter.for_each(|param| match param {
+            syn::GenericParam::Lifetime(_) => {}
+            syn::GenericParam::Type(param) => {
+                type_params.insert(param.ident.clone(), param.default.as_ref().unwrap());
+            }
+            syn::GenericParam::Const(param) => {
+                const_params.insert(param.ident.clone(), param.default.as_ref().unwrap());
+            }
+        });
+
+        let mut non_predicate_param_resolver =
+            NonPredicateParamResolver::new(lifetimes, type_params, const_params);
+        if let Some(where_clause) = main_trait.generics.where_clause.as_mut() {
+            non_predicate_param_resolver.visit_where_clause_mut(where_clause);
+        }
+        for supertrait in &mut main_trait.supertraits {
+            non_predicate_param_resolver.visit_type_param_bound_mut(supertrait);
+        }
+        for item in &mut main_trait.items {
+            non_predicate_param_resolver.visit_trait_item_mut(item);
+        }
+        main_trait.generics.params = syn::punctuated::Punctuated::new();
     }
 }
