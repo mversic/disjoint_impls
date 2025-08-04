@@ -296,7 +296,7 @@ impl VisitMut for ImplItemResolver {
     }
 }
 
-mod param {
+pub mod param {
     use crate::param::NonPredicateParamResolver;
 
     use super::*;
@@ -332,6 +332,18 @@ mod param {
         }
     }
 
+    pub fn rewrite_main_trait_bounds_to_where_clause(generics: &mut syn::Generics) {
+        let mut param_bound_resolver = MainTraitParamBoundResolver::new();
+        param_bound_resolver.visit_generics(generics);
+
+        generics.params = syn::punctuated::Punctuated::new();
+        let where_clause = generics.make_where_clause();
+        where_clause.predicates = core::mem::take(&mut where_clause.predicates)
+            .into_iter()
+            .chain(param_bound_resolver.0)
+            .collect();
+    }
+
     pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, impl_trait: &syn::Path) {
         match &impl_trait.segments.last().unwrap().arguments {
             syn::PathArguments::None => {}
@@ -361,16 +373,7 @@ mod param {
                         _ => unreachable!(),
                     });
 
-                let mut param_bound_resolver = MainTraitParamBoundResolver::new();
-                param_bound_resolver.visit_generics(&main_trait.generics);
-
-                main_trait.generics.params = syn::punctuated::Punctuated::new();
-                let where_clause = main_trait.generics.make_where_clause();
-                where_clause.predicates = core::mem::take(&mut where_clause.predicates)
-                    .into_iter()
-                    .chain(param_bound_resolver.0)
-                    .collect();
-
+                rewrite_main_trait_bounds_to_where_clause(&mut main_trait.generics);
                 let mut non_predicate_param_resolver =
                     NonPredicateParamResolver::new(lifetimes, type_params, const_params);
                 non_predicate_param_resolver.visit_item_trait_mut(main_trait);

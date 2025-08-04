@@ -83,7 +83,10 @@ const _: () = {
 #[test]
 fn trait_with_default_types() {
     assert_eq!("1st Blanket A", <String as Kita>::NAME);
-    assert_eq!("2nd Blanket A", <Vec::<u32> as Kita<[Vec<u32>; 1], 42>>::NAME);
+    assert_eq!(
+        "2nd Blanket A",
+        <Vec::<u32> as Kita<[Vec<u32>; 1], 42>>::NAME
+    );
     assert_eq!("1st Blanket B", <u32 as Kita>::NAME);
     assert_eq!("2nd Blanket B", <i32 as Kita<[i32; 1], 42>>::NAME);
 }

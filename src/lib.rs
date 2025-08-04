@@ -11,12 +11,15 @@ use superset::Substitutions;
 use syn::ItemImpl;
 use syn::parse_quote;
 use syn::visit::Visit;
+use syn::visit_mut::VisitMut;
 use syn::{
     ItemTrait,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
 
+use crate::main_trait::param::rewrite_main_trait_bounds_to_where_clause;
+use crate::param::NonPredicateParamResolver;
 use crate::superset::Superset;
 
 mod disjoint;
@@ -326,6 +329,76 @@ impl AssocBoundsGroup {
         Self {
             bounds,
             unsized_params: impl_bounds.1,
+        }
+    }
+
+    /// Removes all assoc bounds that are mandated by the main trait.
+    /// These bounds are always the same for all impllementations.
+    ///
+    /// # Example
+    ///
+    /// impl trait Kita<T: Bound<Type = u32>> {}
+    /// impl<T> Kita for T where T: Bound<Type = u32> {}
+    ///
+    /// here `Bound<Type = u32>` shouldn't be taken as part of the dispatch assoc bounds
+    fn prune_main_trait_assoc(
+        &mut self,
+        main_trait_generics: &syn::Generics,
+        impl_trait: &syn::Path,
+    ) {
+        let mut type_params = IndexMap::new();
+
+        match &impl_trait.segments.last().unwrap().arguments {
+            syn::PathArguments::None => {}
+            syn::PathArguments::AngleBracketed(bracketed) => {
+                main_trait_generics
+                    .params
+                    .iter()
+                    .zip(&bracketed.args)
+                    .for_each(|(param, arg)| {
+                        if let (syn::GenericParam::Type(param), syn::GenericArgument::Type(arg)) =
+                            (param, arg)
+                        {
+                            type_params.insert(param.ident.clone(), arg);
+                        }
+                    });
+            }
+            syn::PathArguments::Parenthesized(_) => unreachable!(),
+        }
+
+        let mut main_trait_generics = main_trait_generics.clone();
+        rewrite_main_trait_bounds_to_where_clause(&mut main_trait_generics);
+        if let Some(where_clause) = &mut main_trait_generics.where_clause {
+            let mut param_resolver =
+                NonPredicateParamResolver::new(IndexMap::new(), type_params, IndexMap::new());
+            param_resolver.visit_where_clause_mut(where_clause);
+            let main_trait_param_bounds = TraitBoundsVisitor::find(&main_trait_generics);
+
+            self.bounds = core::mem::take(&mut self.bounds)
+                .into_iter()
+                .map(|(assoc_bound, assoc_bound_payload)| {
+                    if let Some((_, matching_bound_payload)) = main_trait_param_bounds
+                        .0
+                        .iter()
+                        .find(|(bound, _)| bound == &assoc_bound)
+                    {
+                        let assoc_bound_payload = assoc_bound_payload
+                            .into_iter()
+                            .filter(|per_impl_payloads| {
+                                !matching_bound_payload
+                                    .iter()
+                                    .any(|(ident, _)| per_impl_payloads.contains_key(ident))
+                            })
+                            .collect();
+
+                        (assoc_bound, assoc_bound_payload)
+                    } else {
+                        (assoc_bound, assoc_bound_payload)
+                    }
+                })
+                .collect();
+
+            self.prune_non_assoc();
         }
     }
 
@@ -773,8 +846,16 @@ impl Parse for ImplGroups {
                 // TODO: Handle error properly
                 .unwrap_or_else(|| panic!("Unable to form impl group for {impl_group_id:?}"))
             })
-            .map(|(impl_group_id, (assoc_bounds, impl_group))| {
+            .map(|(impl_group_id, (mut assoc_bounds, impl_group))| {
                 let item_impls = impl_group.into_iter().cloned().collect();
+
+                if let Some(main_trait) = &main_trait {
+                    assoc_bounds.prune_main_trait_assoc(
+                        &main_trait.generics,
+                        impl_group_id.0.as_ref().unwrap(),
+                    );
+                }
+
                 (
                     impl_group_id.clone(),
                     ImplGroup {
