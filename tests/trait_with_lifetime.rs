@@ -43,24 +43,29 @@ pub trait Kita<'a, 'b: 'a, U> {
 }
 
 const _: () = {
-    pub trait _Kita0<'a, 'b: 'a, _3: ?Sized, U> {
+    pub trait Kita0<'a, 'b: 'a, _3: ?Sized, U> {
         fn get_name(&'b self) -> &'a str;
     }
 
-    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupA>> _Kita0<'_0, '_1, GroupA, u32> for _2 {
+    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupA>> Kita0<'_0, '_1, GroupA, u32> for _2 {
         fn get_name(&'_1 self) -> &'_0 str {
             "Blanket A"
         }
     }
-    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupB>> _Kita0<'_0, '_1, GroupB, u32> for _2 {
+    impl<'_0, '_1: '_0, _2: Dispatch<Group = GroupB>> Kita0<'_0, '_1, GroupB, u32> for _2 {
         fn get_name(&'_1 self) -> &'_0 str {
             "Blanket B"
         }
     }
 
-    impl<'_0, '_1, _2> Kita<'_0, '_1, u32> for _2 where '_1: '_0, _2: Dispatch, Self: _Kita0<'_0, '_1, <_2 as Dispatch>::Group, u32> {
+    impl<'_0, '_1, _2> Kita<'_0, '_1, u32> for _2
+    where
+        '_1: '_0,
+        _2: Dispatch,
+        Self: Kita0<'_0, '_1, <_2 as Dispatch>::Group, u32>,
+    {
         fn get_name(&'_1 self) -> &'_0 str {
-            <Self as _Kita0<'_0, '_1, <_2 as Dispatch>::Group, u32>>::get_name(self)
+            <Self as Kita0<'_0, '_1, <_2 as Dispatch>::Group, u32>>::get_name(self)
         }
     }
 };

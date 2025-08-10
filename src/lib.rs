@@ -27,6 +27,7 @@ mod helper_trait;
 mod main_trait;
 mod param;
 mod superset;
+mod unconstrained;
 mod validate;
 
 // TODO: Remove this and implement proper Ord
@@ -750,6 +751,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     let mut helper_traits = Vec::new();
     let mut main_trait_impls = Vec::new();
     let mut item_impls = Vec::new();
+    let mut constrain_traits = Vec::new();
 
     let main_trait = impls.item_trait_;
     for (impl_group_idx, mut impl_group) in impls.impl_groups.into_values().enumerate() {
@@ -760,9 +762,16 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
                 &impl_group,
             ));
 
-            if let Some(main_trait_impl) =
+            if let Some(mut main_trait_impl) =
                 main_trait::generate(main_trait.as_ref(), impl_group_idx, &impl_group)
             {
+                constrain_traits.push(unconstrained::generate(
+                    main_trait.as_ref(),
+                    &mut main_trait_impl,
+                    impl_group_idx,
+                    &impl_group,
+                ));
+
                 main_trait_impls.push(main_trait_impl);
             }
 
@@ -779,6 +788,8 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
             #( #helper_traits )*
             #( #item_impls )*
             #( #main_trait_impls )*
+
+            #( #constrain_traits )*
         };
     }
     .into()

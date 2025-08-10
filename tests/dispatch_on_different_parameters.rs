@@ -25,7 +25,10 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    impl<T, U> Kita<U> for T where U: Dispatch<Group = GroupA> {
+    impl<T, U> Kita<U> for T
+    where
+        U: Dispatch<Group = GroupA>,
+    {
         const NAME: &'static str = "Blanket A";
     }
     impl<T, U: Dispatch<Group = GroupB>> Kita<U> for T {
@@ -39,19 +42,26 @@ pub trait Kita<U> {
 }
 
 const _: () = {
-    pub trait _Kita0<_1: ?Sized, U> {
+    pub trait Kita0<_1: ?Sized, U> {
         const NAME: &'static str;
     }
 
-    impl<_1, _0> _Kita0<GroupA, _0> for _1 where _0: Dispatch<Group = GroupA> {
+    impl<_1, _0> Kita0<GroupA, _0> for _1
+    where
+        _0: Dispatch<Group = GroupA>,
+    {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_1, _0: Dispatch<Group = GroupB>> _Kita0<GroupB, _0> for _1 {
+    impl<_1, _0: Dispatch<Group = GroupB>> Kita0<GroupB, _0> for _1 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<_0, _1> Kita<_0> for _1 where _0: Dispatch, Self: _Kita0<<_0 as Dispatch>::Group, _0> {
-        const NAME: &'static str = <Self as _Kita0<<_0 as Dispatch>::Group, _0>>::NAME;
+    impl<_0, _1> Kita<_0> for _1
+    where
+        _0: Dispatch,
+        Self: Kita0<<_0 as Dispatch>::Group, _0>,
+    {
+        const NAME: &'static str = <Self as Kita0<<_0 as Dispatch>::Group, _0>>::NAME;
     }
 };
 */

@@ -30,7 +30,10 @@ disjoint_impls! {
     }
 
     // NOTE: Dispatch trait parameters must be the same
-    impl<'b, 'k, 'a, T: Dispatch<'b, (), Group = GroupA>> Kita for &'a T where T: T<'k> {
+    impl<'b, 'k, 'a, T: Dispatch<'b, (), Group = GroupA>> Kita for &'a T
+    where
+        T: T<'k>,
+    {
         const NAME: &'static str = "Blanket A";
     }
     impl<'a, 'c, T: Dispatch<'a, (), Group = GroupB>> Kita for &'c T {
@@ -44,19 +47,26 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized> {
+    pub trait Kita0<_0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<'_2, '_3, '_0, _1: Dispatch<'_2, (), Group = GroupA>> _Kita0<GroupA> for &'_0 _1 where _1: T<'_3> {
+    impl<'_2, '_3, '_0, _1: Dispatch<'_2, (), Group = GroupA>> Kita0<GroupA> for &'_0 _1
+    where
+        _1: T<'_3>,
+    {
         const NAME: &'static str = "Blanket A";
     }
-    impl<'_2, '_0, _1: Dispatch<'_2, (), Group = GroupB>> _Kita0<GroupB> for &'_0 _1 {
+    impl<'_2, '_0, _1: Dispatch<'_2, (), Group = GroupB>> Kita0<GroupB> for &'_0 _1 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<'_0, '_2, _1> Kita for &'_0 _1 where _1: Dispatch<'_2, ()>, Self: _Kita0<<_1 as Dispatch<'_2, ()>>::Group> {
-        const NAME: &'static str = <Self as _Kita0<<_1 as Dispatch<'_2, ()>>::Group>>::NAME;
+    impl<'_0, '_2, _1> Kita for &'_0 _1
+    where
+        _1: Dispatch<'_2, ()>,
+        Self: Kita0<<_1 as Dispatch<'_2, ()>>::Group>,
+    {
+        const NAME: &'static str = <Self as Kita0<<_1 as Dispatch<'_2, ()>>::Group>>::NAME;
     }
 };
 */

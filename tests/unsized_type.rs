@@ -44,24 +44,28 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized> {
+    pub trait Kita0<_0: ?Sized> {
         fn kita(&self) -> String;
     }
 
-    impl<_0: Dispatch<Group = GroupA>> _Kita0<GroupA> for _0 {
+    impl<_0: Dispatch<Group = GroupA>> Kita0<GroupA> for _0 {
         fn kita(&self) -> String {
             "Blanket A".to_owned()
         }
     }
-    impl<_0: Dispatch<Group = GroupB> + ?Sized> _Kita0<GroupB> for _0 {
+    impl<_0: Dispatch<Group = GroupB> + ?Sized> Kita0<GroupB> for _0 {
         fn kita(&self) -> String {
             "Blanket B".to_owned()
         }
     }
 
-    impl<_0> Kita for _0 where _0: ?Sized + Dispatch, Self: _Kita0<<_0 as Dispatch>::Group> {
+    impl<_0> Kita for _0
+    where
+        _0: ?Sized + Dispatch,
+        Self: Kita0<<_0 as Dispatch>::Group>,
+    {
         fn kita(&self) -> String {
-            <Self as _Kita0<<_0 as Dispatch>::Group>>::kita(self)
+            <Self as Kita0<<_0 as Dispatch>::Group>>::kita(self)
         }
     }
 };

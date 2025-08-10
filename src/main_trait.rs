@@ -19,11 +19,7 @@ pub fn generate(
 ) -> Option<ItemImpl> {
     let example_impl = impl_group.item_impls.first()?;
 
-    let mut main_trait_impl = main_trait
-        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, example_impl))
-        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl));
-
-    let helper_trait_ident = main_trait_impl.trait_.as_ref().map_or_else(
+    let helper_trait_ident = main_trait.map_or_else(
         || {
             let self_ty = &*example_impl.self_ty;
 
@@ -36,13 +32,12 @@ pub fn generate(
 
             None
         },
-        |main_trait| {
-            Some(helper_trait::gen_ident(
-                &main_trait.1.segments.last().unwrap().ident,
-                impl_group_idx,
-            ))
-        },
+        |main_trait| Some(helper_trait::gen_ident(&main_trait.ident, impl_group_idx)),
     )?;
+
+    let mut main_trait_impl = main_trait
+        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, example_impl))
+        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl));
 
     main_trait_impl
         .generics
@@ -301,15 +296,15 @@ pub mod param {
 
     use super::*;
 
-    struct MainTraitParamBoundResolver(Vec<syn::WherePredicate>);
+    struct ParamBoundToWherePredicateMover(Vec<syn::WherePredicate>);
 
-    impl MainTraitParamBoundResolver {
+    impl ParamBoundToWherePredicateMover {
         fn new() -> Self {
             Self(Vec::new())
         }
     }
 
-    impl Visit<'_> for MainTraitParamBoundResolver {
+    impl Visit<'_> for ParamBoundToWherePredicateMover {
         fn visit_lifetime_param(&mut self, node: &syn::LifetimeParam) {
             let ty = &node.lifetime;
 
@@ -333,7 +328,7 @@ pub mod param {
     }
 
     pub fn rewrite_main_trait_bounds_to_where_clause(generics: &mut syn::Generics) {
-        let mut param_bound_resolver = MainTraitParamBoundResolver::new();
+        let mut param_bound_resolver = ParamBoundToWherePredicateMover::new();
         param_bound_resolver.visit_generics(generics);
 
         generics.params = core::mem::take(&mut generics.params)

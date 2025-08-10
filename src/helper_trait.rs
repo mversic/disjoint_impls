@@ -138,5 +138,5 @@ fn gen_inherent_impl_items(
 
 /// Generate ident of the helper trait
 pub fn gen_ident(ident: &syn::Ident, idx: usize) -> syn::Ident {
-    format_ident!("_{}{}", ident, idx)
+    format_ident!("{}{}", ident, idx)
 }

@@ -26,16 +26,28 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    impl<T, U> Kita for (T, U) where (T, U): Dispatch<Group = GroupA> {
+    impl<T, U> Kita for (T, U)
+    where
+        (T, U): Dispatch<Group = GroupA>,
+    {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T, U> Kita for (Vec<T>, U) where (Vec<T>, U): Dispatch<Group = GroupB> {
+    impl<T, U> Kita for (Vec<T>, U)
+    where
+        (Vec<T>, U): Dispatch<Group = GroupB>,
+    {
         const NAME: &'static str = "Blanket B";
     }
-    impl<T, U> Kita for (T, Vec<U>) where (T, Vec<U>): Dispatch<Group = GroupC> {
+    impl<T, U> Kita for (T, Vec<U>)
+    where
+        (T, Vec<U>): Dispatch<Group = GroupC>,
+    {
         const NAME: &'static str = "Blanket C";
     }
-    impl<T, U> Kita for (Vec<T>, Vec<U>) where (Vec<T>, Vec<U>): Dispatch<Group = GroupD> {
+    impl<T, U> Kita for (Vec<T>, Vec<U>)
+    where
+        (Vec<T>, Vec<U>): Dispatch<Group = GroupD>,
+    {
         const NAME: &'static str = "Blanket D";
     }
 }
@@ -46,34 +58,51 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait _Kita0<_0: ?Sized> {
+    pub trait Kita0<_ŠČ0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<_0, _1> _Kita0<GroupA> for (_0, _1) where (_0, _1): Dispatch<Group = GroupA> {
+    impl<_ŠČ0, _ŠČ1> Kita0<GroupA> for (_ŠČ0, _ŠČ1)
+    where
+        (_ŠČ0, _ŠČ1): Dispatch<Group = GroupA>,
+    {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0, _1> _Kita0<GroupB> for (Vec<_0>, _1) where (Vec<_0>, _1): Dispatch<Group = GroupB> {
+    impl<_ŠČ0, _ŠČ1> Kita0<GroupB> for (Vec<_ŠČ0>, _ŠČ1)
+    where
+        (Vec<_ŠČ0>, _ŠČ1): Dispatch<Group = GroupB>,
+    {
         const NAME: &'static str = "Blanket B";
     }
-    impl<_0, _1> _Kita0<GroupC> for (_0, Vec<_1>) where (_0, Vec<_1>): Dispatch<Group = GroupC> {
+    impl<_ŠČ0, _ŠČ1> Kita0<GroupC> for (_ŠČ0, Vec<_ŠČ1>)
+    where
+        (_ŠČ0, Vec<_ŠČ1>): Dispatch<Group = GroupC>,
+    {
         const NAME: &'static str = "Blanket C";
     }
-    impl<_0, _1> _Kita0<GroupD> for (Vec<_0>, Vec<_1>) where (Vec<_0>, Vec<_1>): Dispatch<Group = GroupD> {
+    impl<_ŠČ0, _ŠČ1> Kita0<GroupD> for (Vec<_ŠČ0>, Vec<_ŠČ1>)
+    where
+        (Vec<_ŠČ0>, Vec<_ŠČ1>): Dispatch<Group = GroupD>,
+    {
         const NAME: &'static str = "Blanket D";
     }
 
-    impl<_0, _1> Kita for (_0, _1) where (_0, _1): Dispatch, Self: _Kita0<<(_0, _1) as Dispatch>::Group> {
-        const NAME: &'static str = <Self as _Kita0<<(_0, _1) as Dispatch>::Group>>::NAME;
+    impl<_ŠČ0, _ŠČ1> Kita for (_ŠČ0, _ŠČ1)
+    where
+        (_ŠČ0, _ŠČ1): Dispatch,
+        Self: Kita0<<(_ŠČ0, _ŠČ1) as Dispatch>::Group>,
+    {
+        const NAME: &'static str = <Self as Kita0<
+            <(_ŠČ0, _ŠČ1) as Dispatch>::Group,
+        >>::NAME;
     }
 };
 */
 
-fn main() {
+#[test]
+fn supersets_2() {
     assert_eq!("Blanket A", <(String, u32)>::NAME);
     assert_eq!("Blanket B", <(Vec<String>, u32)>::NAME);
     assert_eq!("Blanket C", <(String, Vec<u32>)>::NAME);
-    assert_eq!("Blanket C", <(Vec<String>, Vec<u32>)>::NAME);
-
-    unimplemented!("Add what it expands to")
+    assert_eq!("Blanket D", <(Vec<String>, Vec<u32>)>::NAME);
 }
