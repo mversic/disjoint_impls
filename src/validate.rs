@@ -103,13 +103,13 @@ fn compare_trait_items(trait_items: &[syn::TraitItem], second: &[syn::ImplItem])
         }
     }
 
-    for (second_item, _) in second_consts {
+    if let Some((second_item, _)) = second_consts.into_iter().next() {
         abort!(second_item, "Not found in trait definition");
     }
-    for (second_item, _) in second_types {
+    if let Some((second_item, _)) = second_types.into_iter().next() {
         abort!(second_item, "Not found in trait definition");
     }
-    for (second_item, _) in second_fns {
+    if let Some((second_item, _)) = second_fns.into_iter().next() {
         abort!(second_item, "Not found in trait definition");
     }
 }
@@ -157,13 +157,13 @@ fn compare_inherent_items(first: &[syn::ImplItem], second: &[syn::ImplItem]) {
         }
     }
 
-    for (second_item, _) in second_consts {
+    if let Some((second_item, _)) = second_consts.into_iter().next() {
         abort!(second_item, "Not found in one of the impls");
     }
-    for (second_item, _) in second_types {
+    if let Some((second_item, _)) = second_types.into_iter().next() {
         abort!(second_item, "Not found in one of the impls");
     }
-    for (second_item, _) in second_fns {
+    if let Some((second_item, _)) = second_fns.into_iter().next() {
         abort!(second_item, "Not found in one of the impls");
     }
 }

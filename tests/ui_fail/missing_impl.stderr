@@ -1,0 +1,33 @@
+error[E0271]: type mismatch resolving `<Vec<u32> as Dispatch2>::Group == GroupA`
+  --> tests/ui_fail/missing_impl.rs:51:14
+   |
+51 |     let _ = <Vec::<u32> as Kita>::NAME;
+   |              ^^^^^^^^^^ type mismatch resolving `<Vec<u32> as Dispatch2>::Group == GroupA`
+   |
+note: expected this to be `GroupA`
+  --> tests/ui_fail/missing_impl.rs:23:18
+   |
+23 |     type Group = GroupB;
+   |                  ^^^^^^
+note: required for `Vec<u32>` to implement `Kita0<GroupA>`
+  --> tests/ui_fail/missing_impl.rs:33:1
+   |
+33 | / disjoint_impls! {
+34 | |     pub trait Kita {
+35 | |         const NAME: &'static str;
+...  |
+44 | | }
+   | |_^
+note: required for `Vec<u32>` to implement `Kita`
+  --> tests/ui_fail/missing_impl.rs:33:1
+   |
+33 | / disjoint_impls! {
+34 | |     pub trait Kita {
+35 | |         const NAME: &'static str;
+...  |
+38 | |     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita for T {
+   | |                                                                    ^^^^
+...  |
+44 | | }
+   | |_^
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)

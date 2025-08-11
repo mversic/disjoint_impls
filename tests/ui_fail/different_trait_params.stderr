@@ -1,0 +1,11 @@
+error: proc macro panicked
+  --> tests/ui_fail/different_trait_params.rs:23:1
+   |
+23 | / disjoint_impls! {
+24 | |     pub trait Kita {
+25 | |         const NAME: &'static str;
+...  |
+34 | | }
+   | |_^
+   |
+   = help: message: Conflicting implementations of `impl Kita for _ŠČ0`

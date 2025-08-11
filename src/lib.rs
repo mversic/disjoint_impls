@@ -855,7 +855,17 @@ impl Parse for ImplGroups {
                     acc
                 })
                 // TODO: Handle error properly
-                .unwrap_or_else(|| panic!("Unable to form impl group for {impl_group_id:?}"))
+                .unwrap_or_else(|| {
+                    let trait_ = &impl_group_id.0;
+                    let ty = &impl_group_id.1;
+
+                    let impl_group = trait_.as_ref().map_or_else(
+                        || format!("`impl {}`", quote!(#ty)),
+                        |trait_| format!("`impl {} for {}`", quote!(#trait_), quote!(#ty)),
+                    );
+
+                    panic!("Conflicting implementations of {impl_group}");
+                })
             })
             .map(|(impl_group_id, (mut assoc_bounds, impl_group))| {
                 let item_impls = impl_group.into_iter().cloned().collect();
