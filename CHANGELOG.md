@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2025-08-11
+
+### Added
+
+- Add compile tests
+- Implement support for params only constrained by other params
+
+### Fixed
+
+- Properly resolve main trait bounded default params
+- Add param bounds for complex predicates to main trait impl
+- Properly index parameters
+
+### Changed
+
+- Let single impls pass through without a helper trait
+
+### Removed
+
+- Remove main trait assoc bounds from assoc bounds group for dispatch
+
 ## [1.0.3] - 2025-06-28
 
 ### Added
