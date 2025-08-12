@@ -293,7 +293,7 @@ impl Substitute for syn::ExprAssign {
         self.left
             .substitute(substitutions)
             .into_iter()
-            .cartesian_product(self.left.substitute(substitutions))
+            .cartesian_product(self.right.substitute(substitutions))
             .map(|(left, right)| Self {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -381,7 +381,7 @@ impl Substitute for syn::ExprBinary {
         self.left
             .substitute(substitutions)
             .into_iter()
-            .cartesian_product(self.left.substitute(substitutions))
+            .cartesian_product(self.right.substitute(substitutions))
             .map(|(left, right)| Self {
                 left: Box::new(left),
                 right: Box::new(right),

@@ -259,22 +259,8 @@ impl Substitute for syn::TypeInfer {
 }
 
 impl Superset for syn::TypeImplTrait {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
-        if self.bounds.len() != other.bounds.len() {
-            return None;
-        }
-
-        // TODO: Order of traits doesn't matter here
-        // They don't even have to have the same size or associated types
-        // trait Kita {
-        //      fn kita(a: impl Clone + Kara<Bound = Self> + Kara);
-        // }
-        // impl Kita for i32 {
-        //     fn kita(a: impl Kara + Clone) {}
-        // }
-        zip(&self.bounds, &other.bounds).try_fold(Substitutions::default(), |acc, (x1, x2)| {
-            acc.merge(x1.is_superset(x2)?)
-        })
+    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions<'a>> {
+        unreachable!()
     }
 }
 
@@ -491,15 +477,8 @@ impl Substitute for syn::TypeSlice {
 }
 
 impl Superset for syn::TypeTraitObject {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
-        if self.bounds.len() != other.bounds.len() {
-            return None;
-        }
-
-        // TODO: Does order of trait bounds matter here? Take a look at TypeImplTrait
-        zip(&self.bounds, &other.bounds).try_fold(Substitutions::default(), |acc, (x1, x2)| {
-            acc.merge(x1.is_superset(x2)?)
-        })
+    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions<'a>> {
+        unreachable!()
     }
 }
 

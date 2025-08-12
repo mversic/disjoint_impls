@@ -87,21 +87,8 @@ impl Substitute for syn::LifetimeParam {
 }
 
 impl Superset for syn::TypeParam {
-    fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
-        if self.ident != other.ident || self.bounds.len() != other.bounds.len() {
-            return None;
-        }
-
-        self.attrs
-            .is_superset(&other.attrs)?
-            .merge(self.default.is_superset(&other.default)?)?
-            .merge(
-                // TODO: Order is irrelevant here. Take a look at TypeImplTrait
-                zip(&self.bounds, &other.bounds)
-                    .try_fold(Substitutions::default(), |acc, (x1, x2)| {
-                        acc.merge(x1.is_superset(x2)?)
-                    })?,
-            )
+    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions<'a>> {
+        unreachable!()
     }
 }
 

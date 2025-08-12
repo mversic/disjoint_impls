@@ -27,10 +27,19 @@ impl Dispatch1 for i32 {
     type Group = GroupB;
 }
 impl Dispatch2 for i32 {
-    type Group = GroupA;
+    type Group = GroupB;
 }
 impl Dispatch1 for u32 {
     type Group = GroupB;
+}
+impl Dispatch2 for u32 {
+    type Group = GroupB;
+}
+
+impl core::fmt::Display for GroupB {
+    fn fmt(&self, _: &mut core::fmt::Formatter) -> core::fmt::Result {
+        unimplemented!()
+    }
 }
 
 disjoint_impls! {
@@ -41,7 +50,7 @@ disjoint_impls! {
     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita for T {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T: Dispatch1<Group = GroupB>> Kita for T {
+    impl<T: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>> Kita for T {
         const NAME: &'static str = "Blanket B";
     }
 }
@@ -59,7 +68,7 @@ const _: () = {
     impl<_0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA> for _0 {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0: Dispatch1<Group = GroupB>> Kita0<GroupB> for _0 {
+    impl<_0: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>> Kita0<GroupB> for _0 {
         const NAME: &'static str = "Blanket B";
     }
 

@@ -253,6 +253,10 @@ impl Substitute for syn::BoundLifetimes {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
+        if self.lifetimes.is_empty() {
+            return vec![self.clone()];
+        }
+
         self.lifetimes
             .iter()
             .map(|l| l.substitute(substitutions))

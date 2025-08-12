@@ -2,8 +2,6 @@ use proc_macro_error2::OptionExt;
 
 use super::*;
 
-// TODO: Check content of ItemImpl::items, not only idents for impls?
-
 pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
     trait_: &ItemTrait,
     item_impls: I,

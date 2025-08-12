@@ -262,30 +262,17 @@ impl Substitute for syn::AssocType {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        let ty = self.ty.substitute(substitutions);
-
-        if let Some(generics) = &self.generics {
-            generics
-                .substitute(substitutions)
-                .into_iter()
-                .cartesian_product(ty)
-                .map(|(generics, ty)| Self {
-                    ident: self.ident.clone(),
-                    generics: Some(generics),
-                    eq_token: self.eq_token,
-                    ty,
-                })
-                .collect()
-        } else {
-            ty.into_iter()
-                .map(|ty| Self {
-                    ident: self.ident.clone(),
-                    generics: None,
-                    eq_token: self.eq_token,
-                    ty,
-                })
-                .collect()
-        }
+        self.generics
+            .substitute(substitutions)
+            .into_iter()
+            .cartesian_product(self.ty.substitute(substitutions))
+            .map(|(generics, ty)| Self {
+                ident: self.ident.clone(),
+                generics,
+                eq_token: self.eq_token,
+                ty,
+            })
+            .collect()
     }
 }
 
@@ -309,43 +296,59 @@ impl Substitute for syn::AssocConst {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        let value = self.value.substitute(substitutions);
-
-        if let Some(generics) = &self.generics {
-            generics
-                .substitute(substitutions)
-                .into_iter()
-                .cartesian_product(value)
-                .map(|(generics, value)| Self {
-                    ident: self.ident.clone(),
-                    generics: Some(generics),
-                    eq_token: self.eq_token,
-                    value,
-                })
-                .collect()
-        } else {
-            value
-                .into_iter()
-                .map(|value| Self {
-                    ident: self.ident.clone(),
-                    generics: None,
-                    eq_token: self.eq_token,
-                    value,
-                })
-                .collect()
-        }
+        self.generics
+            .substitute(substitutions)
+            .into_iter()
+            .cartesian_product(self.value.substitute(substitutions))
+            .map(|(generics, value)| Self {
+                ident: self.ident.clone(),
+                generics,
+                eq_token: self.eq_token,
+                value,
+            })
+            .collect()
     }
 }
 
 impl Superset for syn::Constraint {
-    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
-        unimplemented!()
+    fn is_superset<'a>(&'a self, _: &'a Self) -> Option<Substitutions<'a>> {
+        unreachable!()
     }
 }
 
 impl Substitute for syn::Constraint {
-    fn substitute(&self, _: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>) -> Vec<Self> {
-        unimplemented!()
+    fn substitute(
+        &self,
+        substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
+    ) -> Vec<Self> {
+        let generics = self.generics.substitute(substitutions).into_iter();
+
+        if self.bounds.is_empty() {
+            generics
+                .map(|generics| Self {
+                    ident: self.ident.clone(),
+                    generics,
+                    colon_token: self.colon_token,
+                    bounds: self.bounds.clone(),
+                })
+                .collect()
+        } else {
+            let bounds = self
+                .bounds
+                .iter()
+                .map(|x| x.substitute(substitutions))
+                .multi_cartesian_product();
+
+            generics
+                .cartesian_product(bounds)
+                .map(|(generics, bounds)| Self {
+                    ident: self.ident.clone(),
+                    generics,
+                    colon_token: self.colon_token,
+                    bounds: bounds.into_iter().collect(),
+                })
+                .collect()
+        }
     }
 }
 
