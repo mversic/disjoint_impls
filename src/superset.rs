@@ -301,10 +301,10 @@ impl Substitute for syn::LitStr {
 }
 
 fn matches_param_ident(path: &syn::Path) -> Option<&syn::Ident> {
-    if let Some(ident) = path.get_ident() {
-        if ident.to_string().starts_with("_ŠČ") {
-            return Some(ident);
-        }
+    if let Some(ident) = path.get_ident()
+        && ident.to_string().starts_with("_ŠČ")
+    {
+        return Some(ident);
     }
 
     None

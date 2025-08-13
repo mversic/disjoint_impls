@@ -11,6 +11,7 @@ use superset::Substitutions;
 use syn::ItemImpl;
 use syn::parse_quote;
 use syn::visit::Visit;
+use syn::visit::visit_path;
 use syn::visit_mut::VisitMut;
 use syn::{
     ItemTrait,
@@ -670,8 +671,27 @@ impl Visit<'_> for TraitBoundsVisitor {
     }
 
     fn visit_predicate_type(&mut self, node: &syn::PredicateType) {
-        self.curr_type_param = Some((&node.bounded_ty).into());
-        syn::visit::visit_predicate_type(self, node);
+        struct ParamTypeVisitor(bool);
+
+        impl Visit<'_> for ParamTypeVisitor {
+            fn visit_path(&mut self, node: &syn::Path) {
+                if let Some(ident) = node.get_ident()
+                    && ident.to_string().starts_with("_ŠČ")
+                {
+                    self.0 = true;
+                } else {
+                    visit_path(self, node);
+                }
+            }
+        }
+
+        let mut concrete_type_visitor = ParamTypeVisitor(false);
+        concrete_type_visitor.visit_type(&node.bounded_ty);
+
+        if concrete_type_visitor.0 {
+            self.curr_type_param = Some((&node.bounded_ty).into());
+            syn::visit::visit_predicate_type(self, node);
+        }
     }
 
     fn visit_trait_bound(&mut self, node: &syn::TraitBound) {

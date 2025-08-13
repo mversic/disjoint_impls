@@ -9,8 +9,8 @@ disjoint_impls! {
         const NAME: &'static str = "Blanket 1";
     }
 
-    impl<T> Kita for Option<T> {
-        const NAME: &'static str = "Blanket 2";
+    impl Kita for Option<u32> {
+        const NAME: &'static str = "Concrete Option<u32>";
     }
 }
 
@@ -23,8 +23,8 @@ const _: () = {
     impl<_0> Kita for (_0,) {
         const NAME: &'static str = "Blanket 1";
     }
-    impl<_0> Kita for Option<_0> {
-        const NAME: &'static str = "Blanket 2";
+    impl Kita for Option<u32> {
+        const NAME: &'static str = "Concrete Option<u32>";
     }
 };
 */
@@ -32,5 +32,5 @@ const _: () = {
 #[test]
 fn non_overlapping_blanket_impls() {
     assert_eq!("Blanket 1", <(String,)>::NAME);
-    assert_eq!("Blanket 2", <Option<Vec::<u32>>>::NAME);
+    assert_eq!("Concrete Option<u32>", Option::<u32>::NAME);
 }

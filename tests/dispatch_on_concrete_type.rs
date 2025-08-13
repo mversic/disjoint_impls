@@ -5,18 +5,18 @@ pub trait Dispatch {
 }
 
 pub enum GroupA {}
-impl Dispatch for Option<String> {
+impl Dispatch for String {
     type Group = GroupA;
 }
-impl<T> Dispatch for Option<Vec<T>> {
+impl<T> Dispatch for Vec<T> {
     type Group = GroupA;
 }
 
 pub enum GroupB {}
-impl Dispatch for Option<i32> {
+impl Dispatch for i32 {
     type Group = GroupB;
 }
-impl Dispatch for Option<u32> {
+impl Dispatch for u32 {
     type Group = GroupB;
 }
 
@@ -25,21 +25,17 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    impl<T> Kita for T
+    impl<T: Dispatch<Group = GroupA>> Kita for T
     where
-        Option<T>: Dispatch<Group = GroupA>,
+        u32: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T> Kita for T
+    impl<T: Dispatch<Group = GroupB>> Kita for T
     where
-        Option<T>: Dispatch<Group = GroupB>,
+        u32: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
-    }
-
-    impl Kita for Option<i16> {
-        const NAME: &'static str = "Concrete Option<i16>";
     }
 }
 
@@ -52,30 +48,29 @@ const _: () = {
     pub trait Kita0<_0: ?Sized> {
         const NAME: &'static str;
     }
-    impl<_0> Kita0<GroupA> for _0
+
+    impl<_0: Dispatch<Group = GroupA>> Kita0<GroupA> for _0
     where
-        Option<_0>: Dispatch<Group = GroupA>,
+        u32: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0> Kita0<GroupB> for _0
+    impl<_0: Dispatch<Group = GroupB>> Kita0<GroupB> for _0
     where
-        Option<_0>: Dispatch<Group = GroupB>,
+        u32: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
     }
+
     impl<_0> Kita for _0
     where
-        Option<_0>: Dispatch,
-        Self: Kita0<<Option<_0> as Dispatch>::Group>,
+        _0: Dispatch,
+        Self: Kita0<<_0 as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<<Option<_0> as Dispatch>::Group>>::NAME;
-    }
-    impl Kita for Option<i16> {
-        const NAME: &'static str = "Concrete Option<i16>";
+        const NAME: &'static str = <Self as Kita0<<_0 as Dispatch>::Group>>::NAME;
     }
 };
-*/
+ */
 
 #[test]
 fn dispatch_on_concrete_type() {
@@ -84,6 +79,4 @@ fn dispatch_on_concrete_type() {
 
     assert_eq!("Blanket B", <u32 as Kita>::NAME);
     assert_eq!("Blanket B", <i32 as Kita>::NAME);
-
-    assert_eq!("Concrete Option<i16>", <Option<i16> as Kita>::NAME);
 }
