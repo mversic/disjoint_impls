@@ -338,8 +338,10 @@ impl AssocBoundsGroup {
     ///
     /// # Example
     ///
+    /// ```ignore
     /// impl trait Kita<T: Bound<Type = u32>> {}
     /// impl<T> Kita for T where T: Bound<Type = u32> {}
+    /// ```
     ///
     /// here `Bound<Type = u32>` shouldn't be taken as part of the dispatch assoc bounds
     fn prune_main_trait_assoc(
@@ -403,6 +405,22 @@ impl AssocBoundsGroup {
         }
     }
 
+    /// Removes all trait bounds that don't have an associated type in any of the impls
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// impl<T: Dispatch<Group = GroupA> + Dispatch2> Kita for T {
+    ///     const NAME: &'static str = "Blanket A";
+    /// }
+    /// impl<T: Dispatch<Group = GroupB> + Dispatch2, U> Kita for (T, U) where {
+    ///     const NAME: &'static str = "Blanket C";
+    /// }
+    /// ```
+    ///
+    /// `Dispatch2` is considered as an associated bound because it isn't known ahead of time
+    /// if some of the impls will use it as a differentiator. After all impls are processed
+    /// `Dispatch2` should be removed since no impl was found where it had an associated bound
     fn prune_non_assoc(&mut self) {
         self.bounds = core::mem::take(&mut self.bounds)
             .into_iter()
@@ -414,6 +432,27 @@ impl AssocBoundsGroup {
             .collect();
     }
 
+    /// Returns true if all associated bounds of any 2 impls are overlapping
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// impl<T: Dispatch<Group = GroupB>> Kita for T {
+    ///     const NAME: &'static str = "Blanket B";
+    /// }
+
+    /// impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> Kita for (T, U) {
+    ///     const NAME: &'static str = "Blanket AA";
+    /// }
+    /// impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupB>> Kita for (T, U) {
+    ///     const NAME: &'static str = "Blanket AB";
+    /// }
+    /// ```
+    ///
+    /// since `T` is a superset of `(T, U)` when the above 3 impls form impl group `impl Kita for T`
+    /// they will do so on the associated bound `T: Dispatch<Group = x>`. Notice, however, that the
+    /// last 2 impls are dispatched on the same payload `GroupA` of the chosen associated bound,
+    /// i.e. they are overlapping. Therefore this impl group is invalid and should be discarded
     fn is_overlapping(&mut self) -> bool {
         let assoc_payloads = self.payloads().collect::<Vec<_>>();
 
@@ -446,6 +485,17 @@ impl AssocBoundsGroup {
         self.bounds.is_empty()
     }
 
+    /// Returns an ordered list of associated bound identifiers
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita for T {}
+    /// impl<T: Dispatch1<Group = GroupB> + Dispatch2> Kita for T {}
+    /// impl<T: Dispatch1 + Dispatch2<Group = GroupB>> Kita for T {}
+    /// ```
+    ///
+    /// would return: `[(Dispatch1, Group), (Dispatch2, Group)]`
     fn idents(&self) -> impl Iterator<Item = AssocBoundIdent> {
         self.bounds
             .iter()
@@ -464,6 +514,17 @@ impl AssocBoundsGroup {
             })
     }
 
+    /// Returns an ordered list of associated bound payloads for every impl item
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// impl<T: Dispatch<Group = GroupA>> Kita for T {}
+    /// impl<T: Dispatch<Group = GroupB>> Kita for T {}
+    /// impl<T: Dispatch> Kita for T {}
+    /// ```
+    ///
+    /// would return: `[Some([GroupA]), Some([GroupB]), None]`
     fn payloads(&self) -> impl Iterator<Item = Vec<Option<&AssocBoundPayload>>> {
         let mut impl_item_idx = 0;
 
@@ -493,7 +554,6 @@ impl AssocBoundsGroup {
                     .unwrap_or_default()
             });
 
-            // TODO: Can I avoid collecting here?
             Some(Iterator::collect::<Vec<_>>(impl_payloads))
         })
     }
@@ -839,21 +899,12 @@ impl Parse for ImplGroups {
             .flat_map(|impl_group_id| {
                 let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
 
-                find_impl_group_candidates(
+                find_impl_groups(
                     (impl_group_id, &impl_group),
                     &subsets,
                     &mut supersets,
                     &impl_groups,
                 )
-                .reduce(|mut acc, impl_groups| {
-                    // TODO: How to choose minimal impl group set?
-                    // ATM, one of the smallest sets is chosen
-                    if acc.len() >= impl_groups.len() {
-                        acc = impl_groups;
-                    }
-
-                    acc
-                })
                 // TODO: Handle error properly
                 .unwrap_or_else(|| {
                     let trait_ = &impl_group_id.0;
@@ -891,40 +942,24 @@ impl Parse for ImplGroups {
     }
 }
 
-// TODO: Can dynamic programming look up table be applied?
-fn find_impl_group_candidates<'a, 'b>(
+fn find_impl_groups<'a, 'b>(
     curr_impl_group: (&'a ImplGroupId, &[&'b ItemImpl]),
 
     impl_group_id_subsets: &Subsets<'a>,
     impl_group_id_supersets: &mut Supersets<'a>,
 
     item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>>,
-) -> impl Iterator<Item = IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
-    find_impl_group_candidates_rec(
+) -> Option<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+    find_impl_groups_rec(
         curr_impl_group,
         impl_group_id_subsets,
         impl_group_id_supersets,
         item_impls,
         &mut IndexMap::new(),
     )
-    .into_iter()
-    .filter_map(|mut impl_groups| {
-        for (assoc_bounds_group, impls) in impl_groups.values_mut() {
-            assoc_bounds_group.prune_non_assoc();
-
-            if assoc_bounds_group.is_empty() && impls.len() > 1 {
-                return None;
-            }
-            if assoc_bounds_group.is_overlapping() {
-                return None;
-            }
-        }
-
-        Some(impl_groups)
-    })
 }
 
-fn find_impl_group_candidates_rec<'a, 'b>(
+fn find_impl_groups_rec<'a, 'b>(
     curr_impl_group: (&'a ImplGroupId, &[&'b ItemImpl]),
 
     impl_group_id_subsets: &Subsets<'a>,
@@ -932,7 +967,7 @@ fn find_impl_group_candidates_rec<'a, 'b>(
 
     item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
-) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+) -> Option<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
     let curr_impl_group_id = curr_impl_group.0;
 
     if let Some((&curr_impl, other)) = curr_impl_group.1.split_first() {
@@ -941,7 +976,7 @@ fn find_impl_group_candidates_rec<'a, 'b>(
         let curr_impl_bounds = &item_impls[curr_impl_group_id][curr_impl];
         let impl_group_ids = impl_groups.keys().cloned().collect::<Vec<_>>();
 
-        let mut acc = Vec::new();
+        let mut acc = None::<IndexMap<_, _>>;
         for impl_group_id in impl_group_ids {
             let impl_group = &impl_groups[impl_group_id];
 
@@ -961,17 +996,38 @@ fn find_impl_group_candidates_rec<'a, 'b>(
                 impl_group.1.push(curr_impl);
 
                 let mut supersets = impl_group_id_supersets.clone();
-                let res = find_impl_group_candidates_rec(
+                let res = find_impl_groups_rec(
                     (curr_impl_group_id, other),
                     impl_group_id_subsets,
                     &mut supersets,
                     item_impls,
                     impl_groups,
-                );
+                )
+                .and_then(|mut impl_groups| {
+                    for (assoc_bounds_group, impls) in impl_groups.values_mut() {
+                        assoc_bounds_group.prune_non_assoc();
 
-                if !res.is_empty() {
-                    new_supersets = supersets;
-                    acc.extend(res);
+                        if impls.len() > 1 && assoc_bounds_group.is_empty() {
+                            return None;
+                        }
+                        if assoc_bounds_group.is_overlapping() {
+                            return None;
+                        }
+                    }
+
+                    Some(impl_groups)
+                });
+
+                match (res, &mut acc) {
+                    (Some(res), Some(acc)) if res.len() < acc.len() => {
+                        new_supersets = supersets;
+                        *acc = res;
+                    }
+                    (Some(res), None) => {
+                        new_supersets = supersets;
+                        acc = Some(res);
+                    }
+                    _ => {}
                 }
 
                 // NOTE: Restore changes to the impl groups set for the next iteration
@@ -981,10 +1037,10 @@ fn find_impl_group_candidates_rec<'a, 'b>(
             });
         }
 
+        if acc.is_some() {
+            *impl_group_id_supersets = new_supersets;
         // NOTE: Create a new group if it doesn't exist yet
-        if !impl_groups.contains_key(curr_impl_group_id) {
-            let mut supersets = impl_group_id_supersets.clone();
-
+        } else if !impl_groups.contains_key(curr_impl_group_id) {
             impl_groups.insert(
                 curr_impl_group_id,
                 (
@@ -993,25 +1049,16 @@ fn find_impl_group_candidates_rec<'a, 'b>(
                 ),
             );
 
-            let res = find_impl_group_candidates_rec(
+            acc = find_impl_groups_rec(
                 (curr_impl_group_id, other),
                 impl_group_id_subsets,
-                &mut supersets,
+                impl_group_id_supersets,
                 item_impls,
                 impl_groups,
             );
 
-            if !res.is_empty() {
-                new_supersets = supersets;
-                acc.extend(res);
-            }
-
             // NOTE: Restore changes to impl groups
             impl_groups.swap_remove(curr_impl_group_id);
-        }
-
-        if !acc.is_empty() {
-            *impl_group_id_supersets = new_supersets;
         }
 
         return acc;
@@ -1034,8 +1081,8 @@ fn unlock_subset_impl_groups<'a, 'b>(
 
     item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplBounds>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>,
-) -> Vec<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
-    let mut acc = vec![impl_groups.clone()];
+) -> Option<IndexMap<&'a ImplGroupId, (AssocBoundsGroup, Vec<&'b ItemImpl>)>> {
+    let mut acc = Some(impl_groups.clone());
 
     for (&subset_impl_group_id, _) in &impl_group_id_subsets[curr_impl_group_id] {
         let subset = &item_impls[subset_impl_group_id].keys().collect::<Vec<_>>();
@@ -1046,22 +1093,15 @@ fn unlock_subset_impl_groups<'a, 'b>(
 
         *superset_count -= 1;
         if *superset_count == 0 {
-            let old_supersets = impl_group_id_supersets.clone();
-
-            acc = acc
-                .into_iter()
-                .flat_map(|mut impl_groups| {
-                    *impl_group_id_supersets = old_supersets.clone();
-
-                    find_impl_group_candidates_rec(
-                        (subset_impl_group_id, subset),
-                        impl_group_id_subsets,
-                        impl_group_id_supersets,
-                        item_impls,
-                        &mut impl_groups,
-                    )
-                })
-                .collect();
+            acc = acc.and_then(|mut impl_groups| {
+                find_impl_groups_rec(
+                    (subset_impl_group_id, subset),
+                    impl_group_id_subsets,
+                    impl_group_id_supersets,
+                    item_impls,
+                    &mut impl_groups,
+                )
+            });
         }
     }
 
@@ -1244,19 +1284,12 @@ mod tests {
             .flat_map(|impl_group_id| {
                 let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
 
-                find_impl_group_candidates(
+                find_impl_groups(
                     (impl_group_id, &impl_group),
                     &subsets,
                     &mut supersets,
                     &impl_groups,
                 )
-                .reduce(|mut acc, impl_groups| {
-                    if acc.len() >= impl_groups.len() {
-                        acc = impl_groups;
-                    }
-
-                    acc
-                })
                 .unwrap()
             })
             .collect::<Vec<_>>();
