@@ -19,10 +19,10 @@ impl Superset for syn::Type {
 
             (Path(x1), x2) => {
                 if let Some(ident) = matches_param_ident(&x1.path) {
-                    if let syn::Type::Path(other) = other {
-                        if Some(ident) == matches_param_ident(&other.path) {
-                            return Some(Substitutions::identity(ident));
-                        }
+                    if let syn::Type::Path(other) = other
+                        && Some(ident) == matches_param_ident(&other.path)
+                    {
+                        return Some(Substitutions::identity(ident));
                     }
 
                     return Some(Substitutions::new(ident, other));
@@ -247,7 +247,7 @@ impl Substitute for syn::TypeGroup {
 }
 
 impl Superset for syn::TypeInfer {
-    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions<'_>> {
         Some(Substitutions::default())
     }
 }
@@ -305,7 +305,7 @@ impl Substitute for syn::TypeMacro {
 }
 
 impl Superset for syn::TypeNever {
-    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions<'_>> {
         Some(Substitutions::default())
     }
 }

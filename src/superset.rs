@@ -108,7 +108,7 @@ impl<'a> Substitutions<'a> {
     /// * 2nd where `Vec<T>` was replaced with `U`
     pub fn substitute(
         &self,
-        trait_bound: &TraitBoundIdent,
+        (bounded_ty, trait_bound): &TraitBoundIdent,
     ) -> impl Iterator<Item = TraitBoundIdent> {
         let reverse_map =
             self.0
@@ -120,14 +120,12 @@ impl<'a> Substitutions<'a> {
 
         // TODO: assert that there are no multiple `T` -> `fn(T)` reverse mappings
 
-        let bounded = trait_bound
-            .0
+        let bounded = bounded_ty
             .0
             .substitute(&reverse_map)
             .into_iter()
             .map(Bounded);
         let trait_ = trait_bound
-            .1
             .0
             .substitute(&reverse_map)
             .into_iter()
@@ -194,7 +192,7 @@ impl<T: Substitute> Substitute for Option<T> {
 }
 
 impl Superset for Vec<syn::Attribute> {
-    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions<'_>> {
         Some(Substitutions::default())
     }
 }
@@ -206,7 +204,7 @@ impl Substitute for Vec<syn::Attribute> {
 }
 
 impl Superset for syn::Macro {
-    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions<'_>> {
         (self == other).then_some(Substitutions::default())
     }
 }
@@ -218,7 +216,7 @@ impl Substitute for syn::Macro {
 }
 
 impl Superset for syn::Lifetime {
-    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions<'_>> {
         const UNDERSCORE: &str = "_";
 
         if self.ident == UNDERSCORE || other.ident == UNDERSCORE {
@@ -270,7 +268,7 @@ impl Substitute for syn::BoundLifetimes {
 }
 
 impl Superset for syn::Lit {
-    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions<'_>> {
         (self == other).then_some(Substitutions::default())
     }
 }
@@ -289,7 +287,7 @@ impl Substitute for syn::Lit {
 }
 
 impl Superset for syn::LitStr {
-    fn is_superset(&self, other: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, other: &Self) -> Option<Substitutions<'_>> {
         (self == other).then_some(Substitutions::default())
     }
 }

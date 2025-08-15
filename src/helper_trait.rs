@@ -10,7 +10,7 @@ pub fn generate(
     impl_group_idx: usize,
     impl_group: &ImplGroup,
 ) -> Option<syn::ItemTrait> {
-    let assoc_bound_count = &impl_group.assoc_bounds.idents().count();
+    let assoc_binding_count = &impl_group.assoc_bindings.idents().count();
 
     let mut helper_trait = if let Some(helper_trait) = main_trait {
         helper_trait.clone()
@@ -47,7 +47,7 @@ pub fn generate(
 
     let start_idx = helper_trait.generics.params.len();
     helper_trait.generics.params = combine_generic_args(
-        (start_idx..start_idx + assoc_bound_count).map(param::gen_indexed_param_ident),
+        (start_idx..start_idx + assoc_binding_count).map(param::gen_indexed_param_ident),
         &helper_trait.generics,
     )
     .map(|arg| -> syn::GenericParam { syn::parse_quote!(#arg) })

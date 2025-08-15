@@ -279,12 +279,12 @@ impl<'a> NonPredicateParamIndexer<'a> {
                             .and_modify(|value| value.2.extend(predicate.bounds.iter()));
                     }
                     syn::WherePredicate::Type(predicate) => {
-                        if let syn::Type::Path(syn::TypePath { path, .. }) = &predicate.bounded_ty {
-                            if let Some(ident) = path.get_ident() {
-                                indexed_type_params
-                                    .entry(ident)
-                                    .and_modify(|value| value.2.extend(predicate.bounds.iter()));
-                            }
+                        if let syn::Type::Path(syn::TypePath { path, .. }) = &predicate.bounded_ty
+                            && let Some(ident) = path.get_ident()
+                        {
+                            indexed_type_params
+                                .entry(ident)
+                                .and_modify(|value| value.2.extend(predicate.bounds.iter()));
                         }
                     }
                     _ => unreachable!(),
@@ -338,7 +338,7 @@ impl<'a> NonPredicateParamIndexer<'a> {
     }
 
     fn visit_lifetime_ident(&mut self, lifetime_ident: &'a syn::Ident) -> bool {
-        if let Some(removed) = self.unindexed_lifetimes.swap_remove(lifetime_ident) {
+        if let Some(removed) = self.unindexed_lifetimes.remove(lifetime_ident) {
             self.indexed_lifetimes
                 .insert(lifetime_ident, (self.curr_param_pos_idx, removed));
             self.curr_param_pos_idx += 1;
@@ -348,7 +348,7 @@ impl<'a> NonPredicateParamIndexer<'a> {
     }
 
     fn visit_type_param_ident(&mut self, param_ident: &'a syn::Ident) -> bool {
-        if let Some(removed) = self.unindexed_type_params.swap_remove(param_ident) {
+        if let Some(removed) = self.unindexed_type_params.remove(param_ident) {
             self.indexed_type_params
                 .insert(param_ident, (self.curr_param_pos_idx, removed));
             self.curr_param_pos_idx += 1;
@@ -360,7 +360,7 @@ impl<'a> NonPredicateParamIndexer<'a> {
     }
 
     fn visit_const_param_ident(&mut self, param_ident: &'a syn::Ident) -> bool {
-        if let Some(removed) = self.unindexed_const_params.swap_remove(param_ident) {
+        if let Some(removed) = self.unindexed_const_params.remove(param_ident) {
             self.indexed_const_params
                 .insert(param_ident, (self.curr_param_pos_idx, removed));
             self.curr_param_pos_idx += 1;

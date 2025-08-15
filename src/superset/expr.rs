@@ -38,10 +38,10 @@ impl Superset for syn::Expr {
 
             (Path(x1), x2) => {
                 if let Some(ident) = matches_param_ident(&x1.path) {
-                    if let syn::Expr::Path(x2) = x2 {
-                        if Some(ident) == matches_param_ident(&x2.path) {
-                            return Some(Substitutions::identity(ident));
-                        }
+                    if let syn::Expr::Path(x2) = x2
+                        && Some(ident) == matches_param_ident(&x2.path)
+                    {
+                        return Some(Substitutions::identity(ident));
                     }
 
                     return Some(Substitutions::new(ident, x2));

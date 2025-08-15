@@ -238,7 +238,7 @@ impl Substitute for syn::PatRest {
 }
 
 impl Superset for syn::PatStruct {
-    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions<'_>> {
         unimplemented!()
     }
 }
@@ -314,7 +314,7 @@ impl Substitute for syn::PatTuple {
 }
 
 impl Superset for syn::PatTupleStruct {
-    fn is_superset(&self, _: &Self) -> Option<Substitutions> {
+    fn is_superset(&self, _: &Self) -> Option<Substitutions<'_>> {
         unimplemented!()
     }
 }

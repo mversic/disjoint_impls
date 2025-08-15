@@ -6,10 +6,10 @@ impl Superset for syn::Path {
             return None;
         }
 
-        if let Some(ident) = matches_param_ident(self) {
-            if Some(ident) == matches_param_ident(other) {
-                return Some(Substitutions::identity(ident));
-            }
+        if let Some(ident) = matches_param_ident(self)
+            && Some(ident) == matches_param_ident(other)
+        {
+            return Some(Substitutions::identity(ident));
         }
 
         let mut substitutions = Substitutions::default();

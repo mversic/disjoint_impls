@@ -1,11 +1,11 @@
 use super::*;
 
-struct AssocBoundRemover<'a> {
+struct AssocBindingRemover<'a> {
     assoc_param: &'a TraitBoundIdent,
     assoc_param_bound: &'a syn::Ident,
 }
 
-impl VisitMut for AssocBoundRemover<'_> {
+impl VisitMut for AssocBindingRemover<'_> {
     fn visit_type_param_mut(&mut self, node: &mut syn::TypeParam) {
         if let syn::Type::Path(syn::TypePath { path, .. }) = &self.assoc_param.0.0
             && Some(&node.ident) == path.get_ident()
@@ -98,9 +98,11 @@ pub fn generate(
         };
 
         let (last_assoc_param, last_assoc_param_bound) =
-            impl_group.assoc_bounds.bounds.last().unwrap();
+            impl_group.assoc_bindings.bindings.last().unwrap();
 
         let bounded = if let Some(main_trait) = main_trait {
+            unconstrained_type_params.pop().unwrap();
+
             constrain_trait.generics.where_clause = main_trait.generics.where_clause.clone();
             constrain_trait.generics.params = main_trait
                 .generics
@@ -109,23 +111,17 @@ pub fn generate(
                 .map(syn::GenericParam::Type)
                 .collect();
 
-            if let Bounded(syn::Type::Path(syn::TypePath { path, .. })) = &last_assoc_param.0 {
-                unconstrained_type_params.swap_remove(path.get_ident().unwrap());
-            } else {
-                unreachable!();
-            }
-
             item_impls
                 .iter_mut()
                 .enumerate()
                 .for_each(|(i, item_impl)| {
                     if let Some((assoc_param_bound, _)) = last_assoc_param_bound[i].last() {
-                        let mut assoc_bound_remover = AssocBoundRemover {
+                        let mut assoc_binding_remover = AssocBindingRemover {
                             assoc_param: last_assoc_param,
                             assoc_param_bound,
                         };
 
-                        assoc_bound_remover.visit_item_impl_mut(item_impl);
+                        assoc_binding_remover.visit_item_impl_mut(item_impl);
                     }
                     let unconstrained_type_params: IndexSet<_> =
                         find_unconstrained_type_params(item_impl).cloned().collect();

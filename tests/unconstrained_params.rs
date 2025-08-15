@@ -51,7 +51,7 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    impl<T: Dispatch<Group = GroupA> + A<A = [A; 1]>, A: Dispatch<Group = [Z; 1]>, Z> Kita for T {
+    impl<T: Dispatch<Group = GroupA>, A: Dispatch<Group = [Z; 1]>, Z> Kita for T where Self: A<A = [A; 1]> {
         const NAME: &'static str = "1st Blanket AA";
     }
     impl<T: Dispatch<Group = GroupA> + A<A = [A; 1]>, A: Dispatch<Group = [Z; 2]>, Z> Kita for T {

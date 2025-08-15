@@ -43,15 +43,18 @@ pub fn generate(
         .generics
         .make_where_clause()
         .predicates
-        .extend(gen_assoc_bound_predicates(
+        .extend(gen_assoc_binding_predicates(
             example_impl,
             &helper_trait_ident,
-            &impl_group.assoc_bounds,
+            &impl_group.assoc_bindings,
         ));
     remove_unused_params(&mut main_trait_impl, example_impl);
 
-    let mut impl_item_resolver =
-        ImplItemResolver::new(example_impl, &helper_trait_ident, &impl_group.assoc_bounds);
+    let mut impl_item_resolver = ImplItemResolver::new(
+        example_impl,
+        &helper_trait_ident,
+        &impl_group.assoc_bindings,
+    );
     main_trait_impl
         .items
         .iter_mut()
@@ -157,16 +160,16 @@ fn gen_dummy_impl_from_trait_definition(
     }
 }
 
-fn combine_generic_args<'a, T: IntoIterator<Item = AssocBoundIdent<'a>>>(
-    assoc_bound_idents: T,
+fn combine_generic_args<'a, T: IntoIterator<Item = AssocBindingIdent<'a>>>(
+    assoc_binding_idents: T,
     path: &syn::Path,
 ) -> impl Iterator<Item = syn::GenericArgument> + use<T> {
     let arguments = &path.segments.last().unwrap().arguments;
 
-    let mut generic_args: Vec<_> = assoc_bound_idents
+    let mut generic_args: Vec<_> = assoc_binding_idents
         .into_iter()
-        .map(|((param, trait_bound), assoc_param_name)| {
-            syn::parse_quote! { <#param as #trait_bound>::#assoc_param_name }
+        .map(|((bounded, trait_bound), assoc_param_name)| {
+            syn::parse_quote! { <#bounded as #trait_bound>::#assoc_param_name }
         })
         .collect();
 
@@ -187,13 +190,13 @@ fn combine_generic_args<'a, T: IntoIterator<Item = AssocBoundIdent<'a>>>(
 fn gen_helper_trait_bound<'a>(
     example_impl: &ItemImpl,
     helper_trait_ident: &syn::Ident,
-    assoc_bound_idents: impl IntoIterator<Item = AssocBoundIdent<'a>>,
+    assoc_binding_idents: impl IntoIterator<Item = AssocBindingIdent<'a>>,
 ) -> syn::Path {
     let generic_args = if let Some((_, impl_trait, _)) = &example_impl.trait_ {
-        combine_generic_args(assoc_bound_idents, impl_trait)
+        combine_generic_args(assoc_binding_idents, impl_trait)
     } else if let syn::Type::Path(mut self_ty) = (*example_impl.self_ty).clone() {
         gen_inherent_self_ty_args(&mut self_ty, &example_impl.generics);
-        combine_generic_args(assoc_bound_idents, &self_ty.path)
+        combine_generic_args(assoc_binding_idents, &self_ty.path)
     } else {
         unreachable!()
     };
@@ -205,10 +208,10 @@ impl ImplItemResolver {
     fn new(
         example_impl: &ItemImpl,
         helper_trait_ident: &syn::Ident,
-        assoc_bounds: &AssocBoundsGroup,
+        assoc_bindings: &AssocBindingsGroup,
     ) -> Self {
         let helper_trait_bound =
-            gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bounds.idents());
+            gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bindings.idents());
 
         Self {
             self_as_helper_trait: quote! {
@@ -218,15 +221,15 @@ impl ImplItemResolver {
     }
 }
 
-fn gen_assoc_bound_predicates<'a>(
+fn gen_assoc_binding_predicates<'a>(
     example_impl: &ItemImpl,
     helper_trait_ident: &syn::Ident,
-    assoc_bounds: &'a AssocBoundsGroup,
+    assoc_bindings: &'a AssocBindingsGroup,
 ) -> impl Iterator<Item = syn::WherePredicate> + 'a {
     let helper_trait_bound =
-        gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bounds.idents());
+        gen_helper_trait_bound(example_impl, helper_trait_ident, assoc_bindings.idents());
 
-    let type_param_trait_bounds = assoc_bounds.idents().fold(
+    let type_param_trait_bounds = assoc_bindings.idents().fold(
         IndexMap::<_, IndexSet<_>>::new(),
         |mut acc, ((param_ident, trait_bound), _)| {
             acc.entry(param_ident).or_default().insert(trait_bound);
@@ -240,7 +243,11 @@ fn gen_assoc_bound_predicates<'a>(
         .map(move |(param_ident, trait_bounds)| -> syn::WherePredicate {
             let trait_bounds = trait_bounds.into_iter();
 
-            if assoc_bounds.unsized_params.contains(param_ident) {
+            if let Bounded(syn::Type::Path(syn::TypePath { path, .. })) = param_ident
+                && path
+                    .get_ident()
+                    .is_some_and(|param_ident| assoc_bindings.unsized_params.contains(param_ident))
+            {
                 parse_quote! { #param_ident: ?Sized + #(#trait_bounds)+* }
             } else {
                 parse_quote! { #param_ident: #(#trait_bounds)+* }
