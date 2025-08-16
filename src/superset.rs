@@ -137,12 +137,12 @@ impl<'a> Substitutions<'a> {
 
 impl Superset for ImplGroupId {
     fn is_superset<'a>(&'a self, other: &'a Self) -> Option<Substitutions<'a>> {
-        match (&self.0, &other.0) {
+        match (&self.trait_, &other.trait_) {
             (Some(x1), Some(x2)) => x1.is_superset(x2)?,
             (None, None) => Substitutions::default(),
             _ => return None,
         }
-        .merge(self.1.is_superset(&other.1)?)
+        .merge(self.self_ty.is_superset(&other.self_ty)?)
     }
 }
 
@@ -151,7 +151,7 @@ impl Substitute for ImplGroupId {
         &self,
         substitutions: &IndexMap<SubstitutionValue, Vec<&syn::Ident>>,
     ) -> Vec<Self> {
-        self.0
+        self.trait_
             .as_ref()
             .map_or_else(
                 || vec![None],
@@ -164,8 +164,8 @@ impl Substitute for ImplGroupId {
                 },
             )
             .into_iter()
-            .cartesian_product(self.1.substitute(substitutions))
-            .map(|(trait_, self_ty)| ImplGroupId(trait_, self_ty))
+            .cartesian_product(self.self_ty.substitute(substitutions))
+            .map(|(trait_, self_ty)| ImplGroupId { trait_, self_ty })
             .collect()
     }
 }

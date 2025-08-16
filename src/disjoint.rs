@@ -5,14 +5,10 @@ use super::*;
 pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImpl> {
     let assoc_bindings_idents = impl_group.assoc_bindings.idents().collect::<Vec<_>>();
 
-    let Some(example_impl) = impl_group.item_impls.first() else {
-        return Vec::new();
-    };
-
-    if example_impl.trait_.is_none()
-        && let syn::Type::Path(mut self_ty) = (*example_impl.self_ty).clone()
+    if impl_group.id.trait_.is_none()
+        && let syn::Type::Path(mut self_ty) = impl_group.id.self_ty.clone()
     {
-        gen_inherent_self_ty_args(&mut self_ty, &example_impl.generics);
+        gen_inherent_self_ty_args(&mut self_ty, &impl_group.params);
 
         impl_group
             .item_impls

@@ -63,8 +63,7 @@ pub fn generate(
 ) -> Option<syn::Macro> {
     let unconstrained = main_trait.map_or_else(
         || {
-            let example_impl = impl_group.item_impls.first()?;
-            let self_ty = &*example_impl.self_ty;
+            let self_ty = &impl_group.id.self_ty;
 
             if let syn::Type::Path(type_path) = self_ty {
                 return Some(gen_ident(&helper_trait::gen_ident(
