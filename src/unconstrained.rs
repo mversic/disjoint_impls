@@ -25,7 +25,7 @@ impl VisitMut for AssocBindingRemover<'_> {
     }
 
     fn visit_trait_bound_mut(&mut self, node: &mut syn::TraitBound) {
-        if TraitBound(node.path.clone()) == self.assoc_param.1 {
+        if TraitBound::from(node.clone()) == self.assoc_param.1 {
             self.visit_path_mut(&mut node.path);
         }
     }
@@ -124,8 +124,7 @@ pub fn generate(
                     }
                     let unconstrained_type_params: IndexSet<_> =
                         find_unconstrained_type_params(item_impl).cloned().collect();
-                    item_impl.generics.params = core::mem::take(&mut item_impl.generics)
-                        .params
+                    item_impl.generics.params = core::mem::take(&mut item_impl.generics.params)
                         .into_iter()
                         .filter(|param| {
                             if let syn::GenericParam::Type(param) = param {

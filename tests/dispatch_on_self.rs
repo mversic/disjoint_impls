@@ -10,7 +10,7 @@ pub trait Dispatch2 {
 }
 
 pub enum GroupA {}
-impl Dispatch for Option<String> {
+impl Dispatch for String {
     type Group = GroupA;
 }
 
@@ -65,5 +65,5 @@ const _: () = {
 #[test]
 fn dispatch_on_self() {
     assert_eq!("Blanket A", String::NAME);
-    assert_eq!("Blanket B", i32::NAME);
+    assert_eq!("Blanket B", Option::<i32>::NAME);
 }

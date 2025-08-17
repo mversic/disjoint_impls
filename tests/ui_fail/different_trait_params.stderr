@@ -1,4 +1,4 @@
-error: proc macro panicked
+error: Conflicting implementations of `impl Kita for _ŠČ0`
   --> tests/ui_fail/different_trait_params.rs:23:1
    |
 23 | / disjoint_impls! {
@@ -8,4 +8,4 @@ error: proc macro panicked
 34 | | }
    | |_^
    |
-   = help: message: Conflicting implementations of `impl Kita for _ŠČ0`
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)

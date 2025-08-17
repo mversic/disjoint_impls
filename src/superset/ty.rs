@@ -662,10 +662,7 @@ mod tests {
 
     #[test]
     fn identity_type_substitute() {
-        let substituted = (
-            Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-            TraitBound(parse_quote!(Dispatch)),
-        );
+        let substituted = (parse_quote!(Option<Vec<_ŠČ>>), parse_quote!(Dispatch));
 
         let t1: syn::Type = syn::parse_quote!(_ŠČ);
         assert!(
@@ -694,10 +691,7 @@ mod tests {
 
     #[test]
     fn concrete_type_substitute() {
-        let substituted = (
-            Bounded(parse_quote!(Option<Vec<i32>>)),
-            TraitBound(parse_quote!(Dispatch)),
-        );
+        let substituted = (parse_quote!(Option<Vec<i32>>), parse_quote!(Dispatch));
 
         let t1: syn::Type = syn::parse_quote!(i32);
         assert!(
@@ -732,14 +726,8 @@ mod tests {
         assert!(
             a.is_superset(&b)
                 .unwrap()
-                .substitute(&(
-                    Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-                    TraitBound(parse_quote!(Dispatch)),
-                ))
-                .eq([(
-                    Bounded(parse_quote!(Option<_ŠČ>)),
-                    TraitBound(parse_quote!(Dispatch)),
-                )])
+                .substitute(&(parse_quote!(Option<Vec<_ŠČ>>), parse_quote!(Dispatch)))
+                .eq([(parse_quote!(Option<_ŠČ>), parse_quote!(Dispatch))])
         );
     }
 
@@ -752,26 +740,12 @@ mod tests {
             a.is_superset(&b)
                 .unwrap()
                 .substitute(&(
-                    Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-                    TraitBound(parse_quote!(Dispatch<Group = Vec<_ŠČ>>)),
+                    parse_quote!(Option<Vec<_ŠČ>>),
+                    parse_quote!(Dispatch<Group = Vec<_ŠČ>>),
                 ))
                 .eq([
-                    (
-                        Bounded(parse_quote!(Option<_ŠČ0>)),
-                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ0>)),
-                    ),
-                    (
-                        Bounded(parse_quote!(Option<_ŠČ0>)),
-                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ1>)),
-                    ),
-                    (
-                        Bounded(parse_quote!(Option<_ŠČ1>)),
-                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ0>)),
-                    ),
-                    (
-                        Bounded(parse_quote!(Option<_ŠČ1>)),
-                        TraitBound(parse_quote!(Dispatch<Group = _ŠČ1>)),
-                    )
+                    (parse_quote!(Option<_ŠČ0>), parse_quote!(Dispatch),),
+                    (parse_quote!(Option<_ŠČ1>), parse_quote!(Dispatch),),
                 ])
         );
     }

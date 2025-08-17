@@ -509,12 +509,3 @@ impl VisitMut for NonPredicateParamResolver<'_> {
         }
     }
 }
-
-// TODO: Lifetimes as type/const params can have the same ident
-pub fn get_param_ident(generic_param: &syn::GenericParam) -> &syn::Ident {
-    match generic_param {
-        syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => &lifetime.ident,
-        syn::GenericParam::Type(syn::TypeParam { ident, .. }) => ident,
-        syn::GenericParam::Const(syn::ConstParam { ident, .. }) => ident,
-    }
-}

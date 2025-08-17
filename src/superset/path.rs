@@ -389,10 +389,7 @@ mod tests {
 
     #[test]
     fn identity_path_substitute() {
-        let substituted = (
-            Bounded(parse_quote!(Option<Vec<_ŠČ>>)),
-            TraitBound(parse_quote!(Dispatch)),
-        );
+        let substituted = (parse_quote!(Option<Vec<_ŠČ>>), parse_quote!(Dispatch));
 
         let p1: syn::Path = syn::parse_quote!(_ŠČ);
         assert!(
@@ -421,10 +418,7 @@ mod tests {
 
     #[test]
     fn concrete_path_substitute() {
-        let substituted = (
-            Bounded(parse_quote!(Option<Vec<i32>>)),
-            TraitBound(parse_quote!(Dispatch)),
-        );
+        let substituted = (parse_quote!(Option<Vec<i32>>), parse_quote!(Dispatch));
 
         let p1: syn::Path = syn::parse_quote!(i32);
 
@@ -454,10 +448,7 @@ mod tests {
 
     #[test]
     fn identity_path_substitute_trait_with_generic_param() {
-        let substituted = (
-            Bounded(parse_quote!(_ŠČ1)),
-            TraitBound(parse_quote!(Dispatch<_ŠČ1>)),
-        );
+        let substituted = (parse_quote!(_ŠČ1), parse_quote!(Dispatch<_ŠČ1>));
 
         let p1: syn::Path = syn::parse_quote!(_ŠČ1);
 
@@ -471,10 +462,7 @@ mod tests {
 
     #[test]
     fn identity_path_substitute_trait_with_concrete_param() {
-        let substituted = (
-            Bounded(parse_quote!(_ŠČ1)),
-            TraitBound(parse_quote!(Dispatch<()>)),
-        );
+        let substituted = (parse_quote!(_ŠČ1), parse_quote!(Dispatch<()>));
 
         let p1: syn::Path = syn::parse_quote!(_ŠČ1);
 
