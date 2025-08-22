@@ -16,12 +16,6 @@ disjoint_impls! {
     }
 }
 
-#[test]
-fn single_inherent_impl() {
-    assert_eq!("Blanket", <Wrapper<(u32, i32), 12>>::kita(42, 420));
-    assert_eq!("Blanket", <Wrapper<(u32, i32), 12>>::NAME);
-}
-
 /*
 const _: () = {
     impl<'_ŠČ0, _ŠČ1, _ŠČ2> Wrapper<'_ŠČ0, (_ŠČ1, _ŠČ2), 12> {
@@ -37,3 +31,9 @@ const _: () = {
     }
 };
 */
+
+#[test]
+fn single_inherent_impl() {
+    assert_eq!("Blanket", <Wrapper<(u32, i32), 12>>::kita(42, 420));
+    assert_eq!("Blanket", <Wrapper<(u32, i32), 12>>::NAME);
+}

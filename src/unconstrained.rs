@@ -1,32 +1,49 @@
+use syn::visit_mut::{visit_predicate_type_mut, visit_type_param_mut};
+
 use super::*;
 
-struct AssocBindingRemover<'a> {
-    assoc_param: &'a TraitBoundIdent,
-    assoc_param_bound: &'a syn::Ident,
+struct AssocGroupBindingRemover<'a> {
+    param_to_prune: &'a syn::Ident,
+    flagged_to_remove: bool,
 }
 
-impl VisitMut for AssocBindingRemover<'_> {
+struct ImplItemAssocBindingRemover<'a> {
+    param_to_prune: &'a syn::Ident,
+    prune_assoc_bindings: bool,
+}
+
+impl<'a> AssocGroupBindingRemover<'a> {
+    fn new(assoc_param: &'a syn::Ident) -> Self {
+        Self {
+            param_to_prune: assoc_param,
+            flagged_to_remove: false,
+        }
+    }
+}
+
+impl Visit<'_> for AssocGroupBindingRemover<'_> {
+    fn visit_type_path(&mut self, node: &syn::TypePath) {
+        if Some(self.param_to_prune) == node.path.get_ident() {
+            self.flagged_to_remove = true;
+        }
+    }
+}
+
+impl<'a> ImplItemAssocBindingRemover<'a> {
+    fn new(assoc_param: &'a syn::Ident) -> Self {
+        Self {
+            param_to_prune: assoc_param,
+            prune_assoc_bindings: false,
+        }
+    }
+}
+
+impl VisitMut for ImplItemAssocBindingRemover<'_> {
     fn visit_type_param_mut(&mut self, node: &mut syn::TypeParam) {
-        if let syn::Type::Path(syn::TypePath { path, .. }) = &self.assoc_param.0.0
-            && Some(&node.ident) == path.get_ident()
-        {
-            for bound in &mut node.bounds {
-                self.visit_type_param_bound_mut(bound);
-            }
-        }
-    }
-
-    fn visit_predicate_type_mut(&mut self, node: &mut syn::PredicateType) {
-        if node.bounded_ty == self.assoc_param.0.0 {
-            for bound in &mut node.bounds {
-                self.visit_type_param_bound_mut(bound);
-            }
-        }
-    }
-
-    fn visit_trait_bound_mut(&mut self, node: &mut syn::TraitBound) {
-        if TraitBound::from(node.clone()) == self.assoc_param.1 {
-            self.visit_path_mut(&mut node.path);
+        if self.param_to_prune == &node.ident {
+            self.prune_assoc_bindings = true;
+            visit_type_param_mut(self, node);
+            self.prune_assoc_bindings = false;
         }
     }
 
@@ -34,16 +51,23 @@ impl VisitMut for AssocBindingRemover<'_> {
         &mut self,
         node: &mut syn::AngleBracketedGenericArguments,
     ) {
-        node.args = core::mem::take(&mut node.args)
-            .into_iter()
-            .filter(|arg| {
-                if let syn::GenericArgument::AssocType(syn::AssocType { ident, .. }) = arg {
-                    return ident != self.assoc_param_bound;
-                }
+        if self.prune_assoc_bindings {
+            node.args = core::mem::take(&mut node.args)
+                .into_iter()
+                .filter(|arg| !matches!(arg, syn::GenericArgument::AssocType(_)))
+                .collect();
+        }
+    }
 
-                true
-            })
-            .collect();
+    fn visit_predicate_type_mut(&mut self, node: &mut syn::PredicateType) {
+        self.prune_assoc_bindings = false;
+        visit_predicate_type_mut(self, node);
+    }
+
+    fn visit_type_path_mut(&mut self, node: &mut syn::TypePath) {
+        if Some(self.param_to_prune) == node.path.get_ident() {
+            self.prune_assoc_bindings = true;
+        }
     }
 }
 
@@ -56,12 +80,11 @@ fn find_unconstrained_type_params(item_impl: &ItemImpl) -> impl Iterator<Item = 
 }
 
 pub fn generate(
-    main_trait: Option<&ItemTrait>,
     main_trait_impl: &mut ItemImpl,
     impl_group_idx: usize,
     impl_group: &ImplGroup,
 ) -> Option<syn::Macro> {
-    let unconstrained = main_trait.map_or_else(
+    let unconstrained = impl_group.id.trait_.as_ref().map_or_else(
         || {
             let self_ty = &impl_group.id.self_ty;
 
@@ -74,83 +97,62 @@ pub fn generate(
 
             None
         },
-        |main_trait| {
-            Some(gen_ident(&helper_trait::gen_ident(
-                &main_trait.ident,
-                impl_group_idx,
-            )))
+        |trait_| {
+            let path = &trait_.segments.last().unwrap().ident;
+            Some(gen_ident(&helper_trait::gen_ident(path, impl_group_idx)))
         },
     )?;
 
     let mut unconstrained_type_params: IndexSet<_> =
         find_unconstrained_type_params(main_trait_impl)
-            .cloned()
+            .sorted()
             .collect();
 
     if !unconstrained_type_params.is_empty() {
         let mut item_impls = impl_group.item_impls.clone();
 
-        let mut constrain_trait: ItemTrait = parse_quote! {
-            trait #unconstrained {
-                type Bound: ?Sized;
-            }
-        };
-
-        let (last_assoc_param, last_assoc_param_bound) =
-            impl_group.assoc_bindings.bindings.last().unwrap();
-
-        let bounded = if let Some(main_trait) = main_trait {
-            unconstrained_type_params.pop().unwrap();
-
-            constrain_trait.generics.where_clause = main_trait.generics.where_clause.clone();
-            constrain_trait.generics.params = main_trait
-                .generics
-                .type_params()
-                .cloned()
-                .map(syn::GenericParam::Type)
-                .collect();
-
-            item_impls
-                .iter_mut()
-                .enumerate()
-                .for_each(|(i, item_impl)| {
-                    if let Some((assoc_param_bound, _)) = last_assoc_param_bound[i].last() {
-                        let mut assoc_binding_remover = AssocBindingRemover {
-                            assoc_param: last_assoc_param,
-                            assoc_param_bound,
-                        };
-
-                        assoc_binding_remover.visit_item_impl_mut(item_impl);
-                    }
-                    let unconstrained_type_params: IndexSet<_> =
-                        find_unconstrained_type_params(item_impl).cloned().collect();
-                    item_impl.generics.params = core::mem::take(&mut item_impl.generics.params)
-                        .into_iter()
-                        .filter(|param| {
-                            if let syn::GenericParam::Type(param) = param {
-                                return !unconstrained_type_params.contains(&param.ident);
-                            }
-
-                            true
-                        })
-                        .collect();
-                });
-
-            main_trait_impl.generics.params = core::mem::take(&mut main_trait_impl.generics.params)
-                .into_iter()
-                .filter(|param| {
-                    if let syn::GenericParam::Type(param) = param {
-                        return !unconstrained_type_params.contains(&param.ident);
-                    }
-
-                    true
-                })
-                .collect();
-
-            last_assoc_param.0.0.clone()
-        } else {
+        let bounded = if impl_group.id.trait_.is_none() {
             let unconstrained_type_params = unconstrained_type_params.into_iter();
-            parse_quote!((#(#unconstrained_type_params, )*))
+            quote!((#(#unconstrained_type_params, )*))
+        } else {
+            let last_assoc_param = unconstrained_type_params.pop().unwrap();
+
+            item_impls.iter_mut().for_each(|item_impl| {
+                let mut assoc_binding_remover = ImplItemAssocBindingRemover::new(last_assoc_param);
+                assoc_binding_remover.visit_item_impl_mut(item_impl);
+
+                let unconstrained_type_params: IndexSet<_> =
+                    find_unconstrained_type_params(item_impl).cloned().collect();
+
+                item_impl.generics.params = core::mem::take(&mut item_impl.generics.params)
+                    .into_iter()
+                    .filter(|param| {
+                        if let syn::GenericParam::Type(param) = param {
+                            return !unconstrained_type_params.contains(&param.ident);
+                        }
+
+                        true
+                    })
+                    .collect();
+            });
+
+            let mut constraint_assoc_bindings = impl_group.assoc_bindings.clone();
+            constraint_assoc_bindings
+                .0
+                .retain(|assoc_binding_ident, _| {
+                    let mut assoc_binding_remover = AssocGroupBindingRemover::new(last_assoc_param);
+                    assoc_binding_remover.visit_type(&assoc_binding_ident.0.0.0);
+                    !assoc_binding_remover.flagged_to_remove
+                });
+            let impls_to_remove = constraint_assoc_bindings.prune_overlapping();
+
+            item_impls = item_impls
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, item_impl)| (!impls_to_remove.contains(&i)).then_some(item_impl))
+                .collect();
+
+            quote!(#last_assoc_param)
         };
 
         item_impls.iter_mut().for_each(|item_impl| {
@@ -168,7 +170,10 @@ pub fn generate(
 
         return Some(parse_quote! {
             disjoint_impls::disjoint_impls! {
-                #constrain_trait
+                trait #unconstrained {
+                    type Bound: ?Sized;
+                }
+
                 #( #item_impls )*
             }
         });

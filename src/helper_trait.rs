@@ -18,23 +18,21 @@ pub fn generate(
         let syn::ItemImpl {
             attrs,
             unsafety,
-            mut generics,
             mut self_ty,
             items,
             ..
         } = helper_trait.clone();
 
         let items = gen_inherent_impl_items(&items);
+        let impl_generics = &impl_group.params[..];
+
         if let syn::Type::Path(type_path) = &mut *self_ty {
             type_path.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
         }
 
-        remove_param_bounds(&mut generics);
-        let impl_generics = generics.split_for_impl().0;
-
         syn::parse_quote! {
             #(#attrs)*
-            #unsafety trait #self_ty #impl_generics {
+            #unsafety trait #self_ty <#(#impl_generics),*> {
                 #(#items)*
             }
         }
@@ -42,6 +40,17 @@ pub fn generate(
         return None;
     };
 
+    let mut assoc_binding_idents = impl_group.assoc_bindings.idents()
+        .map(|((bounded, trait_bound), assoc_binding)| {
+            quote!(<#bounded as #trait_bound>::#assoc_binding)
+        });
+
+    let doc_str = format!(
+        "Helper trait with arguments: {}",
+        assoc_binding_idents.join(",\n")
+    );
+
+    helper_trait.attrs.push(parse_quote!(#[doc = #doc_str]));
     helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));
     helper_trait.ident = gen_ident(&helper_trait.ident, impl_group_idx);
 
@@ -54,20 +63,6 @@ pub fn generate(
     .collect();
 
     Some(helper_trait)
-}
-
-pub fn remove_param_bounds(generics: &mut syn::Generics) {
-    generics.params.iter_mut().for_each(|param| match param {
-        syn::GenericParam::Lifetime(syn::LifetimeParam { bounds, .. }) => {
-            *bounds = syn::punctuated::Punctuated::default()
-        }
-        syn::GenericParam::Type(syn::TypeParam { bounds, .. }) => {
-            *bounds = syn::punctuated::Punctuated::default()
-        }
-        syn::GenericParam::Const(_) => {}
-    });
-
-    generics.where_clause = None;
 }
 
 fn combine_generic_args(

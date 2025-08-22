@@ -2,8 +2,6 @@
 
 use syn::{parse_quote, visit_mut::VisitMut};
 
-use crate::helper_trait::remove_param_bounds;
-
 use super::*;
 
 struct ImplItemResolver {
@@ -35,7 +33,7 @@ pub fn generate(
 
     let mut main_trait_impl = main_trait
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, impl_group_id))
-        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl));
+        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl, impl_group));
 
     main_trait_impl
         .generics
@@ -126,10 +124,13 @@ pub fn generate(
 }
 
 /// Generates main trait implementation with item values set to dummy values
-fn gen_dummy_impl_from_inherent_impl(example_impl: &ItemImpl) -> syn::ItemImpl {
+fn gen_dummy_impl_from_inherent_impl(
+    example_impl: &ItemImpl,
+    impl_group: &ImplGroup,
+) -> syn::ItemImpl {
     let mut main_trait_impl = example_impl.clone();
-    remove_param_bounds(&mut main_trait_impl.generics);
-
+    main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
+    main_trait_impl.generics.where_clause = None;
     main_trait_impl
 }
 
@@ -200,7 +201,7 @@ fn gen_dummy_impl_from_trait_definition(
     }
 }
 
-fn combine_generic_args<'a, T: IntoIterator<Item = AssocBindingIdent<'a>>>(
+fn combine_generic_args<T: IntoIterator<Item = AssocBindingIdent>>(
     assoc_binding_idents: T,
     path: &syn::Path,
 ) -> impl Iterator<Item = syn::GenericArgument> + use<T> {
@@ -227,10 +228,10 @@ fn combine_generic_args<'a, T: IntoIterator<Item = AssocBindingIdent<'a>>>(
     lifetimes.into_iter().chain(generic_args)
 }
 
-fn gen_helper_trait_bound<'a>(
+fn gen_helper_trait_bound(
     impl_group: &ImplGroup,
     helper_trait_ident: &syn::Ident,
-    assoc_binding_idents: impl IntoIterator<Item = AssocBindingIdent<'a>>,
+    assoc_binding_idents: impl IntoIterator<Item = AssocBindingIdent>,
 ) -> syn::Path {
     let generic_args = if let Some(impl_trait) = &impl_group.id.trait_ {
         combine_generic_args(assoc_binding_idents, impl_trait)
@@ -250,8 +251,11 @@ impl ImplItemResolver {
         helper_trait_ident: &syn::Ident,
         assoc_bindings: &AssocBindingsGroup,
     ) -> Self {
-        let helper_trait_bound =
-            gen_helper_trait_bound(impl_group, helper_trait_ident, assoc_bindings.idents());
+        let helper_trait_bound = gen_helper_trait_bound(
+            impl_group,
+            helper_trait_ident,
+            assoc_bindings.idents().cloned(),
+        );
 
         Self {
             self_as_helper_trait: quote! {
@@ -266,8 +270,11 @@ fn gen_assoc_binding_predicates<'a>(
     helper_trait_ident: &syn::Ident,
     assoc_bindings: &'a AssocBindingsGroup,
 ) -> impl Iterator<Item = syn::WherePredicate> + 'a {
-    let helper_trait_bound =
-        gen_helper_trait_bound(impl_group, helper_trait_ident, assoc_bindings.idents());
+    let helper_trait_bound = gen_helper_trait_bound(
+        impl_group,
+        helper_trait_ident,
+        assoc_bindings.idents().cloned(),
+    );
 
     let type_param_trait_bounds = assoc_bindings.idents().fold(
         IndexMap::<_, IndexSet<_>>::new(),

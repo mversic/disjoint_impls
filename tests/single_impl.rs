@@ -22,12 +22,6 @@ disjoint_impls! {
     }
 }
 
-#[test]
-fn single_impl() {
-    assert_eq!("Blanket", <String as Kita<u32>>::kita(12));
-    assert_eq!("Blanket", <Box<str> as Kita<String>>::kita(12));
-}
-
 /*
 pub trait Kita<T>
 where
@@ -51,3 +45,9 @@ const _: () = {
     }
 };
 */
+
+#[test]
+fn single_impl() {
+    assert_eq!("Blanket", <String as Kita<u32>>::kita(12));
+    assert_eq!("Blanket", <Box<str> as Kita<String>>::kita(12));
+}
