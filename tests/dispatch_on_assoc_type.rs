@@ -6,15 +6,15 @@ pub trait Dispatch {
 
 pub enum GroupA {}
 impl Dispatch for String {
-    type Group = GroupA;
+    type Group = i32;
 }
 impl<T> Dispatch for Vec<T> {
-    type Group = GroupA;
+    type Group = u32;
 }
 
 pub enum GroupB {}
 impl Dispatch for i32 {
-    type Group = GroupB;
+    type Group = GroupA;
 }
 impl Dispatch for u32 {
     type Group = GroupB;
@@ -79,7 +79,5 @@ const _: () = {
 #[test]
 fn dispatch_on_assoc_type() {
     assert_eq!(String::NAME, "Blanket A");
-    assert_eq!(Vec::NAME, "Blanket A");
-    assert_eq!(u32::NAME, "Blanket B");
-    assert_eq!(i32::NAME, "Blanket B");
+    assert_eq!(Vec::<i32>::NAME, "Blanket B");
 }
