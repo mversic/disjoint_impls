@@ -201,10 +201,10 @@ fn gen_dummy_impl_from_trait_definition(
     }
 }
 
-fn combine_generic_args<T: IntoIterator<Item = AssocBindingIdent>>(
-    assoc_binding_idents: T,
+fn combine_generic_args<'a>(
+    assoc_binding_idents: impl IntoIterator<Item = &'a AssocBindingIdent>,
     path: &syn::Path,
-) -> impl Iterator<Item = syn::GenericArgument> + use<T> {
+) -> impl Iterator<Item = syn::GenericArgument> {
     let arguments = &path.segments.last().unwrap().arguments;
 
     let mut generic_args: Vec<_> = assoc_binding_idents
@@ -218,9 +218,9 @@ fn combine_generic_args<T: IntoIterator<Item = AssocBindingIdent>>(
     if let syn::PathArguments::AngleBracketed(bracketed) = &arguments {
         for arg in &bracketed.args {
             if matches!(arg, syn::GenericArgument::Lifetime(_)) {
-                lifetimes.push(syn::parse_quote!(#arg));
+                lifetimes.push(parse_quote!(#arg));
             } else {
-                generic_args.push(syn::parse_quote!(#arg));
+                generic_args.push(parse_quote!(#arg));
             }
         }
     }
@@ -228,15 +228,17 @@ fn combine_generic_args<T: IntoIterator<Item = AssocBindingIdent>>(
     lifetimes.into_iter().chain(generic_args)
 }
 
-fn gen_helper_trait_bound(
+fn gen_helper_trait_bound<'a>(
     impl_group: &ImplGroup,
     helper_trait_ident: &syn::Ident,
-    assoc_binding_idents: impl IntoIterator<Item = AssocBindingIdent>,
+    assoc_binding_idents: impl IntoIterator<Item = &'a AssocBindingIdent>,
 ) -> syn::Path {
+    let mut self_ty = impl_group.id.self_ty.clone();
+
     let generic_args = if let Some(impl_trait) = &impl_group.id.trait_ {
         combine_generic_args(assoc_binding_idents, impl_trait)
-    } else if let syn::Type::Path(mut self_ty) = impl_group.id.self_ty.clone() {
-        gen_inherent_self_ty_args(&mut self_ty, &impl_group.params);
+    } else if let syn::Type::Path(self_ty) = &mut self_ty {
+        gen_inherent_self_ty_args(self_ty, &impl_group.params);
         combine_generic_args(assoc_binding_idents, &self_ty.path)
     } else {
         unreachable!()
@@ -251,11 +253,8 @@ impl ImplItemResolver {
         helper_trait_ident: &syn::Ident,
         assoc_bindings: &AssocBindingsGroup,
     ) -> Self {
-        let helper_trait_bound = gen_helper_trait_bound(
-            impl_group,
-            helper_trait_ident,
-            assoc_bindings.idents().cloned(),
-        );
+        let helper_trait_bound =
+            gen_helper_trait_bound(impl_group, helper_trait_ident, assoc_bindings.idents());
 
         Self {
             self_as_helper_trait: quote! {
@@ -270,20 +269,32 @@ fn gen_assoc_binding_predicates<'a>(
     helper_trait_ident: &syn::Ident,
     assoc_bindings: &'a AssocBindingsGroup,
 ) -> impl Iterator<Item = syn::WherePredicate> + 'a {
-    let helper_trait_bound = gen_helper_trait_bound(
-        impl_group,
-        helper_trait_ident,
-        assoc_bindings.idents().cloned(),
-    );
+    let helper_trait_bound =
+        gen_helper_trait_bound(impl_group, helper_trait_ident, assoc_bindings.idents());
 
     let type_param_trait_bounds = assoc_bindings.idents().fold(
         IndexMap::<_, IndexSet<_>>::new(),
         |mut acc, ((param_ident, trait_bound), _)| {
-            acc.entry(param_ident).or_default().insert(trait_bound);
+            if let Bounded(syn::Type::Path(syn::TypePath {
+                qself: Some(syn::QSelf { ty, .. }),
+                path,
+            })) = &param_ident
+            {
+                let dispatch_trait = path.segments.iter().take(path.segments.len() - 1);
+
+                acc.entry(&**ty)
+                    .or_default()
+                    .insert(parse_quote!(#(#dispatch_trait)::*));
+            }
+
+            acc.entry(&param_ident.0)
+                .or_default()
+                .insert(trait_bound.clone());
 
             acc
         },
     );
+
     type_param_trait_bounds
         .into_iter()
         .map(move |(param_ident, trait_bounds)| -> syn::WherePredicate {
@@ -353,7 +364,7 @@ pub mod param {
             let ty = &node.lifetime;
 
             let bounds = &node.bounds;
-            self.0.push(syn::parse_quote! {
+            self.0.push(parse_quote! {
                 #ty: #bounds
             });
         }
@@ -364,7 +375,7 @@ pub mod param {
             if !node.bounds.is_empty() {
                 let bounds = &node.bounds;
 
-                self.0.push(syn::parse_quote! {
+                self.0.push(parse_quote! {
                     #ty: #bounds
                 });
             }
