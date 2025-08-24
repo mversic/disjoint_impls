@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-08-24
+
+### Changed
+
+- simplify tracking of associated binding groups
+- implementation of wrapper types (most notably of `TraitBound`)
+- rename assoc bound to assoc binding
+- optimize algorithm for finding impl groups
+
+### Fixed
+
+- properly define main trait generics
+- don't consider associated bounds on concrete types
+
 ## [1.0.5] - 2025-08-12
 
 ### Added
