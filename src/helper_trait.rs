@@ -40,13 +40,14 @@ pub fn generate(
         return None;
     };
 
-    let mut assoc_binding_idents = impl_group.assoc_bindings.idents()
-        .map(|((bounded, trait_bound), assoc_binding)| {
-            quote!(<#bounded as #trait_bound>::#assoc_binding)
+    let mut assoc_binding_idents = impl_group.assoc_bindings.idents().enumerate()
+        .map(|(i, ((bounded, trait_bound), assoc_binding))| {
+            let pos = syn::LitInt::new(&i.to_string(), proc_macro2::Span::call_site());
+            quote!(#pos. <#bounded as #trait_bound>::#assoc_binding)
         });
 
     let doc_str = format!(
-        "Helper trait with arguments: {}",
+        "Helper trait with arguments corresponding to the following associated bindings:\n{}\n",
         assoc_binding_idents.join(",\n")
     );
 

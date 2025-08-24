@@ -41,7 +41,7 @@ pub struct IndexedParams {
 pub struct NonPredicateParamResolver<'a> {
     lifetime_replacements: IndexMap<syn::Ident, &'a syn::Lifetime>,
     type_param_replacements: IndexMap<syn::Ident, &'a syn::Type>,
-    const_param_replacements: IndexMap<syn::Ident, &'a syn::Expr>,
+    const_param_replacements: IndexMap<syn::Ident, syn::Expr>,
 }
 
 pub fn index(item_impl: &syn::ItemImpl) -> IndexedParams {
@@ -191,12 +191,12 @@ impl IndexedParams {
             .map(|(old_const_param, new_const_param)| {
                 (old_const_param, syn::parse_quote!(#new_const_param))
             })
-            .collect::<IndexMap<_, _>>();
+            .collect::<IndexMap<_, syn::Expr>>();
 
         NonPredicateParamResolver::new(
             lifetimes.iter().map(|(old, new)| (old.clone(), new)),
             type_params.iter().map(|(old, new)| (old.clone(), new)),
-            const_params.iter().map(|(old, new)| (old.clone(), new)),
+            const_params.into_iter().map(|(old, new)| (old, new)),
         )
         .visit_item_impl_mut(item_impl);
 
@@ -440,7 +440,7 @@ impl<'a> NonPredicateParamResolver<'a> {
     pub fn new(
         lifetime_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Lifetime)>,
         type_param_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Type)>,
-        const_param_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Expr)>,
+        const_param_replacements: impl IntoIterator<Item = (syn::Ident, syn::Expr)>,
     ) -> Self {
         Self {
             lifetime_replacements: lifetime_replacements.into_iter().collect(),
@@ -487,6 +487,8 @@ impl VisitMut for NonPredicateParamResolver<'_> {
 
                 if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
                     *node = new_ty;
+                } else {
+                    self.try_replace_expr_path_with_type(&mut ty.path);
                 }
             }
             _ => syn::visit_mut::visit_type_mut(self, node),

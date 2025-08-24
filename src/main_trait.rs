@@ -425,7 +425,10 @@ pub mod param {
                             type_params.insert(param.ident.clone(), arg);
                         }
                         (syn::GenericParam::Const(param), syn::GenericArgument::Const(arg)) => {
-                            const_params.insert(param.ident.clone(), arg);
+                            const_params.insert(param.ident.clone(), arg.clone());
+                        }
+                        (syn::GenericParam::Const(param), syn::GenericArgument::Type(arg)) => {
+                            const_params.insert(param.ident.clone(), parse_quote!(#arg));
                         }
                         _ => unreachable!(),
                     });
@@ -439,7 +442,7 @@ pub mod param {
                 type_params.insert(param.ident.clone(), param.default.as_ref().unwrap());
             }
             syn::GenericParam::Const(param) => {
-                const_params.insert(param.ident.clone(), param.default.as_ref().unwrap());
+                const_params.insert(param.ident.clone(), param.default.clone().unwrap());
             }
         });
 
