@@ -38,7 +38,7 @@ disjoint_impls! {
         type Item = U;
 
         fn kita() -> Self::Item {
-            U::default()
+            <U as Default>::default()
         }
     }
 }

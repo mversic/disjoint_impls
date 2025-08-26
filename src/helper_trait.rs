@@ -24,7 +24,7 @@ pub fn generate(
         } = helper_trait.clone();
 
         let items = gen_inherent_impl_items(&items);
-        let impl_generics = &impl_group.params[..];
+        let impl_generics = &impl_group.generics.params;
 
         if let syn::Type::Path(type_path) = &mut *self_ty {
             type_path.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
@@ -32,7 +32,7 @@ pub fn generate(
 
         syn::parse_quote! {
             #(#attrs)*
-            #unsafety trait #self_ty <#(#impl_generics),*> {
+            #unsafety trait #self_ty <#impl_generics> {
                 #(#items)*
             }
         }
@@ -40,11 +40,12 @@ pub fn generate(
         return None;
     };
 
-    let mut assoc_binding_idents = impl_group.assoc_bindings.idents().enumerate()
-        .map(|(i, ((bounded, trait_bound), assoc_binding))| {
+    let mut assoc_binding_idents = impl_group.assoc_bindings.idents().enumerate().map(
+        |(i, ((bounded, trait_bound), assoc_binding))| {
             let pos = syn::LitInt::new(&i.to_string(), proc_macro2::Span::call_site());
             quote!(#pos. <#bounded as #trait_bound>::#assoc_binding)
-        });
+        },
+    );
 
     let doc_str = format!(
         "Helper trait with arguments corresponding to the following associated bindings:\n{}\n",

@@ -8,7 +8,7 @@ pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImp
             unreachable!();
         };
 
-        gen_inherent_self_ty_args(&mut self_ty, &impl_group.params);
+        gen_inherent_self_ty_args(&mut self_ty, &impl_group.generics.params);
 
         impl_group
             .item_impls

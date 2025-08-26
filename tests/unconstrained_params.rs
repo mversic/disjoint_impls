@@ -86,23 +86,26 @@ const _: () = {
     }
 
     impl<
-        _0: Dispatch<Group = GroupA> + A<A = [_1; 1]>,
+        _0: Dispatch<Group = GroupA>,
         _1: Dispatch<Group = [_2; 1]>,
         _2,
-    > Kita0<GroupA, [_1; 1], [_2; 1]> for _0 {
+    > Kita0<GroupA, [_2; 1], [_1; 1]> for _0
+    where
+        _0: A<A = [_1; 1]>,
+    {
         const NAME: &'static str = "1st Blanket AA";
     }
     impl<
         _0: Dispatch<Group = GroupA> + A<A = [_1; 1]>,
         _1: Dispatch<Group = [_2; 2]>,
         _2,
-    > Kita0<GroupA, [_1; 1], [_2; 2]> for _0 {
+    > Kita0<GroupA, [_2; 2], [_1; 1]> for _0 {
         const NAME: &'static str = "1st Blanket AB";
     }
     impl<
         _0: Dispatch<Group = GroupB> + A<A = [_1; 2]>,
         _1: Dispatch,
-    > Kita0<GroupB, [_1; 2], <_1 as Dispatch>::Group> for _0 {
+    > Kita0<GroupB, <_1 as Dispatch>::Group, [_1; 2]> for _0 {
         const NAME: &'static str = "1st Blanket B*";
     }
 
@@ -131,15 +134,15 @@ const _: () = {
         _1: Dispatch,
         Self: Kita0<
             <_0 as Dispatch>::Group,
-            <_0 as A>::A,
             <_1 as Dispatch>::Group,
+            <_0 as A>::A,
         >,
         Self: Kita0Constraint<Bound = _1>,
     {
         const NAME: &'static str = <Self as Kita0<
             <_0 as Dispatch>::Group,
-            <_0 as A>::A,
             <_1 as Dispatch>::Group,
+            <_0 as A>::A,
         >>::NAME;
     }
     impl<_0, _1> Kita for [_0; 1]
@@ -165,7 +168,10 @@ const _: () = {
             type Bound: ?Sized;
         }
 
-        impl<_0: Dispatch<Group = GroupA> + A<A = [_1; 1]>, _1: Dispatch> Kita0Constraint for _0 {
+        impl<_0: Dispatch<Group = GroupA>, _1: Dispatch> Kita0Constraint for _0
+        where
+            Self: A<A = [_1; 1]>,
+        {
             type Bound = _1;
         }
         impl<_0: Dispatch<Group = GroupB> + A<A = [_1; 2]>, _1: Dispatch> Kita0Constraint for _0 {
@@ -178,7 +184,7 @@ const _: () = {
             type Bound: ?Sized;
         }
 
-        impl<_0: Dispatch<Group = GroupA> + A<A = [_1; 1]>, _1: Dispatch> Kita1Constraint for [_0; 1] {
+        impl<_0: Dispatch<Group = GroupA> + A<A = [_1; 1]>, _1: Dispatch<Group = [u16; 1]>> Kita1Constraint for [_0; 1] {
             type Bound = _1;
         }
         impl<_0: Dispatch<Group = GroupB> + A<A = [_1; 2]>, _1: Dispatch> Kita1Constraint for [_0; 1] {

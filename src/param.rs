@@ -1,14 +1,21 @@
 //! Contains logic related to uniform position based (re-)naming of parameters
 
 use indexmap::IndexMap;
-use proc_macro_error2::abort_call_site;
+use proc_macro_error2::{abort, abort_call_site};
 use proc_macro2::Span;
 
 use quote::format_ident;
 use syn::{
+    parse_quote,
     visit::{Visit, visit_generic_argument, visit_trait_bound},
     visit_mut::VisitMut,
 };
+
+use crate::{AssocBindingsGroup, ImplGroupId, TraitBound};
+
+pub trait IsUnsizedBound {
+    fn is_unsized(&self) -> bool;
+}
 
 /// Indexer for params used in traits, impl trait or self type, and simple predicates.
 ///
@@ -42,6 +49,96 @@ pub struct NonPredicateParamResolver<'a> {
     lifetime_replacements: IndexMap<syn::Ident, &'a syn::Lifetime>,
     type_param_replacements: IndexMap<syn::Ident, &'a syn::Type>,
     const_param_replacements: IndexMap<syn::Ident, syn::Expr>,
+}
+
+pub fn prune_unused_generics(
+    generics: &mut syn::Generics,
+    impl_group_id: &ImplGroupId,
+    assoc_bindings: &AssocBindingsGroup,
+) {
+    let predicates = generics
+        .where_clause
+        .as_mut()
+        .map(|wc| core::mem::take(&mut wc.predicates))
+        .unwrap_or_default();
+
+    let mut indexer = NonPredicateParamIndexer::new(
+        generics
+            .lifetimes()
+            .map(|param| (&param.lifetime.ident, param)),
+        generics.type_params().map(|param| (&param.ident, param)),
+        generics.const_params().map(|param| (&param.ident, param)),
+        0,
+    );
+
+    if let Some(trait_) = &impl_group_id.trait_ {
+        indexer.visit_path(trait_);
+    }
+
+    indexer.visit_type(&impl_group_id.self_ty);
+    for ((bounded, _), _) in assoc_bindings.idents() {
+        indexer.visit_type(&bounded.0);
+    }
+
+    let predicates = predicates
+        .into_iter()
+        .filter(|pred| {
+            if let syn::WherePredicate::Type(syn::PredicateType { bounded_ty, .. }) = pred
+                && let syn::Type::Path(syn::TypePath { path, .. }) = bounded_ty
+                && let Some(ident) = path.get_ident()
+            {
+                return indexer.indexed_type_params.contains_key(ident);
+            }
+
+            true
+        })
+        .collect();
+
+    generics.params = indexer
+        .indexed_lifetimes
+        .into_values()
+        .map(|(_, lifetime)| syn::GenericParam::from(lifetime.clone()))
+        .chain(
+            indexer
+                .indexed_type_params
+                .into_values()
+                .map(|(_, param)| param.clone().into()),
+        )
+        .chain(
+            indexer
+                .indexed_const_params
+                .into_values()
+                .map(|(_, param)| param.clone().into()),
+        )
+        .collect();
+
+    if let Some(wc) = &mut generics.where_clause {
+        wc.predicates = predicates;
+    }
+}
+
+impl IsUnsizedBound for TraitBound {
+    fn is_unsized(&self) -> bool {
+        matches!(
+            self.0,
+            syn::TraitBound {
+                modifier: syn::TraitBoundModifier::Maybe(_),
+                ..
+            }
+        )
+    }
+}
+
+impl IsUnsizedBound for syn::TypeParamBound {
+    fn is_unsized(&self) -> bool {
+        matches!(
+            self,
+            syn::TypeParamBound::Trait(syn::TraitBound {
+                modifier: syn::TraitBoundModifier::Maybe(_),
+                ..
+            })
+        )
+    }
 }
 
 pub fn index(item_impl: &syn::ItemImpl) -> IndexedParams {
@@ -134,6 +231,31 @@ pub(super) fn gen_indexed_param_ident(idx: usize) -> syn::Ident {
 
 impl IndexedParams {
     pub fn resolve(self, item_impl: &mut syn::ItemImpl) {
+        struct SelfReplacer<'a> {
+            self_ty: &'a syn::Type,
+        }
+        impl VisitMut for SelfReplacer<'_> {
+            fn visit_type_mut(&mut self, node: &mut syn::Type) {
+                if let syn::Type::Path(ty) = node {
+                    let first_seg = &ty.path.segments.first().unwrap();
+
+                    if first_seg.ident == "Self" {
+                        *node = replace_path(&ty.path, self.self_ty);
+                    }
+                }
+
+                syn::visit_mut::visit_type_mut(self, node);
+            }
+        }
+
+        let mut self_replacer = SelfReplacer {
+            self_ty: &item_impl.self_ty,
+        };
+        self_replacer.visit_generics_mut(&mut item_impl.generics);
+        if let Some((_, trait_, _)) = &mut item_impl.trait_ {
+            self_replacer.visit_path_mut(trait_);
+        }
+
         let lifetimes = self
             .lifetimes
             .into_iter()
@@ -182,21 +304,19 @@ impl IndexedParams {
             .collect::<IndexMap<_, _>>();
         let type_params = type_params
             .into_iter()
-            .map(|(old_type_param, new_type_param)| {
-                (old_type_param, syn::parse_quote!(#new_type_param))
-            })
+            .map(|(old_type_param, new_type_param)| (old_type_param, parse_quote!(#new_type_param)))
             .collect::<IndexMap<_, _>>();
         let const_params = const_params
             .into_iter()
             .map(|(old_const_param, new_const_param)| {
-                (old_const_param, syn::parse_quote!(#new_const_param))
+                (old_const_param, parse_quote!(#new_const_param))
             })
             .collect::<IndexMap<_, syn::Expr>>();
 
         NonPredicateParamResolver::new(
             lifetimes.iter().map(|(old, new)| (old.clone(), new)),
             type_params.iter().map(|(old, new)| (old.clone(), new)),
-            const_params.into_iter().map(|(old, new)| (old, new)),
+            const_params,
         )
         .visit_item_impl_mut(item_impl);
 
@@ -412,6 +532,10 @@ impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
         self.visit_lifetime_ident(&node.ident);
     }
 
+    fn visit_type_impl_trait(&mut self, node: &'a syn::TypeImplTrait) {
+        abort!(node, "`impl Trait` is not allowed in this position");
+    }
+
     fn visit_type_path(&mut self, node: &'a syn::TypePath) {
         if let Some(qself) = &node.qself {
             self.visit_qself(qself);
@@ -436,6 +560,29 @@ impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
     }
 }
 
+fn replace_path(ty: &syn::Path, replacement: &syn::Type) -> syn::Type {
+    if ty.segments.len() > 1 {
+        if let syn::Type::Path(syn::TypePath { qself: None, path }) = replacement
+            && path.get_ident().is_some()
+        {
+            let mut segments = ty.segments.iter();
+            let ident = segments.next().unwrap();
+
+            let abort_msg = format!(
+                "Ambiguous associated type. Qualify with a trait to disambiguate (e.g. {})",
+                quote::quote!(<#ident as Trait>#(::#segments)*)
+            );
+
+            abort!(ty, abort_msg);
+        } else {
+            let segments = ty.segments.iter().skip(1);
+            parse_quote!(<#replacement> #(::#segments)*)
+        }
+    } else {
+        parse_quote!(#replacement)
+    }
+}
+
 impl<'a> NonPredicateParamResolver<'a> {
     pub fn new(
         lifetime_replacements: impl IntoIterator<Item = (syn::Ident, &'a syn::Lifetime)>,
@@ -449,16 +596,11 @@ impl<'a> NonPredicateParamResolver<'a> {
         }
     }
 
-    fn try_replace_type_path_with_type(&self, path: &syn::Path) -> Option<syn::Type> {
-        let mut segments = path.segments.iter();
-        let ident = &segments.next().unwrap().ident;
+    fn try_replace_type_path_with_type(&self, ty: &syn::Path) -> Option<syn::Type> {
+        let first_seg = ty.segments.first().unwrap();
 
-        if let Some(&replacement) = self.type_param_replacements.get(ident) {
-            return Some(if path.segments.len() > 1 {
-                syn::parse_quote!(<#replacement> #(::#segments)*)
-            } else {
-                syn::parse_quote!(#replacement)
-            });
+        if let Some(&replacement) = self.type_param_replacements.get(&first_seg.ident) {
+            return Some(replace_path(ty, replacement));
         }
 
         None
@@ -468,7 +610,7 @@ impl<'a> NonPredicateParamResolver<'a> {
         let first_seg = path.segments.first_mut().unwrap();
 
         if let Some(replacement) = self.const_param_replacements.get(&first_seg.ident) {
-            *first_seg = syn::parse_quote!(#replacement);
+            *first_seg = parse_quote!(#replacement);
         }
     }
 }
@@ -502,7 +644,7 @@ impl VisitMut for NonPredicateParamResolver<'_> {
 
                 // TODO: struct name can clash with type/const param name
                 if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
-                    *node = syn::parse_quote!(#new_ty);
+                    *node = parse_quote!(#new_ty);
                 } else {
                     self.try_replace_expr_path_with_type(&mut ty.path);
                 }

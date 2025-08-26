@@ -1,0 +1,5 @@
+error: Ambiguous associated type. Qualify with a trait to disambiguate (e.g. < T as Trait > :: Group)
+  --> tests/ui_fail/unqualified_type_param.rs:30:9
+   |
+30 |         T::Group: Dispatch<Group = GroupA>,
+   |         ^^^^^^^^

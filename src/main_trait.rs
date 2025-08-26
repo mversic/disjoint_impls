@@ -2,6 +2,8 @@
 
 use syn::{parse_quote, visit_mut::VisitMut};
 
+use crate::param::IsUnsizedBound;
+
 use super::*;
 
 struct ImplItemResolver {
@@ -35,18 +37,30 @@ pub fn generate(
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, impl_group_id))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl, impl_group));
 
-    main_trait_impl
-        .generics
-        .make_where_clause()
-        .predicates
-        .extend(gen_assoc_binding_predicates(
-            impl_group,
-            &helper_trait_ident,
-            &impl_group.assoc_bindings,
-        ));
-
-    main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
+    main_trait_impl.generics.params = impl_group.generics.params.iter().cloned().collect();
     let where_clause = main_trait_impl.generics.make_where_clause();
+    let mut predicates = core::mem::take(&mut where_clause.predicates)
+        .into_iter()
+        .collect::<IndexSet<_>>();
+    predicates.extend(
+        impl_group
+            .generics
+            .where_clause
+            .as_ref()
+            .map(|w| &w.predicates)
+            .cloned()
+            .unwrap_or_default(),
+    );
+    where_clause.predicates = predicates.into_iter().collect();
+
+    let helper_trait_bound = gen_helper_trait_bound(
+        impl_group,
+        &helper_trait_ident,
+        impl_group.assoc_bindings.idents(),
+    );
+    where_clause
+        .predicates
+        .push(parse_quote! { Self: #helper_trait_bound });
 
     let mut unsized_params = IndexSet::new();
     where_clause.predicates = core::mem::take(&mut where_clause.predicates)
@@ -56,13 +70,7 @@ pub fn generate(
                 predicate.bounds = core::mem::take(&mut predicate.bounds)
                     .into_iter()
                     .filter(|bound| {
-                        let is_unsized = matches!(
-                            bound,
-                            syn::TypeParamBound::Trait(syn::TraitBound {
-                                modifier: syn::TraitBoundModifier::Maybe(_),
-                                ..
-                            })
-                        );
+                        let is_unsized = bound.is_unsized();
 
                         if is_unsized {
                             let unsized_param = match &predicate.bounded_ty {
@@ -100,15 +108,7 @@ pub fn generate(
         });
 
     for unsized_param in unsized_params {
-        if !unsized_param.bounds.iter().any(|bound| {
-            matches!(
-                bound,
-                syn::TypeParamBound::Trait(syn::TraitBound {
-                    modifier: syn::TraitBoundModifier::Maybe(_),
-                    ..
-                })
-            )
-        }) {
+        if !unsized_param.bounds.iter().any(IsUnsizedBound::is_unsized) {
             unsized_param.bounds.push(parse_quote! { ?Sized });
         }
     }
@@ -129,8 +129,7 @@ fn gen_dummy_impl_from_inherent_impl(
     impl_group: &ImplGroup,
 ) -> syn::ItemImpl {
     let mut main_trait_impl = example_impl.clone();
-    main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
-    main_trait_impl.generics.where_clause = None;
+    main_trait_impl.generics = impl_group.generics.clone();
     main_trait_impl
 }
 
@@ -238,7 +237,7 @@ fn gen_helper_trait_bound<'a>(
     let generic_args = if let Some(impl_trait) = &impl_group.id.trait_ {
         combine_generic_args(assoc_binding_idents, impl_trait)
     } else if let syn::Type::Path(self_ty) = &mut self_ty {
-        gen_inherent_self_ty_args(self_ty, &impl_group.params);
+        gen_inherent_self_ty_args(self_ty, &impl_group.generics.params);
         combine_generic_args(assoc_binding_idents, &self_ty.path)
     } else {
         unreachable!()
@@ -262,48 +261,6 @@ impl ImplItemResolver {
             },
         }
     }
-}
-
-fn gen_assoc_binding_predicates<'a>(
-    impl_group: &ImplGroup,
-    helper_trait_ident: &syn::Ident,
-    assoc_bindings: &'a AssocBindingsGroup,
-) -> impl Iterator<Item = syn::WherePredicate> + 'a {
-    let helper_trait_bound =
-        gen_helper_trait_bound(impl_group, helper_trait_ident, assoc_bindings.idents());
-
-    let type_param_trait_bounds = assoc_bindings.idents().fold(
-        IndexMap::<_, IndexSet<_>>::new(),
-        |mut acc, ((param_ident, trait_bound), _)| {
-            if let Bounded(syn::Type::Path(syn::TypePath {
-                qself: Some(syn::QSelf { ty, .. }),
-                path,
-            })) = &param_ident
-            {
-                let dispatch_trait = path.segments.iter().take(path.segments.len() - 1);
-
-                acc.entry(&**ty)
-                    .or_default()
-                    .insert(parse_quote!(#(#dispatch_trait)::*));
-            }
-
-            acc.entry(&param_ident.0)
-                .or_default()
-                .insert(trait_bound.clone());
-
-            acc
-        },
-    );
-
-    type_param_trait_bounds
-        .into_iter()
-        .map(move |(param_ident, trait_bounds)| -> syn::WherePredicate {
-            let trait_bounds = trait_bounds.into_iter();
-            parse_quote! { #param_ident: #(#trait_bounds)+* }
-        })
-        .chain(core::iter::once({
-            parse_quote! { Self: #helper_trait_bound }
-        }))
 }
 
 impl VisitMut for ImplItemResolver {
@@ -477,15 +434,7 @@ pub mod param {
                         if !is_param {
                             predicate.bounds = core::mem::take(&mut predicate.bounds)
                                 .into_iter()
-                                .filter(|bound| {
-                                    !matches!(
-                                        bound,
-                                        syn::TypeParamBound::Trait(syn::TraitBound {
-                                            modifier: syn::TraitBoundModifier::Maybe(_),
-                                            ..
-                                        })
-                                    )
-                                })
+                                .filter(|bound| !bound.is_unsized())
                                 .collect();
                         }
 

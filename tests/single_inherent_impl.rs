@@ -18,13 +18,13 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    impl<'_ŠČ0, _ŠČ1, _ŠČ2> Wrapper<'_ŠČ0, (_ŠČ1, _ŠČ2), 12> {
+    impl<'_0, _1, _2> Wrapper<'_0, (_1, _2), 12> {
         pub const NAME: &'static str = "1st Blanket A";
 
-        fn kita(_a: _ŠČ1, _b: _ŠČ2) -> &'static str
+        fn kita(_a: _1, _b: _2) -> &'static str
         where
-            _ŠČ1: '_ŠČ0,
-            _ŠČ2: '_ŠČ0,
+            _1: '_0,
+            _2: '_0,
         {
             Self::NAME
         }
