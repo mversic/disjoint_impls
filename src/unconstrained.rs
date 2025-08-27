@@ -144,12 +144,20 @@ pub fn generate(
                     assoc_binding_remover.visit_type(&assoc_binding_ident.0.0.0);
                     !assoc_binding_remover.flagged_to_remove
                 });
-            let impls_to_remove = constraint_assoc_bindings.prune_overlapping();
 
+            let overlapping = (0..item_impls.len())
+                .rev()
+                .flat_map(|i| {
+                    constraint_assoc_bindings
+                        .find_overlapping_before(i)
+                        .into_iter()
+                        .filter(move |j| i == *j)
+                })
+                .collect::<IndexSet<_>>();
             item_impls = item_impls
                 .into_iter()
                 .enumerate()
-                .filter_map(|(i, item_impl)| (!impls_to_remove.contains(&i)).then_some(item_impl))
+                .filter_map(|(i, item_impl)| (!overlapping.contains(&i)).then_some(item_impl))
                 .collect();
 
             quote!(#last_assoc_param)
