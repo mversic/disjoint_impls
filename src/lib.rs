@@ -698,7 +698,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
 
 impl Parse for ImplGroups {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
-        let mut impl_groups = IndexMap::<_, IndexMap<_, _>>::new();
+        let mut impl_groups = IndexMap::<_, Vec<_>>::new();
 
         let main_trait = input.parse::<ItemTrait>().ok();
         while let Ok(mut item) = input.parse::<ItemImpl>() {
@@ -714,7 +714,7 @@ impl Parse for ImplGroups {
             impl_groups
                 .entry(impl_group_id.clone())
                 .or_default()
-                .insert(item, param_bounds);
+                .push((param_bounds, item));
         }
 
         let (mut supersets, subsets) = make_sets(impl_groups.keys());
@@ -731,22 +731,15 @@ impl Parse for ImplGroups {
             .collect::<Vec<_>>()
             .into_iter()
             .flat_map(|impl_group_id| {
-                let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
+                find_impl_groups(impl_group_id, &subsets, &mut supersets, &impl_groups)
+                    .unwrap_or_else(|| {
+                        let msg = format!(
+                            "Conflicting implementations of `{}`",
+                            quote!(#impl_group_id)
+                        );
 
-                find_impl_groups(
-                    (impl_group_id, &impl_group),
-                    &subsets,
-                    &mut supersets,
-                    &impl_groups,
-                )
-                .unwrap_or_else(|| {
-                    let msg = format!(
-                        "Conflicting implementations of `{}`",
-                        quote!(#impl_group_id)
-                    );
-
-                    abort!(impl_group_id, msg)
-                })
+                        abort!(impl_group_id, msg)
+                    })
             })
             .map(|(impl_group_id, (assoc_bindings_builder, impl_group))| {
                 let mut generics = syn::Generics::default();
@@ -808,15 +801,15 @@ impl Parse for ImplGroups {
 }
 
 fn find_impl_groups<'a, 'b>(
-    curr_impl_group: (&'a ImplGroupId, &[&'b ItemImpl]),
+    curr_impl_group_id: &'a ImplGroupId,
 
     impl_group_id_subsets: &Subsets<'a>,
     impl_group_id_supersets: &mut Supersets<'a>,
 
-    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplDescriptor>>,
+    item_impls: &'b IndexMap<ImplGroupId, Vec<(ItemImplDescriptor, ItemImpl)>>,
 ) -> Option<IndexMap<&'a ImplGroupId, (AssocBindingsGroupBuilder, Vec<&'b ItemImpl>)>> {
     find_impl_groups_rec(
-        curr_impl_group,
+        (curr_impl_group_id, 0),
         impl_group_id_subsets,
         impl_group_id_supersets,
         item_impls,
@@ -825,27 +818,22 @@ fn find_impl_groups<'a, 'b>(
 }
 
 fn find_impl_groups_rec<'a, 'b>(
-    curr_impl_group: (&'a ImplGroupId, &[&'b ItemImpl]),
+    curr_impl: (&'a ImplGroupId, usize),
 
     impl_group_id_subsets: &Subsets<'a>,
     impl_group_id_supersets: &mut Supersets<'a>,
 
-    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplDescriptor>>,
+    item_impls: &'b IndexMap<ImplGroupId, Vec<(ItemImplDescriptor, ItemImpl)>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBindingsGroupBuilder, Vec<&'b ItemImpl>)>,
 ) -> Option<IndexMap<&'a ImplGroupId, (AssocBindingsGroupBuilder, Vec<&'b ItemImpl>)>> {
-    let curr_impl_group_id = curr_impl_group.0;
+    let (curr_impl_group_id, item_idx) = curr_impl;
+    let curr_group = &item_impls[curr_impl_group_id];
 
-    if let Some((&curr_impl, other)) = curr_impl_group.1.split_first() {
-        let mut new_supersets = IndexMap::new();
-
-        let curr_impl_desc = &item_impls[curr_impl_group_id][curr_impl];
+    if let Some((curr_impl_desc, curr_impl_item)) = curr_group.get(item_idx) {
         let impl_group_ids = impl_groups.keys().cloned().collect::<Vec<_>>();
 
-        let item_idx = item_impls[curr_impl_group_id]
-            .get_index_of(curr_impl)
-            .unwrap();
-
         let mut acc = None::<IndexMap<_, _>>;
+        let mut new_supersets = IndexMap::new();
         for impl_group_id in impl_group_ids {
             let impl_group = &impl_groups[impl_group_id];
 
@@ -862,11 +850,11 @@ fn find_impl_groups_rec<'a, 'b>(
             .for_each(|intersection| {
                 let impl_group = impl_groups.get_mut(impl_group_id).unwrap();
                 let prev_assoc_bindings = core::mem::replace(&mut impl_group.0, intersection);
-                impl_group.1.push(curr_impl);
+                impl_group.1.push(curr_impl_item);
 
                 let mut supersets = impl_group_id_supersets.clone();
                 let res = find_impl_groups_rec(
-                    (curr_impl_group_id, other),
+                    (curr_impl_group_id, item_idx + 1),
                     impl_group_id_subsets,
                     &mut supersets,
                     item_impls,
@@ -900,12 +888,12 @@ fn find_impl_groups_rec<'a, 'b>(
                 curr_impl_group_id,
                 (
                     AssocBindingsGroupBuilder::new(curr_impl_desc.clone()),
-                    vec![curr_impl],
+                    vec![curr_impl_item],
                 ),
             );
 
             acc = find_impl_groups_rec(
-                (curr_impl_group_id, other),
+                (curr_impl_group_id, item_idx + 1),
                 impl_group_id_subsets,
                 impl_group_id_supersets,
                 item_impls,
@@ -934,14 +922,12 @@ fn unlock_subset_impl_groups<'a, 'b>(
     impl_group_id_subsets: &Subsets<'a>,
     impl_group_id_supersets: &mut Supersets<'a>,
 
-    item_impls: &'b IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplDescriptor>>,
+    item_impls: &'b IndexMap<ImplGroupId, Vec<(ItemImplDescriptor, ItemImpl)>>,
     impl_groups: &mut IndexMap<&'a ImplGroupId, (AssocBindingsGroupBuilder, Vec<&'b ItemImpl>)>,
 ) -> Option<IndexMap<&'a ImplGroupId, (AssocBindingsGroupBuilder, Vec<&'b ItemImpl>)>> {
     let mut acc = Some(impl_groups.clone());
 
     for (&subset_impl_group_id, _) in &impl_group_id_subsets[curr_impl_group_id] {
-        let subset = &item_impls[subset_impl_group_id].keys().collect::<Vec<_>>();
-
         let superset_count = impl_group_id_supersets
             .get_mut(subset_impl_group_id)
             .unwrap();
@@ -950,7 +936,7 @@ fn unlock_subset_impl_groups<'a, 'b>(
         if *superset_count == 0 {
             acc = acc.and_then(|mut impl_groups| {
                 find_impl_groups_rec(
-                    (subset_impl_group_id, subset),
+                    (subset_impl_group_id, 0),
                     impl_group_id_subsets,
                     impl_group_id_supersets,
                     item_impls,
@@ -1050,7 +1036,7 @@ mod tests {
 
     #[test]
     fn find_impl_group_candidates_works_correctly() {
-        let impl_groups: IndexMap<ImplGroupId, IndexMap<ItemImpl, ItemImplDescriptor>> = [
+        let impl_groups: IndexMap<ImplGroupId, Vec<(ItemImplDescriptor, ItemImpl)>> = [
             (
                 quote!((_ŠČ0, _ŠČ1)),
                 quote!((_ŠČ0, _ŠČ1)),
@@ -1083,11 +1069,6 @@ mod tests {
                     trait_: Some(syn::parse_quote!(Kita)),
                     self_ty: syn::parse_quote!(#ty),
                 },
-                parse_quote! {
-                    impl<_ŠČ> Kita for #ty where #bounded_ty: Dispatch<Group = #assoc_ty> {
-                        const NAME: &'static str = #msg;
-                    }
-                },
                 ItemImplDescriptor {
                     trait_bounds: [(parse_quote!(#bounded_ty), parse_quote!(Dispatch))]
                         .into_iter()
@@ -1102,12 +1083,15 @@ mod tests {
                     .into_iter()
                     .collect(),
                 },
+                parse_quote! {
+                    impl<_ŠČ> Kita for #ty where #bounded_ty: Dispatch<Group = #assoc_ty> {
+                        const NAME: &'static str = #msg;
+                    }
+                },
             )
         })
-        .map(|(group_id, impl_item, assoc_bindings)| {
-            let mut map = IndexMap::new();
-            map.insert(impl_item, assoc_bindings);
-            (group_id, map)
+        .map(|(group_id, impl_item_descriptor, impl_item)| {
+            (group_id, vec![(impl_item_descriptor, impl_item)])
         })
         .collect();
 
@@ -1125,15 +1109,7 @@ mod tests {
             .collect::<Vec<_>>()
             .into_iter()
             .flat_map(|impl_group_id| {
-                let impl_group = impl_groups[impl_group_id].keys().collect::<Vec<_>>();
-
-                find_impl_groups(
-                    (impl_group_id, &impl_group),
-                    &subsets,
-                    &mut supersets,
-                    &impl_groups,
-                )
-                .unwrap()
+                find_impl_groups(impl_group_id, &subsets, &mut supersets, &impl_groups).unwrap()
             })
             .collect::<Vec<_>>();
 
