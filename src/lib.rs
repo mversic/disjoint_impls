@@ -257,44 +257,73 @@ impl AssocBindingsGroup {
     /// they will do so on the associated bound `T: Dispatch<Group = x>`. Notice, however, that the
     /// last 2 impls are dispatched on the same payload `GroupA` of the chosen associated bound,
     /// i.e. they are overlapping. Therefore this impl group is invalid and should be discarded
-    fn is_overlapping(&self) -> bool {
+    fn is_overlapping(&self, item_impls: &[&ItemImpl]) -> bool {
         if self.0.is_empty() {
             return true;
         }
 
-        let last_impl_idx = self.0[0].len() - 1;
-        !self.find_overlapping_before(last_impl_idx).is_empty()
+        !self
+            .find_overlapping_before(item_impls.len() - 1, item_impls)
+            .is_empty()
     }
 
-    /// Checks for overlapping associated bindings, but only before `item_impl_idx`
-    fn find_overlapping_before(&self, item_impl_idx: usize) -> IndexSet<usize> {
-        fn is_superset(lhs: &[Option<&syn::Type>], rhs: &[Option<&syn::Type>]) -> bool {
-            zip_eq(lhs, rhs).all(|(e1, e2)| match (e1, e2) {
-                (Some(e1), Some(e2)) => e1.is_superset(e2).is_some(),
-                (None, _) => true,
-                _ => false,
+    /// Checks for overlapping associated bindings, but only the ones
+    /// that come before `item_impl_idx` in the total ordering
+    fn find_overlapping_before(
+        &self,
+        item_impl_idx: usize,
+        item_impls: &[&ItemImpl],
+    ) -> IndexSet<usize> {
+        fn is_superset(
+            id1: &ItemImpl,
+            id2: &ItemImpl,
+            lhs: &[Option<&syn::Type>],
+            rhs: &[Option<&syn::Type>],
+        ) -> bool {
+            zip_eq(lhs, rhs).all(|(e1, e2)| {
+                let payload_is_superset = match (e1, e2) {
+                    (Some(e1), Some(e2)) => e1.is_superset(e2).is_some(),
+                    (None, _) => true,
+                    _ => false,
+                };
+
+                payload_is_superset
+                    && id1
+                        .trait_
+                        .as_ref()
+                        .zip(id2.trait_.as_ref())
+                        .map_or(false, |((_, trait1, _), (_, trait2, _))| {
+                            trait1.is_superset(trait2).is_some()
+                        })
+                    && id1.self_ty.is_superset(&id2.self_ty).is_some()
             })
         }
 
         let payload_rows = self.payload_rows();
+        let impl_item_id = &item_impls[item_impl_idx];
         let impl_payload = &payload_rows[item_impl_idx];
 
-        let nrows = payload_rows.len();
-        if payload_rows
+        let nrows = item_impls.len();
+
+        if item_impls
             .iter()
+            .zip(&payload_rows)
             .rev()
             .skip(nrows - item_impl_idx)
-            .any(|row| is_superset(row, impl_payload))
+            .any(|(item_id, row)| is_superset(item_id, impl_item_id, row, impl_payload))
         {
             return [item_impl_idx].into_iter().collect();
         }
 
-        payload_rows
+        item_impls
             .iter()
+            .zip(&payload_rows)
             .enumerate()
             .rev()
             .skip(nrows - item_impl_idx)
-            .filter_map(|(i, row)| is_superset(impl_payload, row).then_some(i))
+            .filter_map(|(i, (item_id, row))| {
+                is_superset(impl_item_id, item_id, impl_payload, row).then_some(i)
+            })
             .collect()
     }
 }
@@ -315,11 +344,15 @@ impl AssocBindingsGroupBuilder {
 
     fn intersection<'a>(
         &self,
-        impl_group: &[&ItemImpl],
-        other: &'a ItemImplDescriptor,
+        impl_group: &'a [&ItemImpl],
+        other: (&'a ItemImplDescriptor, &'a ItemImpl),
         substitutions: &Substitutions,
     ) -> impl Iterator<Item = Self> + use<'a> {
-        let nrows = impl_group.len() + 1;
+        let mut impl_group = impl_group.to_vec();
+        let (other, other_impl) = other;
+
+        impl_group.push(other_impl);
+        let nrows = impl_group.len();
 
         let other = other
             .trait_bounds
@@ -412,8 +445,11 @@ impl AssocBindingsGroupBuilder {
             }
         });
 
-        intersections
-            .filter(move |intersection| !intersection.assoc_bindings_group.is_overlapping())
+        intersections.filter(move |intersection| {
+            !intersection
+                .assoc_bindings_group
+                .is_overlapping(&impl_group)
+        })
     }
 }
 
@@ -748,21 +784,13 @@ impl Parse for ImplGroups {
                 let mut generics = syn::Generics::default();
 
                 if let Some(&item) = impl_group.first() {
-                    generics.params = item
-                        .generics
-                        .params
-                        .iter()
-                        .cloned()
-                        .map(|mut param| {
-                            if let syn::GenericParam::Type(syn::TypeParam { bounds, .. }) =
-                                &mut param
-                            {
-                                *bounds = core::iter::empty::<syn::TypeParamBound>().collect();
-                            }
+                    generics.params = item.generics.params.clone();
 
-                            param
-                        })
-                        .collect();
+                    generics.params.iter_mut().for_each(|mut param| {
+                        if let syn::GenericParam::Type(syn::TypeParam { bounds, .. }) = &mut param {
+                            *bounds = core::iter::empty::<syn::TypeParamBound>().collect();
+                        }
+                    });
                 }
 
                 generics.make_where_clause().predicates = assoc_bindings_builder
@@ -840,16 +868,19 @@ fn find_impl_groups_rec<'a, 'b>(
         for impl_group_id in impl_group_ids {
             let impl_group = &impl_groups[impl_group_id];
 
+            let impl_ = (curr_desc, curr_impl_item);
             if let Some(subs) = impl_group_id_subsets[impl_group_id].get(curr_impl_group_id) {
-                impl_group.0.intersection(&impl_group.1, curr_desc, subs)
+                impl_group.0.intersection(&impl_group.1, impl_, subs)
             } else if impl_group_id == curr_impl_group_id {
                 let subs = &impl_group_id.is_superset(curr_impl_group_id).unwrap();
-                impl_group.0.intersection(&impl_group.1, curr_desc, subs)
+                impl_group.0.intersection(&impl_group.1, impl_, subs)
             } else {
                 // NOTE: It's possible that current impl group is not a subset
                 // of a group that comes before it in the topological order
                 continue;
             }
+            .collect::<Vec<_>>()
+            .into_iter()
             .for_each(|intersection| {
                 let impl_group = impl_groups.get_mut(impl_group_id).unwrap();
                 let prev_assoc_bindings = core::mem::replace(&mut impl_group.0, intersection);

@@ -94,10 +94,9 @@ pub fn prune_unused_generics(
         })
         .collect();
 
-    generics.params = indexer
-        .indexed_lifetimes
-        .into_values()
-        .map(|(_, lifetime)| syn::GenericParam::from(lifetime.clone()))
+    generics.params = generics
+        .lifetimes()
+        .map(|lifetime| syn::GenericParam::from(lifetime.clone()))
         .chain(
             indexer
                 .indexed_type_params

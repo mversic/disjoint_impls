@@ -145,11 +145,12 @@ pub fn generate(
                     !assoc_binding_remover.flagged_to_remove
                 });
 
+            let impls_ref = item_impls.iter().collect::<Vec<_>>();
             let overlapping = (0..item_impls.len())
                 .rev()
                 .flat_map(|i| {
                     constraint_assoc_bindings
-                        .find_overlapping_before(i)
+                        .find_overlapping_before(i, &impls_ref)
                         .into_iter()
                         .filter(move |j| i == *j)
                 })
