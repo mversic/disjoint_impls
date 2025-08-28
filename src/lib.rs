@@ -281,21 +281,10 @@ impl AssocBindingsGroup {
             rhs: &[Option<&syn::Type>],
         ) -> bool {
             zip_eq(lhs, rhs).all(|(e1, e2)| {
-                let payload_is_superset = match (e1, e2) {
-                    (Some(e1), Some(e2)) => e1.is_superset(e2).is_some(),
-                    (None, _) => true,
-                    _ => false,
-                };
-
-                payload_is_superset
-                    && id1
-                        .trait_
-                        .as_ref()
-                        .zip(id2.trait_.as_ref())
-                        .map_or(false, |((_, trait1, _), (_, trait2, _))| {
-                            trait1.is_superset(trait2).is_some()
-                        })
-                    && id1.self_ty.is_superset(&id2.self_ty).is_some()
+                id1.trait_.as_ref().zip(id2.trait_.as_ref()).is_some_and(
+                    |((_, trait1, _), (_, trait2, _))| trait1.is_superset(trait2).is_some(),
+                ) && id1.self_ty.is_superset(&id2.self_ty).is_some()
+                    && e1 == e2
             })
         }
 

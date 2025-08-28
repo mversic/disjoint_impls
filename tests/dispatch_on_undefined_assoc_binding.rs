@@ -44,11 +44,11 @@ impl core::fmt::Display for GroupB {
 
 disjoint_impls! {
     pub trait Kita {
-        const NAME: &'static str;
+        const NAME: &str;
     }
 
     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita for T {
-        const NAME: &'static str = "Blanket A";
+        const NAME: &str = "Blanket A";
     }
     impl<T: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>> Kita for T {
         const NAME: &'static str = "Blanket B";
@@ -61,23 +61,30 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_0: ?Sized> {
+    pub trait Kita0<_ŠČ0: ?Sized, _ŠČ1: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<_0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA> for _0 {
+    impl<
+        _ŠČ0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>,
+    > Kita0<GroupA, GroupA> for _ŠČ0 {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>> Kita0<GroupB> for _0 {
+    impl<
+        _ŠČ0: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>,
+    > Kita0<GroupB, <_ŠČ0 as Dispatch2>::Group> for _ŠČ0 {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<_0> Kita for _0
+    impl<_ŠČ0> Kita for _ŠČ0
     where
-        _0: Dispatch1,
-        Self: Kita0<<_0 as Dispatch1>::Group>,
+        _ŠČ0: Dispatch1 + Dispatch2,
+        Self: Kita0<<_ŠČ0 as Dispatch1>::Group, <_ŠČ0 as Dispatch2>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<<_0 as Dispatch1>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<
+            <_ŠČ0 as Dispatch1>::Group,
+            <_ŠČ0 as Dispatch2>::Group,
+        >>::NAME;
     }
 };
 */

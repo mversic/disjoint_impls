@@ -41,7 +41,7 @@ disjoint_impls! {
     }
 
     impl<T: Dispatch<Group = GroupA>> Kita for Option<T> where Self: Dispatch<Group = GroupA> {
-        const NAME: &'static str = "Blanket AA";
+        const NAME: &str = "Blanket AA";
     }
     impl<T: Dispatch<Group = GroupB>> Kita for Option<T> where Option<T>: Dispatch<Group = GroupA> {
         const NAME: &'static str = "Blanket BA";
