@@ -729,9 +729,10 @@ impl Parse for ImplGroups {
         let mut impl_groups = IndexMap::<_, Vec<_>>::new();
 
         let main_trait = input.parse::<ItemTrait>().ok();
-        while let Ok(mut item) = input.parse::<ItemImpl>() {
-            param::index(&item).resolve(&mut item);
+        while let Ok(item) = input.parse::<ItemImpl>() {
+            let mut item = param::normalize(item);
 
+            param::index(&item).resolve(&mut item);
             let impl_group_id = ImplGroupId {
                 trait_: item.trait_.as_ref().map(|trait_| &trait_.1).cloned(),
                 self_ty: (*item.self_ty).clone(),

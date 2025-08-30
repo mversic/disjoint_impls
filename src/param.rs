@@ -51,6 +51,75 @@ pub struct NonPredicateParamResolver<'a> {
     const_param_replacements: IndexMap<syn::Ident, syn::Expr>,
 }
 
+pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
+    struct ElidedLifetimeNamer {
+        curr_elided_lifetime_idx: usize,
+    }
+    struct SelfReplacer<'a> {
+        self_ty: &'a syn::Type,
+    }
+
+    impl VisitMut for ElidedLifetimeNamer {
+        fn visit_lifetime_mut(&mut self, node: &mut syn::Lifetime) {
+            if node.ident == "_" {
+                node.ident = gen_indexed_param_ident(self.curr_elided_lifetime_idx);
+                self.curr_elided_lifetime_idx += 1;
+            }
+        }
+        fn visit_type_reference_mut(&mut self, node: &mut syn::TypeReference) {
+            if node.lifetime.is_none() {
+                node.lifetime = parse_quote!('_);
+            }
+
+            syn::visit_mut::visit_type_reference_mut(self, node);
+        }
+    }
+    impl VisitMut for SelfReplacer<'_> {
+        fn visit_type_mut(&mut self, node: &mut syn::Type) {
+            if let syn::Type::Path(ty) = node {
+                let first_seg = &ty.path.segments.first().unwrap();
+
+                if first_seg.ident == "Self" {
+                    *node = replace_path(&ty.path, self.self_ty);
+                }
+            }
+
+            syn::visit_mut::visit_type_mut(self, node);
+        }
+    }
+
+    let mut elided_lifetime_namer = ElidedLifetimeNamer {
+        curr_elided_lifetime_idx: 0,
+    };
+    if let Some((_, trait_, _)) = &mut item_impl.trait_ {
+        elided_lifetime_namer.visit_path_mut(trait_);
+    }
+    elided_lifetime_namer.visit_type_mut(&mut item_impl.self_ty);
+    elided_lifetime_namer.visit_generics_mut(&mut item_impl.generics);
+
+    let mut self_replacer = SelfReplacer {
+        self_ty: &item_impl.self_ty,
+    };
+    if let Some((_, trait_, _)) = &mut item_impl.trait_ {
+        self_replacer.visit_path_mut(trait_);
+    }
+    self_replacer.visit_generics_mut(&mut item_impl.generics);
+
+    item_impl
+        .generics
+        .params
+        .extend(
+            (0..elided_lifetime_namer.curr_elided_lifetime_idx).map(|idx| {
+                syn::GenericParam::from(syn::LifetimeParam::new(syn::Lifetime {
+                    apostrophe: Span::call_site(),
+                    ident: gen_indexed_param_ident(idx),
+                }))
+            }),
+        );
+
+    item_impl
+}
+
 pub fn prune_unused_generics(
     generics: &mut syn::Generics,
     impl_group_id: &ImplGroupId,
@@ -230,31 +299,6 @@ pub(super) fn gen_indexed_param_ident(idx: usize) -> syn::Ident {
 
 impl IndexedParams {
     pub fn resolve(self, item_impl: &mut syn::ItemImpl) {
-        struct SelfReplacer<'a> {
-            self_ty: &'a syn::Type,
-        }
-        impl VisitMut for SelfReplacer<'_> {
-            fn visit_type_mut(&mut self, node: &mut syn::Type) {
-                if let syn::Type::Path(ty) = node {
-                    let first_seg = &ty.path.segments.first().unwrap();
-
-                    if first_seg.ident == "Self" {
-                        *node = replace_path(&ty.path, self.self_ty);
-                    }
-                }
-
-                syn::visit_mut::visit_type_mut(self, node);
-            }
-        }
-
-        let mut self_replacer = SelfReplacer {
-            self_ty: &item_impl.self_ty,
-        };
-        self_replacer.visit_generics_mut(&mut item_impl.generics);
-        if let Some((_, trait_, _)) = &mut item_impl.trait_ {
-            self_replacer.visit_path_mut(trait_);
-        }
-
         let lifetimes = self
             .lifetimes
             .into_iter()
@@ -318,24 +362,6 @@ impl IndexedParams {
             const_params,
         )
         .visit_item_impl_mut(item_impl);
-
-        // TODO: Add unnamed lifetimes (&u32) or elided lifetimes (&'_ u32)
-        // TODO: Remove unused lifetimes. Example where 'b is unused:
-        // impl<'a: 'b, 'b: 'a, T: 'b > Kara<'a, T> for &'a T {
-        //
-        //self.generics.params = self
-        //    .generics
-        //    .params
-        //    .into_iter()
-        //    .filter(|param| match param {
-        //        syn::GenericParam::Lifetime(lifetime)
-        //            if param_resolver.0.get(&lifetime.lifetime.ident).1 =>
-        //        {
-        //            syn::GenericParam::Lifetime(lifetime)
-        //        }
-        //        param => param,
-        //    })
-        //    .collect();
     }
 }
 

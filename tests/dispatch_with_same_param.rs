@@ -24,20 +24,31 @@ impl Dispatch<'_, ()> for u32 {
     type Group = GroupB;
 }
 
+pub enum GroupC {}
+impl Dispatch<'_, ()> for Option<i32> {
+    type Group = GroupC;
+}
+impl Dispatch<'_, ()> for (i32, u32) {
+    type Group = GroupC;
+}
+
 disjoint_impls! {
     pub trait Kita {
         const NAME: &'static str;
     }
 
     // NOTE: Dispatch trait parameters must be the same
+    impl<'a, T: Dispatch<'a, (), Group = GroupC>> Kita for &T {
+        const NAME: &'static str = "Blanket C";
+    }
+    impl<'a, 'c, T: Dispatch<'a, (), Group = GroupB>> Kita for &'c T {
+        const NAME: &'static str = "Blanket B";
+    }
     impl<'b, 'k, 'a, T: Dispatch<'b, (), Group = GroupA>> Kita for &'a T
     where
         T: T<'k>,
     {
         const NAME: &'static str = "Blanket A";
-    }
-    impl<'a, 'c, T: Dispatch<'a, (), Group = GroupB>> Kita for &'c T {
-        const NAME: &'static str = "Blanket B";
     }
 }
 
@@ -77,4 +88,6 @@ fn dispatch_with_same_param() {
     assert_eq!("Blanket A", <&Vec::<u32>>::NAME);
     assert_eq!("Blanket B", <&u32>::NAME);
     assert_eq!("Blanket B", <&i32>::NAME);
+    assert_eq!("Blanket C", <&Option::<i32>>::NAME);
+    assert_eq!("Blanket C", <&(i32, u32)>::NAME);
 }
