@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.8] - 2025-08-30
+
+### Added
+- handle elided lifetimes
+- enable dispatching on associated types
+
+### Fixed
+- allow overlapping assoc bindings
+- compare item ids when checking for assoc bindings overlap
+
+### Changed
+- simplify implementation for finding overlapping impls
+- simplify impl group id topsort implementation
+
 ## [1.0.7] - 2025-08-24
 
 ### Added
@@ -19,17 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.6] - 2025-08-24
 
+### Fixed
+
+- properly define main trait generics
+- don't consider associated bounds on concrete types
+
 ### Changed
 
 - simplify tracking of associated binding groups
 - implementation of wrapper types (most notably of `TraitBound`)
 - rename assoc bound to assoc binding
 - optimize algorithm for finding impl groups
-
-### Fixed
-
-- properly define main trait generics
-- don't consider associated bounds on concrete types
 
 ## [1.0.5] - 2025-08-12
 
@@ -93,13 +107,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add support for dispatch on generic type
 - Add support for complex generic argument types
 
-### Changed
-
-- transition to using IndexMap instead of FxHashMap
-
 ### Fixed
 
 - Add ?Sized bound on main trait params
+
+### Changed
+
+- transition to using IndexMap instead of FxHashMap
 
 ## [0.7.1] - 2024-05-20
 
@@ -113,14 +127,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Predictable ordering of generic arguments
 
-### Changed
-
-- Only dispatch on assoc bounds that are present in all impls
-
 ### Fixed
 
 - Fix inherent impls parametrization
 - Fix for const parameters in inherent impls
+
+### Changed
+
+- Only dispatch on assoc bounds that are present in all impls
 
 ## [0.6.0] - 2024-01-08
 
@@ -132,13 +146,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support multiple blanket impls on different trait generics
 - Support for resolution of parameters not bounded by trait or self type
 
-### Changed
-
-- Keep original trait param identifiers
-
 ### Fixed
 
 - Fix generation of main trait generics
+
+### Changed
+
+- Keep original trait param identifiers
 
 ## [0.5.0] - 2023-11-23
 
