@@ -18,6 +18,7 @@ use syn::{
 use crate::{
     param::{IsUnsizedBound as _, prune_unused_generics},
     superset::Superset,
+    validate::validate_impl_syntax,
 };
 
 mod disjoint;
@@ -730,9 +731,11 @@ impl Parse for ImplGroups {
 
         let main_trait = input.parse::<ItemTrait>().ok();
         while let Ok(item) = input.parse::<ItemImpl>() {
-            let mut item = param::normalize(item);
+            validate_impl_syntax(&item);
 
+            let mut item = param::normalize(item);
             param::index(&item).resolve(&mut item);
+
             let impl_group_id = ImplGroupId {
                 trait_: item.trait_.as_ref().map(|trait_| &trait_.1).cloned(),
                 self_ty: (*item.self_ty).clone(),

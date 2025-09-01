@@ -2,6 +2,44 @@ use proc_macro_error2::OptionExt;
 
 use super::*;
 
+struct Validator<'a>(IndexSet<&'a syn::Ident>);
+
+impl<'a> Validator<'a> {
+    fn new(generics: &'a syn::Generics) -> Self {
+        Self(generics.type_params().map(|param| &param.ident).collect())
+    }
+}
+
+impl Visit<'_> for Validator<'_> {
+    fn visit_type_path(&mut self, node: &syn::TypePath) {
+        if let syn::TypePath { qself: None, path } = node {
+            let mut segments = path.segments.iter();
+
+            let ident = &segments.next().unwrap().ident;
+            if self.0.contains(&ident) && path.segments.len() > 1 {
+                let abort_msg = format!(
+                    "Ambiguous associated type. Qualify with a trait to disambiguate (e.g. {})",
+                    quote::quote!(<#ident as Trait>#(::#segments)*)
+                );
+
+                abort!(node.path, abort_msg);
+            }
+        }
+
+        syn::visit::visit_type_path(self, node);
+    }
+
+    fn visit_type_impl_trait(&mut self, node: &syn::TypeImplTrait) {
+        abort!(node, "`impl Trait` is not allowed in this position");
+    }
+
+    fn visit_impl_item(&mut self, _: &syn::ImplItem) {}
+}
+
+pub fn validate_impl_syntax(item_impl: &ItemImpl) {
+    Validator::new(&item_impl.generics).visit_item_impl(item_impl);
+}
+
 pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
     trait_: &ItemTrait,
     item_impls: I,

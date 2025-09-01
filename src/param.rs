@@ -1,7 +1,7 @@
 //! Contains logic related to uniform position based (re-)naming of parameters
 
 use indexmap::IndexMap;
-use proc_macro_error2::{abort, abort_call_site};
+use proc_macro_error2::abort_call_site;
 use proc_macro2::Span;
 
 use quote::format_ident;
@@ -557,10 +557,6 @@ impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
         self.visit_lifetime_ident(&node.ident);
     }
 
-    fn visit_type_impl_trait(&mut self, node: &'a syn::TypeImplTrait) {
-        abort!(node, "`impl Trait` is not allowed in this position");
-    }
-
     fn visit_type_path(&mut self, node: &'a syn::TypePath) {
         if let Some(qself) = &node.qself {
             self.visit_qself(qself);
@@ -586,26 +582,13 @@ impl<'a> Visit<'a> for NonPredicateParamIndexer<'a> {
 }
 
 fn replace_path(ty: &syn::Path, replacement: &syn::Type) -> syn::Type {
-    if ty.segments.len() > 1 {
-        if let syn::Type::Path(syn::TypePath { qself: None, path }) = replacement
-            && path.get_ident().is_some()
-        {
-            let mut segments = ty.segments.iter();
-            let ident = segments.next().unwrap();
+    let segments = ty.segments.iter().skip(1);
 
-            let abort_msg = format!(
-                "Ambiguous associated type. Qualify with a trait to disambiguate (e.g. {})",
-                quote::quote!(<#ident as Trait>#(::#segments)*)
-            );
-
-            abort!(ty, abort_msg);
-        } else {
-            let segments = ty.segments.iter().skip(1);
-            parse_quote!(<#replacement> #(::#segments)*)
-        }
-    } else {
-        parse_quote!(#replacement)
+    if segments.len() > 0 {
+        return parse_quote!(<#replacement> #(::#segments)*);
     }
+
+    parse_quote!(#replacement)
 }
 
 impl<'a> NonPredicateParamResolver<'a> {
