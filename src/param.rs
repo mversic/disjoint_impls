@@ -62,7 +62,8 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
     impl VisitMut for ElidedLifetimeNamer {
         fn visit_lifetime_mut(&mut self, node: &mut syn::Lifetime) {
             if node.ident == "_" {
-                node.ident = gen_indexed_param_ident(self.curr_elided_lifetime_idx);
+                let idx = self.curr_elided_lifetime_idx;
+                node.ident = format_ident!("_LŠČ{idx}");
                 self.curr_elided_lifetime_idx += 1;
             }
         }
@@ -112,7 +113,7 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
             (0..elided_lifetime_namer.curr_elided_lifetime_idx).map(|idx| {
                 syn::GenericParam::from(syn::LifetimeParam::new(syn::Lifetime {
                     apostrophe: Span::call_site(),
-                    ident: gen_indexed_param_ident(idx),
+                    ident: format_ident!("_LŠČ{idx}"),
                 }))
             }),
         );
