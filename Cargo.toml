@@ -1,6 +1,6 @@
 [package]
 name = "disjoint_impls"
-version = "1.0.8"
+version = "1.0.9"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["Marin Veršić <marin.versic101@gmail.com>"]
