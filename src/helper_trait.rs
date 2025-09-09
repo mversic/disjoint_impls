@@ -1,3 +1,5 @@
+use crate::main_trait::is_remote;
+
 use super::*;
 
 /// Generate helper trait
@@ -51,6 +53,11 @@ pub fn generate(
         "Helper trait with arguments corresponding to the following associated bindings:\n{}\n",
         assoc_binding_idents.join(",\n")
     );
+
+    helper_trait.attrs = core::mem::take(&mut helper_trait.attrs)
+        .into_iter()
+        .filter(|attr| !is_remote(attr))
+        .collect();
 
     helper_trait.attrs.push(parse_quote!(#[doc = #doc_str]));
     helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));

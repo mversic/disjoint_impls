@@ -16,6 +16,7 @@ use syn::{
 };
 
 use crate::{
+    main_trait::is_remote,
     param::{IsUnsizedBound as _, prune_unused_generics},
     superset::Superset,
     validate::validate_impl_syntax,
@@ -668,6 +669,56 @@ impl Visit<'_> for TraitBoundsVisitor {
 /// }
 /// ```
 ///
+/// # Foreign(remote) traits
+///
+/// If the trait you are writing disjoint impls for is defined in outside of the current crate,
+/// you can use `#[disjoint_impls(remote)]` on the trait while providing copy of the internals:
+///
+/// ```
+/// use disjoint_impls::disjoint_impls;
+/// // NOTE: Foreign trait must be pulled into the current crate
+/// // so that the `disjoint_impls!` macro can refer to it in impls
+/// use remote_trait::ForeignKita;
+///
+/// pub trait Dispatch {
+///     type Group;
+/// }
+///
+/// pub enum GroupA {}
+/// impl Dispatch for String {
+///     type Group = GroupA;
+/// }
+///
+/// pub enum GroupB {}
+/// impl Dispatch for i32 {
+///     type Group = GroupB;
+/// }
+///
+/// // NOTE: (orphan rule): You can define blanket impls
+/// // only for types that are defined in the current crate
+/// struct LocalType<T>(T);
+///
+/// disjoint_impls! {
+///     // NOTE: Trait annotated with `#[disjoint_impls(remote)]` must be
+///     // an exact copy of the trait it refers to in the foreign/remote crate
+///     #[disjoint_impls(remote)]
+///     pub trait ForeignKita<U> {
+///         fn kita() -> &'static str;
+///     }
+///
+///     impl<U, T: Dispatch<Group = GroupA>> ForeignKita<U> for LocalType<T> {
+///         fn kita() -> &'static str {
+///             "Blanket A"
+///         }
+///     }
+///     impl<U, T: Dispatch<Group = GroupB>> ForeignKita<U> for LocalType<T> {
+///         fn kita() -> &'static str {
+///             "Blanket B"
+///         }
+///     }
+/// }
+/// ```
+///
 /// Other much more complex examples can be found in `tests`
 #[proc_macro]
 #[proc_macro_error]
@@ -710,6 +761,9 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
             main_trait_impls.push(main_trait_impl);
         }
     }
+
+    let main_trait =
+        main_trait.filter(|main_trait_| !main_trait_.attrs.iter().any(|attr| is_remote(attr)));
 
     quote! {
         #main_trait

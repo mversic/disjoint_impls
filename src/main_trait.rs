@@ -10,6 +10,17 @@ struct ImplItemResolver {
     self_as_helper_trait: TokenStream2,
 }
 
+pub fn is_remote(attr: &syn::Attribute) -> bool {
+    if let syn::Meta::List(list) = &attr.meta
+        && list.path.is_ident("disjoint_impls")
+        && list.tokens.to_string() == "remote"
+    {
+        return true;
+    }
+
+    false
+}
+
 /// Generate main trait impl
 pub fn generate(
     main_trait: Option<&ItemTrait>,

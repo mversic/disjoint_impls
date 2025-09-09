@@ -20,4 +20,5 @@ indexmap = "2.10.0"
 quote = "1.0.40"
 
 [dev-dependencies]
+remote_trait = { path = "tests/remote_trait" }
 trybuild = "1.0.110"
