@@ -286,6 +286,7 @@ impl VisitMut for ImplItemResolver {
         let self_as_helper_trait = &self.self_as_helper_trait;
 
         let syn::Signature {
+            unsafety,
             ident,
             inputs,
             variadic,
@@ -298,7 +299,7 @@ impl VisitMut for ImplItemResolver {
         });
 
         node.block = parse_quote!({
-            #self_as_helper_trait::#ident(#(#inputs,)* #variadic)
+            #unsafety { #self_as_helper_trait::#ident(#(#inputs,)* #variadic) }
         });
     }
 }

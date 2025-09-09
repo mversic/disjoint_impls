@@ -63,8 +63,14 @@ pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
             abort!(item_impl, "Expected trait impl, found inherent impl");
         }
 
-        if trait_.unsafety != item_impl.unsafety {
-            abort!(item_impl.unsafety, "Doesn't match trait definition");
+        match (trait_.unsafety, item_impl.unsafety) {
+            (Some(_), Some(_)) | (None, None) => {}
+            (Some(unsafety), None) => {
+                abort!(unsafety, "Missing in one of the impls");
+            }
+            (None, Some(unsafety)) => {
+                abort!(unsafety, "Doesn't match trait definition");
+            }
         }
     }
     for impl_items in item_impls.map(|item_impl| &item_impl.items) {
