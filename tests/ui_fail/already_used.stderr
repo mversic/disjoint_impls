@@ -1,0 +1,5 @@
+error: `impl Trait` is not allowed in this position
+  --> tests/ui_fail/already_used.rs:13:30
+   |
+13 |     impl<T: Dispatch<Group = impl Dispatch>> Kita for T {
+   |                              ^^^^^^^^^^^^^

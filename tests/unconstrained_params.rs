@@ -4,7 +4,7 @@ pub trait Dispatch {
     type Group;
 }
 
-pub trait A {
+pub trait Tr {
     type A;
 }
 
@@ -12,7 +12,7 @@ pub enum GroupA {}
 impl Dispatch for String {
     type Group = GroupA;
 }
-impl A for String {
+impl Tr for String {
     type A = [(Self,); 1];
 }
 impl Dispatch for (String,) {
@@ -22,7 +22,7 @@ impl Dispatch for (String,) {
 impl<T> Dispatch for Vec<T> {
     type Group = GroupA;
 }
-impl<T> A for Vec<T> {
+impl<T> Tr for Vec<T> {
     type A = [(Self,); 1];
 }
 impl<T> Dispatch for (Vec<T>,) {
@@ -30,13 +30,13 @@ impl<T> Dispatch for (Vec<T>,) {
 }
 
 pub enum GroupB {}
-impl A for i32 {
+impl Tr for i32 {
     type A = [i16; 2];
 }
 impl Dispatch for i32 {
     type Group = GroupB;
 }
-impl A for u32 {
+impl Tr for u32 {
     type A = [i16; 2];
 }
 impl Dispatch for u32 {
@@ -47,149 +47,115 @@ impl Dispatch for i16 {
 }
 
 disjoint_impls! {
-    pub trait Kita<const N: u32 = 12> {
+    pub trait Kita {
         const NAME: &'static str;
     }
 
-    impl<T: Dispatch<Group = GroupA>, A: Dispatch<Group = [Z; 1]>, Z> Kita for T where Self: A<A = [A; 1]> {
+    impl<T: Dispatch<Group = GroupA>, A: Dispatch<Group = [Z; 1]>, Z> Kita for T
+    where
+        Self: Tr<A = [A; 1]>,
+    {
         const NAME: &'static str = "1st Blanket AA";
     }
-    impl<T: Dispatch<Group = GroupA> + A<A = [A; 1]>, A: Dispatch<Group = [Z; 2]>, Z> Kita for T {
+    impl<T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>, A: Dispatch<Group = [Z; 2]>, Z> Kita for T {
         const NAME: &'static str = "1st Blanket AB";
     }
-    impl<T: Dispatch<Group = GroupB> + A<A = [A; 2]>, A: Dispatch> Kita for T {
+    impl<T: Dispatch<Group = GroupB> + Tr<A = [A; 2]>, A: Dispatch> Kita for T {
         const NAME: &'static str = "1st Blanket B*";
     }
 
-    impl<T: Dispatch<Group = GroupA> + A<A = [A; 1]>, A: Dispatch<Group = [u16; 1]>> Kita for [T; 1] {
+    impl<T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>, A: Dispatch<Group = [u16; 1]>> Kita for [T; 1] {
         const NAME: &'static str = "2nd Blanket AA";
     }
-    impl<T: Dispatch<Group = GroupA> + A<A = [A; 1]>, A: Dispatch<Group = [u16; 2]>> Kita for [T; 1] {
+    impl<T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>, A: Dispatch<Group = [u16; 2]>> Kita for [T; 1] {
         const NAME: &'static str = "2nd Blanket AB";
     }
-    impl<T: Dispatch<Group = GroupB> + A<A = [A; 2]>, A: Dispatch> Kita for [T; 1] {
+    impl<T: Dispatch<Group = GroupB> + Tr<A = [A; 2]>, A: Dispatch> Kita for [T; 1] {
         const NAME: &'static str = "2nd Blanket B*";
     }
 }
 
 /*
-pub trait Kita<const N: u32 = 12> {
+pub trait Kita {
     const NAME: &'static str;
 }
 
 const _: () = {
-    pub trait Kita0<_1: ?Sized, _2: ?Sized, _3: ?Sized, const N: u32 = 12> {
+    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized, _TŠČ2: ?Sized> {
         const NAME: &'static str;
     }
-    pub trait Kita1<_1: ?Sized, _2: ?Sized, _3: ?Sized, const N: u32 = 12> {
+    pub trait Kita1<_TŠČ0: ?Sized, _TŠČ1: ?Sized, _TŠČ2: ?Sized> {
         const NAME: &'static str;
     }
 
     impl<
-        _0: Dispatch<Group = GroupA>,
-        _1: Dispatch<Group = [_2; 1]>,
-        _2,
-    > Kita0<GroupA, [_2; 1], [_1; 1]> for _0
+        T: Dispatch<Group = GroupA>,
+        A: Dispatch<Group = [Z; 1]>,
+        Z,
+    > Kita0<GroupA, [A; 1], [Z; 1]> for T
     where
-        _0: A<A = [_1; 1]>,
+        T: Tr<A = [A; 1]>,
     {
         const NAME: &'static str = "1st Blanket AA";
     }
     impl<
-        _0: Dispatch<Group = GroupA> + A<A = [_1; 1]>,
-        _1: Dispatch<Group = [_2; 2]>,
-        _2,
-    > Kita0<GroupA, [_2; 2], [_1; 1]> for _0 {
+        T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>,
+        A: Dispatch<Group = [Z; 2]>,
+        Z,
+    > Kita0<GroupA, [A; 1], [Z; 2]> for T {
         const NAME: &'static str = "1st Blanket AB";
     }
     impl<
-        _0: Dispatch<Group = GroupB> + A<A = [_1; 2]>,
-        _1: Dispatch,
-    > Kita0<GroupB, <_1 as Dispatch>::Group, [_1; 2]> for _0 {
+        T: Dispatch<Group = GroupB> + Tr<A = [A; 2]>,
+        A: Dispatch,
+    > Kita0<GroupB, [A; 2], <A as Dispatch>::Group> for T {
         const NAME: &'static str = "1st Blanket B*";
     }
 
     impl<
-        _0: Dispatch<Group = GroupA> + A<A = [_1; 1]>,
-        _1: Dispatch<Group = [u16; 1]>,
-    > Kita1<GroupA, [_1; 1], [u16; 1]> for [_0; 1] {
+        T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>,
+        A: Dispatch<Group = [u16; 1]>,
+    > Kita1<GroupA, [A; 1], [u16; 1]> for [T; 1] {
         const NAME: &'static str = "2nd Blanket AA";
     }
     impl<
-        _0: Dispatch<Group = GroupA> + A<A = [_1; 1]>,
-        _1: Dispatch<Group = [u16; 2]>,
-    > Kita1<GroupA, [_1; 1], [u16; 2]> for [_0; 1] {
+        T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>,
+        A: Dispatch<Group = [u16; 2]>,
+    > Kita1<GroupA, [A; 1], [u16; 2]> for [T; 1] {
         const NAME: &'static str = "2nd Blanket AB";
     }
     impl<
-        _0: Dispatch<Group = GroupB> + A<A = [_1; 2]>,
-        _1: Dispatch,
-    > Kita1<GroupB, [_1; 2], <_1 as Dispatch>::Group> for [_0; 1] {
+        T: Dispatch<Group = GroupB> + Tr<A = [A; 2]>,
+        A: Dispatch,
+    > Kita1<GroupB, [A; 2], <A as Dispatch>::Group> for [T; 1] {
         const NAME: &'static str = "2nd Blanket B*";
     }
 
-    impl<_0, _1> Kita for _0
+    impl<T, _TŠČ1, _TŠČ2, _TŠČ3, const _CŠČ0: usize> Kita for T
     where
-        _0: Dispatch + A,
-        _1: Dispatch,
-        Self: Kita0<
-            <_0 as Dispatch>::Group,
-            <_1 as Dispatch>::Group,
-            <_0 as A>::A,
-        >,
-        Self: Kita0Constraint<Bound = _1>,
+        Self: Kita0<_TŠČ1, [_TŠČ2; _CŠČ0], _TŠČ3>,
+        T: Dispatch<Group = _TŠČ1>,
+        T: Tr<A = [_TŠČ2; _CŠČ0]>,
+        _TŠČ2: Dispatch<Group = _TŠČ3>,
     {
         const NAME: &'static str = <Self as Kita0<
-            <_0 as Dispatch>::Group,
-            <_1 as Dispatch>::Group,
-            <_0 as A>::A,
+            _TŠČ1,
+            [_TŠČ2; _CŠČ0],
+            _TŠČ3,
         >>::NAME;
     }
-    impl<_0, _1> Kita for [_0; 1]
+    impl<T, _TŠČ1, _TŠČ2, _TŠČ3, const _CŠČ0: usize> Kita for [T; 1]
     where
-        _0: Dispatch + A,
-        _1: Dispatch,
-        Self: Kita1<
-            <_0 as Dispatch>::Group,
-            <_0 as A>::A,
-            <_1 as Dispatch>::Group,
-        >,
-        Self: Kita1Constraint<Bound = _1>,
+        Self: Kita1<_TŠČ1, [_TŠČ2; _CŠČ0], _TŠČ3>,
+        T: Dispatch<Group = _TŠČ1>,
+        T: Tr<A = [_TŠČ2; _CŠČ0]>,
+        _TŠČ2: Dispatch<Group = _TŠČ3>,
     {
         const NAME: &'static str = <Self as Kita1<
-            <_0 as Dispatch>::Group,
-            <_0 as A>::A,
-            <_1 as Dispatch>::Group,
+            _TŠČ1,
+            [_TŠČ2; _CŠČ0],
+            _TŠČ3,
         >>::NAME;
-    }
-
-    disjoint_impls::disjoint_impls! {
-        trait Kita0Constraint {
-            type Bound: ?Sized;
-        }
-
-        impl<_0: Dispatch<Group = GroupA>, _1: Dispatch> Kita0Constraint for _0
-        where
-            Self: A<A = [_1; 1]>,
-        {
-            type Bound = _1;
-        }
-        impl<_0: Dispatch<Group = GroupB> + A<A = [_1; 2]>, _1: Dispatch> Kita0Constraint for _0 {
-            type Bound = _1;
-        }
-    }
-
-    disjoint_impls::disjoint_impls! {
-        trait Kita1Constraint {
-            type Bound: ?Sized;
-        }
-
-        impl<_0: Dispatch<Group = GroupA> + A<A = [_1; 1]>, _1: Dispatch<Group = [u16; 1]>> Kita1Constraint for [_0; 1] {
-            type Bound = _1;
-        }
-        impl<_0: Dispatch<Group = GroupB> + A<A = [_1; 2]>, _1: Dispatch> Kita1Constraint for [_0; 1] {
-            type Bound = _1;
-        }
     }
 };
 */

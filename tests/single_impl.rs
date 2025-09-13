@@ -28,17 +28,15 @@ where
     T: Default,
 {
     type GenericAssociatedType<GAT>;
-
     fn kita<GAT>(_: Self::GenericAssociatedType<GAT>) -> &'static str;
 }
 
 const _: () = {
-    impl<_0: Default, _1> Kita<_0> for _1
+    impl<T: Default, R> Kita<T> for R
     where
-        _1: std::ops::Deref<Target = str>,
+        R: std::ops::Deref<Target = str>,
     {
         type GenericAssociatedType<GAT> = GAT;
-
         fn kita<GAT>(_: Self::GenericAssociatedType<GAT>) -> &'static str {
             "Blanket"
         }

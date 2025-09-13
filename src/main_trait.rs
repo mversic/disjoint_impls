@@ -2,8 +2,6 @@
 
 use syn::{parse_quote, visit_mut::VisitMut};
 
-use crate::param::IsUnsizedBound;
-
 use super::*;
 
 struct ImplItemResolver {
@@ -25,107 +23,59 @@ pub fn is_remote(attr: &syn::Attribute) -> bool {
 pub fn generate(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
-    impl_group_id: &ImplGroupId,
     impl_group: &ImplGroup,
 ) -> Option<ItemImpl> {
-    let example_impl = impl_group.item_impls.first()?;
-
     let helper_trait_ident = main_trait.map_or_else(
         || {
-            if let syn::Type::Path(type_path) = &impl_group_id.self_ty {
-                return Some(helper_trait::gen_ident(
-                    &type_path.path.segments.last().unwrap().ident,
-                    impl_group_idx,
-                ));
-            }
+            let syn::Type::Path(type_path) = &impl_group.id.self_ty else {
+                unreachable!()
+            };
 
-            None
+            Some(helper_trait::gen_ident(
+                &type_path.path.segments.last().unwrap().ident,
+                impl_group_idx,
+            ))
         },
         |main_trait| Some(helper_trait::gen_ident(&main_trait.ident, impl_group_idx)),
     )?;
 
     let mut main_trait_impl = main_trait
-        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, impl_group_id))
-        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(example_impl, impl_group));
+        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group.id))
+        .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(impl_group));
 
-    main_trait_impl.generics.params = impl_group.generics.params.iter().cloned().collect();
+    main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
     let where_clause = main_trait_impl.generics.make_where_clause();
-    let mut predicates = core::mem::take(&mut where_clause.predicates)
-        .into_iter()
-        .collect::<IndexSet<_>>();
-    predicates.extend(
-        impl_group
-            .generics
-            .where_clause
-            .as_ref()
-            .map(|w| &w.predicates)
-            .cloned()
-            .unwrap_or_default(),
-    );
-    where_clause.predicates = predicates.into_iter().collect();
 
-    let helper_trait_bound = gen_helper_trait_bound(
-        impl_group,
-        &helper_trait_ident,
-        impl_group.assoc_bindings.idents(),
-    );
+    let helper_trait_bound =
+        gen_helper_trait_bound(impl_group, &helper_trait_ident, &impl_group.assoc_bindings);
     where_clause
         .predicates
         .push(parse_quote! { Self: #helper_trait_bound });
+    where_clause
+        .predicates
+        .extend(impl_group.assoc_bindings.0.iter().map(
+            |((bounded, trait_bound), (_, bindings))| -> syn::WherePredicate {
+                let mut trait_ = trait_bound.0.path.clone();
 
-    let mut unsized_params = IndexSet::new();
-    where_clause.predicates = core::mem::take(&mut where_clause.predicates)
-        .into_iter()
-        .filter_map(|mut predicate| {
-            if let syn::WherePredicate::Type(predicate) = &mut predicate {
-                predicate.bounds = core::mem::take(&mut predicate.bounds)
-                    .into_iter()
-                    .filter(|bound| {
-                        let is_unsized = bound.is_unsized();
+                let bindings = bindings
+                    .iter()
+                    .map(|(ident, (payload, _))| payload.as_ref().map(|p| quote!(#ident = #p)));
 
-                        if is_unsized {
-                            let unsized_param = match &predicate.bounded_ty {
-                                syn::Type::Path(syn::TypePath { path, .. }) => {
-                                    path.get_ident().unwrap()
-                                }
-                                _ => unreachable!(),
-                            };
-
-                            unsized_params.insert(unsized_param.clone());
-                        }
-
-                        !is_unsized
-                    })
-                    .collect();
-
-                if predicate.bounds.is_empty() {
-                    return None;
+                trait_.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
+                match &trait_bound.0.path.segments.last().unwrap().arguments {
+                    syn::PathArguments::None => {
+                        parse_quote! { #bounded: #trait_ <#(#bindings),*> }
+                    }
+                    syn::PathArguments::AngleBracketed(bracketed) => {
+                        let args = bracketed.args.iter();
+                        parse_quote! { #bounded: #trait_ <#(#args,)* #(#bindings),*> }
+                    }
+                    syn::PathArguments::Parenthesized(_) => unreachable!("Not a valid trait name"),
                 }
-            }
+            },
+        ));
 
-            Some(predicate)
-        })
-        .collect();
-
-    let unsized_params = main_trait_impl
-        .generics
-        .type_params_mut()
-        .filter_map(|param| {
-            if unsized_params.contains(&param.ident) {
-                return Some(param);
-            }
-
-            None
-        });
-
-    for unsized_param in unsized_params {
-        if !unsized_param.bounds.iter().any(IsUnsizedBound::is_unsized) {
-            unsized_param.bounds.push(parse_quote! { ?Sized });
-        }
-    }
-
-    let mut impl_item_resolver =
-        ImplItemResolver::new(impl_group, &helper_trait_ident, &impl_group.assoc_bindings);
+    let mut impl_item_resolver = ImplItemResolver::new(impl_group, &helper_trait_ident);
     main_trait_impl
         .items
         .iter_mut()
@@ -135,12 +85,46 @@ pub fn generate(
 }
 
 /// Generates main trait implementation with item values set to dummy values
-fn gen_dummy_impl_from_inherent_impl(
-    example_impl: &ItemImpl,
-    impl_group: &ImplGroup,
-) -> syn::ItemImpl {
-    let mut main_trait_impl = example_impl.clone();
-    main_trait_impl.generics = impl_group.generics.clone();
+fn gen_dummy_impl_from_inherent_impl(impl_group: &ImplGroup) -> syn::ItemImpl {
+    let ImplGroup {
+        id,
+
+        impl_items:
+            Some(ImplItems {
+                fns,
+                assoc_types,
+                assoc_consts,
+            }),
+        ..
+    } = &impl_group
+    else {
+        unreachable!()
+    };
+
+    let fns = fns.values().map(|sig| {
+        quote! {
+            #sig { /* DUMMY */ }
+        }
+    });
+    let assoc_types = assoc_types.iter().map(|ident| {
+        quote! {
+            type #ident = DUMMY;
+        }
+    });
+    let assoc_consts = assoc_consts.iter().map(|(ident, ty)| {
+        quote! {
+            const #ident: #ty = DUMMY;
+        }
+    });
+
+    let mut main_trait_impl: syn::ItemImpl = parse_quote! {
+        #id {
+            #(#fns)*
+            #(#assoc_types)*
+            #(#assoc_consts)*
+        }
+    };
+    main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
     main_trait_impl
 }
 
@@ -211,17 +195,15 @@ fn gen_dummy_impl_from_trait_definition(
     }
 }
 
-fn combine_generic_args<'a>(
-    assoc_binding_idents: impl IntoIterator<Item = &'a AssocBindingIdent>,
+fn combine_generic_args(
+    assoc_bindings: &TraitBoundGroup,
     path: &syn::Path,
 ) -> impl Iterator<Item = syn::GenericArgument> {
     let arguments = &path.segments.last().unwrap().arguments;
 
-    let mut generic_args: Vec<_> = assoc_binding_idents
-        .into_iter()
-        .map(|((bounded, trait_bound), assoc_param_name)| {
-            syn::parse_quote! { <#bounded as #trait_bound>::#assoc_param_name }
-        })
+    let mut generic_args: Vec<_> = assoc_bindings
+        .payloads()
+        .map(|p| syn::parse_quote!(#p))
         .collect();
 
     let mut lifetimes = Vec::new();
@@ -238,33 +220,54 @@ fn combine_generic_args<'a>(
     lifetimes.into_iter().chain(generic_args)
 }
 
-fn gen_helper_trait_bound<'a>(
+fn gen_helper_trait_bound(
     impl_group: &ImplGroup,
     helper_trait_ident: &syn::Ident,
-    assoc_binding_idents: impl IntoIterator<Item = &'a AssocBindingIdent>,
+    assoc_bindings: &TraitBoundGroup,
 ) -> syn::Path {
     let mut self_ty = impl_group.id.self_ty.clone();
 
-    let generic_args = if let Some(impl_trait) = &impl_group.id.trait_ {
-        combine_generic_args(assoc_binding_idents, impl_trait)
+    let x = if let Some(impl_trait) = &impl_group.id.trait_ {
+        impl_trait
     } else if let syn::Type::Path(self_ty) = &mut self_ty {
-        gen_inherent_self_ty_args(self_ty, &impl_group.generics.params);
-        combine_generic_args(assoc_binding_idents, &self_ty.path)
+        gen_inherent_self_ty_args(self_ty, &impl_group.params);
+        &self_ty.path
     } else {
         unreachable!()
     };
 
+    let generic_args = combine_generic_args(assoc_bindings, x);
     parse_quote! { #helper_trait_ident<#(#generic_args),*> }
 }
 
+fn gen_inherent_self_ty_args<'a>(
+    self_ty: &mut syn::TypePath,
+    generics: impl IntoIterator<Item = &'a syn::GenericParam>,
+) {
+    let last_seg = &mut self_ty.path.segments.last_mut().unwrap();
+
+    if let syn::PathArguments::AngleBracketed(bracketed) = &mut last_seg.arguments {
+        let mut lifetimes = Vec::new();
+        let mut params = Vec::new();
+
+        generics.into_iter().for_each(|param| match param {
+            syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. }) => {
+                lifetimes.push(lifetime);
+            }
+            syn::GenericParam::Type(syn::TypeParam { ident, .. }) => params.push(ident),
+            syn::GenericParam::Const(syn::ConstParam { ident, .. }) => params.push(ident),
+        });
+
+        *bracketed = parse_quote!(<#(#lifetimes,)* #(#params),*>);
+    } else {
+        unreachable!()
+    }
+}
+
 impl ImplItemResolver {
-    fn new(
-        impl_group: &ImplGroup,
-        helper_trait_ident: &syn::Ident,
-        assoc_bindings: &AssocBindingsGroup,
-    ) -> Self {
+    fn new(impl_group: &ImplGroup, helper_trait_ident: &syn::Ident) -> Self {
         let helper_trait_bound =
-            gen_helper_trait_bound(impl_group, helper_trait_ident, assoc_bindings.idents());
+            gen_helper_trait_bound(impl_group, helper_trait_ident, &impl_group.assoc_bindings);
 
         Self {
             self_as_helper_trait: quote! {
@@ -316,15 +319,92 @@ impl VisitMut for ImplItemResolver {
 }
 
 pub mod param {
-    use crate::param::NonPredicateParamResolver;
+    use crate::generalize::Expr;
 
     use super::*;
 
     struct ParamBoundToWherePredicateMover(Vec<syn::WherePredicate>);
 
+    pub struct ParamResolver<'a> {
+        lifetime_replacements: IndexMap<&'a syn::Ident, &'a syn::Lifetime>,
+        type_param_replacements: IndexMap<&'a syn::Ident, &'a syn::Type>,
+        const_param_replacements: IndexMap<&'a syn::Ident, Expr<'a>>,
+    }
+
     impl ParamBoundToWherePredicateMover {
         fn new() -> Self {
             Self(Vec::new())
+        }
+    }
+
+    impl<'a> ParamResolver<'a> {
+        pub fn new(
+            lifetime_replacements: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::Lifetime)>,
+            type_param_replacements: impl IntoIterator<Item = (&'a syn::Ident, &'a syn::Type)>,
+            const_param_replacements: impl IntoIterator<Item = (&'a syn::Ident, Expr<'a>)>,
+        ) -> Self {
+            Self {
+                lifetime_replacements: lifetime_replacements.into_iter().collect(),
+                type_param_replacements: type_param_replacements.into_iter().collect(),
+                const_param_replacements: const_param_replacements.into_iter().collect(),
+            }
+        }
+
+        fn try_replace_type_path_with_type(&self, ty: &syn::Path) -> Option<syn::Type> {
+            let first_seg = ty.segments.first().unwrap();
+
+            if let Some(&replacement) = self.type_param_replacements.get(&first_seg.ident) {
+                return Some(crate::param::replace_path(ty, replacement));
+            }
+
+            None
+        }
+
+        fn try_replace_expr_path_with_type(&self, path: &mut syn::Path) {
+            let first_seg = path.segments.first_mut().unwrap();
+
+            if let Some(replacement) = self.const_param_replacements.get(&first_seg.ident) {
+                *first_seg = parse_quote!(#replacement);
+            }
+        }
+    }
+
+    impl VisitMut for ParamResolver<'_> {
+        fn visit_lifetime_mut(&mut self, node: &mut syn::Lifetime) {
+            if let Some(&replace_with) = self.lifetime_replacements.get(&node.ident) {
+                *node = replace_with.clone();
+            }
+        }
+
+        fn visit_type_mut(&mut self, node: &mut syn::Type) {
+            match node {
+                syn::Type::Path(ty) => {
+                    syn::visit_mut::visit_type_path_mut(self, ty);
+
+                    if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
+                        *node = new_ty;
+                    } else {
+                        self.try_replace_expr_path_with_type(&mut ty.path);
+                    }
+                }
+                _ => syn::visit_mut::visit_type_mut(self, node),
+            }
+        }
+
+        fn visit_expr_mut(&mut self, node: &mut syn::Expr) {
+            match node {
+                syn::Expr::Path(ty) => {
+                    syn::visit_mut::visit_expr_path_mut(self, ty);
+
+                    // TODO: struct name can clash with type/const param name
+                    if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
+                        *node = parse_quote!(#new_ty);
+                    } else {
+                        self.try_replace_expr_path_with_type(&mut ty.path);
+                    }
+                }
+                _ => syn::visit_mut::visit_expr_mut(self, node),
+            }
         }
     }
 
@@ -342,19 +422,27 @@ pub mod param {
             let ty = &node.ident;
 
             if !node.bounds.is_empty() {
-                let bounds = &node.bounds;
+                let bounds = node.bounds.iter().filter(|bound| {
+                    !matches!(
+                        bound,
+                        syn::TypeParamBound::Trait(syn::TraitBound {
+                            modifier: syn::TraitBoundModifier::Maybe(_),
+                            ..
+                        })
+                    )
+                });
 
                 self.0.push(parse_quote! {
-                    #ty: #bounds
+                    #ty: #(#bounds + )*
                 });
             }
         }
     }
 
     pub fn rewrite_main_trait_bounds_to_where_clause(generics: &mut syn::Generics) {
-        let mut param_bound_resolver = ParamBoundToWherePredicateMover::new();
+        let mut param_bound_mover = ParamBoundToWherePredicateMover::new();
 
-        param_bound_resolver.visit_generics(generics);
+        param_bound_mover.visit_generics(generics);
         generics.params = core::mem::take(&mut generics.params)
             .into_iter()
             .map(|mut param| {
@@ -375,18 +463,18 @@ pub mod param {
         let where_clause = generics.make_where_clause();
         where_clause.predicates = core::mem::take(&mut where_clause.predicates)
             .into_iter()
-            .chain(param_bound_resolver.0)
+            .chain(param_bound_mover.0)
             .collect();
     }
 
     pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, impl_trait: &syn::Path) {
         rewrite_main_trait_bounds_to_where_clause(&mut main_trait.generics);
-        let mut main_trait_iter = main_trait.generics.params.iter();
 
         let mut lifetimes = IndexMap::new();
         let mut type_params = IndexMap::new();
         let mut const_params = IndexMap::new();
 
+        let mut main_trait_iter = main_trait.generics.params.iter();
         match &impl_trait.segments.last().unwrap().arguments {
             syn::PathArguments::None => {}
             syn::PathArguments::AngleBracketed(bracketed) => {
@@ -399,16 +487,16 @@ pub mod param {
                             syn::GenericParam::Lifetime(param),
                             syn::GenericArgument::Lifetime(arg),
                         ) => {
-                            lifetimes.insert(param.lifetime.ident.clone(), arg);
+                            lifetimes.insert(&param.lifetime.ident, arg);
                         }
                         (syn::GenericParam::Type(param), syn::GenericArgument::Type(arg)) => {
-                            type_params.insert(param.ident.clone(), arg);
+                            type_params.insert(&param.ident, arg);
                         }
                         (syn::GenericParam::Const(param), syn::GenericArgument::Const(arg)) => {
-                            const_params.insert(param.ident.clone(), arg.clone());
+                            const_params.insert(&param.ident, Expr::Expr(arg));
                         }
-                        (syn::GenericParam::Const(param), syn::GenericArgument::Type(arg)) => {
-                            const_params.insert(param.ident.clone(), parse_quote!(#arg));
+                        (syn::GenericParam::Const(param), syn::GenericArgument::Type(_)) => {
+                            const_params.insert(&param.ident, Expr::Ident(&param.ident));
                         }
                         _ => unreachable!(),
                     });
@@ -419,51 +507,22 @@ pub mod param {
         main_trait_iter.for_each(|param| match param {
             syn::GenericParam::Lifetime(_) => {}
             syn::GenericParam::Type(param) => {
-                type_params.insert(param.ident.clone(), param.default.as_ref().unwrap());
+                type_params.insert(&param.ident, param.default.as_ref().unwrap());
             }
             syn::GenericParam::Const(param) => {
-                const_params.insert(param.ident.clone(), param.default.clone().unwrap());
+                const_params.insert(&param.ident, Expr::Expr(param.default.as_ref().unwrap()));
             }
         });
 
-        let mut non_predicate_param_resolver =
-            NonPredicateParamResolver::new(lifetimes, type_params, const_params);
+        let mut param_resolver = ParamResolver::new(lifetimes, type_params, const_params);
         if let Some(where_clause) = main_trait.generics.where_clause.as_mut() {
-            non_predicate_param_resolver.visit_where_clause_mut(where_clause);
-            where_clause.predicates = core::mem::take(&mut where_clause.predicates)
-                .into_iter()
-                .filter_map(|mut predicate| {
-                    if let syn::WherePredicate::Type(predicate) = &mut predicate {
-                        let is_param = if let syn::Type::Path(syn::TypePath { path, .. }) =
-                            &predicate.bounded_ty
-                        {
-                            path.get_ident()
-                                .is_some_and(|ident| ident.to_string().starts_with("_ŠČ"))
-                        } else {
-                            false
-                        };
-
-                        if !is_param {
-                            predicate.bounds = core::mem::take(&mut predicate.bounds)
-                                .into_iter()
-                                .filter(|bound| !bound.is_unsized())
-                                .collect();
-                        }
-
-                        if predicate.bounds.is_empty() {
-                            return None;
-                        }
-                    }
-
-                    Some(predicate)
-                })
-                .collect();
+            param_resolver.visit_where_clause_mut(where_clause);
         }
         for supertrait in &mut main_trait.supertraits {
-            non_predicate_param_resolver.visit_type_param_bound_mut(supertrait);
+            param_resolver.visit_type_param_bound_mut(supertrait);
         }
         for item in &mut main_trait.items {
-            non_predicate_param_resolver.visit_trait_item_mut(item);
+            param_resolver.visit_trait_item_mut(item);
         }
     }
 }

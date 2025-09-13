@@ -1,26 +1,28 @@
-use syn::parse_quote;
-
 use super::*;
 
-pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImpl> {
+pub fn generate(
+    impl_group_idx: usize,
+    mut impl_group: ImplGroup,
+) -> impl Iterator<Item = ItemImpl> {
     if impl_group.id.trait_.is_none() {
-        let syn::Type::Path(mut self_ty) = impl_group.id.self_ty.clone() else {
-            unreachable!();
-        };
-
-        gen_inherent_self_ty_args(&mut self_ty, &impl_group.generics.params);
-
         impl_group
-            .item_impls
+            .impls
             .iter_mut()
-            .for_each(|syn::ItemImpl { trait_, .. }| {
-                *trait_ = Some((None, parse_quote!(#self_ty), parse_quote![for]));
-            });
+            .flat_map(|(generic_args, impl_)| {
+                let syn::Type::Path(type_path) = &mut impl_group.id.self_ty else {
+                    unreachable!()
+                };
 
-        impl_group
-            .item_impls
-            .iter_mut()
-            .flat_map(|impl_| &mut impl_.items)
+                let ident = &type_path.path.segments.last_mut().unwrap().ident;
+
+                impl_.trait_ = Some((
+                    None,
+                    parse_quote!(#ident<#(#generic_args),*>),
+                    Default::default(),
+                ));
+
+                &mut impl_.items
+            })
             .for_each(|item| {
                 let vis = match item {
                     syn::ImplItem::Const(syn::ImplItemConst { vis, .. }) => vis,
@@ -36,21 +38,23 @@ pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImp
     let mut impl_assoc_bindings = impl_group
         .assoc_bindings
         .0
-        .iter()
-        .map(|(assoc_binding_ident, assoc_binding_payloads)| {
-            assoc_binding_payloads.iter().map(|payload| {
-                payload
-                    .as_ref()
-                    .map(|payload| quote!(#payload))
-                    .unwrap_or_else(|| {
-                        let ((bounded, trait_bound), assoc_type) = assoc_binding_ident;
-                        quote!(<#bounded as #trait_bound>::#assoc_type)
-                    })
+        .values()
+        .flat_map(|(orig_trait_bound, assoc_bindings)| {
+            assoc_bindings.iter().map(move |(ident, (_, payloads))| {
+                payloads.iter().enumerate().map(move |(i, orig_payload)| {
+                    orig_payload.as_ref().map_or_else(
+                        || {
+                            let (bounded, trait_bound) = &orig_trait_bound[i];
+                            quote!(<#bounded as #trait_bound>::#ident)
+                        },
+                        |p| quote!(#p),
+                    )
+                })
             })
         })
         .collect::<Vec<_>>();
 
-    impl_group.item_impls.iter_mut().for_each(|impl_| {
+    impl_group.impls.iter_mut().for_each(|(_, impl_)| {
         let assoc_bindings = impl_assoc_bindings.iter_mut().map(|x| x.next().unwrap());
 
         let trait_ = &mut impl_.trait_.as_mut().unwrap().1;
@@ -58,13 +62,12 @@ pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImp
 
         match &mut path.arguments {
             syn::PathArguments::None => {
-                let bracketed = syn::parse_quote! { <#( #assoc_bindings ),*> };
-                path.arguments = syn::PathArguments::AngleBracketed(bracketed)
+                let bracketed = parse_quote! { <#( #assoc_bindings ),*> };
+                path.arguments = syn::PathArguments::AngleBracketed(bracketed);
             }
             syn::PathArguments::AngleBracketed(bracketed) => {
                 bracketed.args = assoc_bindings
-                    .into_iter()
-                    .map::<syn::GenericArgument, _>(|param| syn::parse_quote!(#param))
+                    .map(|param| parse_quote!(#param))
                     .chain(core::mem::take(&mut bracketed.args))
                     .collect();
             }
@@ -74,5 +77,5 @@ pub fn generate(impl_group_idx: usize, mut impl_group: ImplGroup) -> Vec<ItemImp
         path.ident = helper_trait::gen_ident(&path.ident, impl_group_idx);
     });
 
-    impl_group.item_impls
+    impl_group.impls.into_iter().map(|(_, impl_)| impl_)
 }

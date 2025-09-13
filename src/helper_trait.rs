@@ -5,70 +5,48 @@ use super::*;
 /// Generate helper trait
 ///
 /// Helper trait contains all items of the main trait but is parametrized with
-/// type parameters corresponding to a minimal set of associated bounds
-/// required to uniquely identify all of the disjoint impls
+/// type parameters corresponding to a minimal set of associated bindings
+/// that uniquely identify all of the disjoint impls within an impl group
 pub fn generate(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
     impl_group: &ImplGroup,
 ) -> Option<syn::ItemTrait> {
-    let assoc_binding_count = &impl_group.assoc_bindings.idents().count();
+    let assoc_binding_count = &impl_group.assoc_bindings.generalized_idents().count();
 
     let mut helper_trait = if let Some(helper_trait) = main_trait {
         helper_trait.clone()
-    } else if let Some(helper_trait) = impl_group.item_impls.first().cloned() {
-        let syn::ItemImpl {
-            attrs,
-            unsafety,
-            mut self_ty,
-            items,
-            ..
-        } = helper_trait.clone();
+    } else {
+        let impl_items = gen_inherent_trait_items(impl_group.impl_items.as_ref().unwrap());
 
-        let items = gen_inherent_impl_items(&items);
-        let impl_generics = &impl_group.generics.params;
-
-        if let syn::Type::Path(type_path) = &mut *self_ty {
+        let mut self_ty = impl_group.id.self_ty.clone();
+        if let syn::Type::Path(type_path) = &mut self_ty {
             type_path.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
         }
 
-        syn::parse_quote! {
-            #(#attrs)*
-            #unsafety trait #self_ty <#impl_generics> {
-                #(#items)*
+        let impl_generics = &impl_group.params;
+
+        parse_quote! {
+            trait #self_ty <#(#impl_generics,)*> {
+                #(#impl_items)*
             }
         }
-    } else {
-        return None;
     };
-
-    let mut assoc_binding_idents = impl_group.assoc_bindings.idents().enumerate().map(
-        |(i, ((bounded, trait_bound), assoc_binding))| {
-            let pos = syn::LitInt::new(&i.to_string(), proc_macro2::Span::call_site());
-            quote!(#pos. <#bounded as #trait_bound>::#assoc_binding)
-        },
-    );
-
-    let doc_str = format!(
-        "Helper trait with arguments corresponding to the following associated bindings:\n{}\n",
-        assoc_binding_idents.join(",\n")
-    );
 
     helper_trait.attrs = core::mem::take(&mut helper_trait.attrs)
         .into_iter()
         .filter(|attr| !is_remote(attr))
         .collect();
 
-    helper_trait.attrs.push(parse_quote!(#[doc = #doc_str]));
-    helper_trait.vis = syn::Visibility::Public(syn::parse_quote!(pub));
+    helper_trait.vis = syn::Visibility::Public(parse_quote!(pub));
     helper_trait.ident = gen_ident(&helper_trait.ident, impl_group_idx);
 
     let start_idx = helper_trait.generics.params.len();
     helper_trait.generics.params = combine_generic_args(
-        (start_idx..start_idx + assoc_binding_count).map(param::gen_indexed_param_ident),
+        (start_idx..start_idx + assoc_binding_count).map(|i| format_ident!("_TŠČ{i}")),
         &helper_trait.generics,
     )
-    .map(|arg| -> syn::GenericParam { syn::parse_quote!(#arg) })
+    .map(|arg| -> syn::GenericParam { parse_quote!(#arg) })
     .collect();
 
     Some(helper_trait)
@@ -95,49 +73,21 @@ fn combine_generic_args(
     lifetimes.into_iter().chain(generic_args)
 }
 
-fn gen_inherent_impl_items(
-    impl_items: &[syn::ImplItem],
-) -> impl Iterator<Item = syn::ImplItem> + '_ {
-    impl_items.iter().map(|impl_item| match impl_item {
-        syn::ImplItem::Const(item) => {
-            let syn::ImplItemConst {
-                attrs,
-                ident,
-                generics,
-                ty,
-                ..
-            } = &item;
+fn gen_inherent_trait_items(impl_items: &ImplItems) -> impl Iterator<Item = syn::TraitItem> {
+    let assoc_consts = impl_items
+        .assoc_consts
+        .iter()
+        .map(|(ident, ty)| syn::TraitItem::Const(parse_quote! { const #ident: #ty; }));
+    let assoc_types = impl_items
+        .assoc_types
+        .iter()
+        .map(|ident| syn::TraitItem::Type(parse_quote! { const #ident; }));
+    let fns = impl_items
+        .fns
+        .values()
+        .map(|sig| syn::TraitItem::Fn(parse_quote! { #sig; }));
 
-            syn::parse_quote! {
-                #(#attrs),*
-                const #ident: #ty #generics;
-            }
-        }
-        syn::ImplItem::Type(item) => {
-            let syn::ImplItemType {
-                attrs,
-                ident,
-                generics,
-                ..
-            } = &item;
-
-            let (impl_generics, _, where_clause) = generics.split_for_impl();
-
-            syn::parse_quote! {
-                #(#attrs),*
-                type #ident #impl_generics #where_clause;
-            }
-        }
-        syn::ImplItem::Fn(item) => {
-            let syn::ImplItemFn { attrs, sig, .. } = &item;
-
-            syn::parse_quote! {
-                #(#attrs),*
-                #sig;
-            }
-        }
-        item => abort!(item, "Not supported"),
-    })
+    assoc_consts.chain(assoc_types).chain(fns)
 }
 
 /// Generate ident of the helper trait

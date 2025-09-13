@@ -47,63 +47,53 @@ disjoint_impls! {
 pub trait Kita<'a, 'b, U> {
     fn get_name(&self) -> &str;
 }
+
 const _: () = {
-    /**Helper trait with arguments corresponding to the following associated bindings:
-0. < & '_3 _4 as Dispatch > :: Group
-*/
-    pub trait Kita0<'a, 'b, _3: ?Sized, U> {
+    pub trait Kita0<'a, 'b, _TŠČ3: ?Sized, U> {
         fn get_name(&self) -> &str;
     }
+
     impl<
-        '_0,
-        '_1,
-        '_3,
-        '_5,
-        _4,
-        _2,
-    > Kita0<'_0, '_1, &'_5 GroupA, _2> for &'_3 _4
+        '_lšč0,
+        '_lšč1,
+        '_lšč2,
+        '_lšč3,
+        T,
+        U,
+    > Kita0<'_lšč0, '_lšč1, &'_lšč3 GroupA, U> for &'_lšč2 T
     where
-        &'_3 _4: Dispatch<Group = &'_5 GroupA>,
+        &'_lšč2 T: Dispatch<Group = &'_lšč3 GroupA>,
     {
         fn get_name(&self) -> &str {
             "Blanket A"
         }
     }
-    impl<
-        '_0,
-        '_1,
-        '_3,
-        _4,
-        _2,
-    > Kita0<'_0, '_1, GroupB, _2> for &'_3 _4
+    impl<'a, 'b, 'c, '_lšč0, T, U> Kita0<'a, 'b, &'_lšč0 GroupB, U> for &'c T
     where
-        &'_3 _4: Dispatch<Group = GroupB>,
+        &'c T: Dispatch<Group = &'_lšč0 GroupB>,
     {
         fn get_name(&self) -> &str {
             "Blanket B"
         }
     }
+
     impl<
-        '_0,
-        '_1,
-        '_3,
-        '_5,
-        _2,
-        _4,
-    > Kita<'_0, '_1, _2> for &'_3 _4
+        '_lšč0,
+        '_lšč1,
+        '_lšč2,
+        '_lšč3,
+        U,
+        T: '_lšč2,
+        _TŠČ2: '_lšč3,
+    > Kita<'_lšč0, '_lšč1, U> for &'_lšč2 T
     where
-        '_0:,
-        '_1:,
-        &'_3 _4: Dispatch,
-        Self: Kita0<'_0, '_1, <&'_3 _4 as Dispatch>::Group, _2>,
+        '_lšč0:,
+        '_lšč1:,
+        Self: Kita0<'_lšč0, '_lšč1, &'_lšč3 _TŠČ2, U>,
+        &'_lšč2 T: Dispatch<Group = &'_lšč3 _TŠČ2>,
     {
         fn get_name(&self) -> &str {
-            <Self as Kita0<
-                '_0,
-                '_1,
-                <&'_3 _4 as Dispatch>::Group,
-                _2,
-            >>::get_name(self)
+            { <Self as Kita0<'_lšč0, '_lšč1, &'_lšč3 _TŠČ2, U>>::get_name(self) }
         }
     }
 };

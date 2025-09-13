@@ -21,7 +21,13 @@ impl Dispatch for u32 {
 }
 
 disjoint_impls! {
+    /// # Safety
+    ///
+    /// This trait is unsafe
     pub unsafe trait Kita<U>: Dispatch {
+        /// # Safety
+        ///
+        /// This function is unsafe
         unsafe fn kita() -> &'static str {
             "Default blanket"
         }
@@ -40,36 +46,49 @@ disjoint_impls! {
 }
 
 /*
+/// # Safety
+///
+/// This trait is unsafe
 pub unsafe trait Kita<U>: Dispatch {
+    /// # Safety
+    ///
+    /// This function is unsafe
     unsafe fn kita() -> &'static str {
         "Default blanket"
     }
 }
 
 const _: () = {
-    pub unsafe trait Kita0<_1: ?Sized, U>: Dispatch {
+    /// # Safety
+    ///
+    /// This trait is unsafe
+    pub unsafe trait Kita0<_TŠČ1: ?Sized, U>: Dispatch {
+        /// # Safety
+        ///
+        /// This function is unsafe
         unsafe fn kita() -> &'static str {
             "Default blanket"
         }
     }
-    unsafe impl<_0, _1: Dispatch<Group = GroupA>> Kita0<GroupA, _0> for _1 {
+
+    unsafe impl<U, T: Dispatch<Group = GroupA>> Kita0<GroupA, U> for T {
         unsafe fn kita() -> &'static str {
             "Blanket A"
         }
     }
-    unsafe impl<_0, _1: Dispatch<Group = GroupB>> Kita0<GroupB, _0> for _1 {
+    unsafe impl<U, T: Dispatch<Group = GroupB>> Kita0<GroupB, U> for T {
         unsafe fn kita() -> &'static str {
             "Blanket B"
         }
     }
 
-    unsafe impl<_0, _1> Kita<_0> for _1
+    unsafe impl<U, T, _TŠČ2> Kita<U> for T
     where
-        _1: Dispatch,
-        Self: Kita0<<_1 as Dispatch>::Group, _0>,
+        Self: Kita0<_TŠČ2, U>,
+        T: Dispatch<Group = _TŠČ2>,
     {
         unsafe fn kita() -> &'static str {
-            unsafe { <Self as Kita0<<_1 as Dispatch>::Group, _0>>::kita() }
+            unsafe { <Self as Kita0<_TŠČ2, U>>::kita() }
         }
     }
 };

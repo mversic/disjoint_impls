@@ -46,34 +46,35 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
+
 const _: () = {
-    pub trait Kita0<_0: ?Sized> {
+    pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<_0> Kita0<GroupA> for _0
+    impl<T> Kita0<GroupA> for T
     where
-        Option<_0>: Dispatch<Group = GroupA>,
+        Option<T>: Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0> Kita0<GroupB> for Vec<_0>
+    impl<U> Kita0<GroupB> for Vec<U>
     where
-        Option<Vec<_0>>: Dispatch<Group = GroupB>,
+        Option<Vec<U>>: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
     }
-
-    impl<_0> Kita for _0
+    impl<T, _TŠČ1> Kita for T
     where
-        Option<_0>: Dispatch,
-        Self: Kita0<<Option<_0> as Dispatch>::Group>,
+        Self: Kita0<_TŠČ1>,
+        Option<T>: Dispatch<Group = _TŠČ1>,
     {
-        const NAME: &'static str = <Self as Kita0<<Option<_0> as Dispatch>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<_TŠČ1>>::NAME;
     }
-    impl<_0> Kita for Option<_0>
+
+    impl<T> Kita for Option<T>
     where
-        Option<_0>: Dispatch<Group = GroupA>,
+        Option<T>: Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket C";
     }

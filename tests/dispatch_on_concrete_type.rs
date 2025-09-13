@@ -1,22 +1,25 @@
 use disjoint_impls::disjoint_impls;
 
-pub trait Dispatch {
+pub trait Dispatch<U> {
     type Group;
 }
 
 pub enum GroupA {}
-impl Dispatch for String {
+impl Dispatch<GroupB> for String {
     type Group = GroupA;
 }
-impl<T> Dispatch for Vec<T> {
+impl<T> Dispatch<GroupB> for Vec<T> {
     type Group = GroupA;
 }
 
 pub enum GroupB {}
-impl Dispatch for i32 {
+impl Dispatch<GroupB> for i32 {
     type Group = GroupB;
 }
-impl Dispatch for u32 {
+impl Dispatch<GroupA> for u32 {
+    type Group = GroupB;
+}
+impl Dispatch<GroupB> for u32 {
     type Group = GroupB;
 }
 
@@ -25,15 +28,15 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    impl<T: Dispatch<Group = GroupA>> Kita for T
+    impl<T: Dispatch<U, Group = GroupA>, U> Kita for T
     where
-        u32: Dispatch<Group = GroupB>,
+        u32: Dispatch<GroupA, Group = U>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T: Dispatch<Group = GroupB>> Kita for T
+    impl<T: Dispatch<U, Group = GroupB>, U> Kita for T
     where
-        u32: Dispatch<Group = GroupB>,
+        u32: Dispatch<GroupA, Group = U>,
     {
         const NAME: &'static str = "Blanket B";
     }
@@ -45,35 +48,35 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_0: ?Sized> {
+    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<_0: Dispatch<Group = GroupA>> Kita0<GroupA> for _0
+    impl<T: Dispatch<U, Group = GroupA>, U> Kita0<U, GroupA> for T
     where
-        u32: Dispatch<Group = GroupB>,
+        u32: Dispatch<GroupA, Group = U>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0: Dispatch<Group = GroupB>> Kita0<GroupB> for _0
+    impl<T: Dispatch<U, Group = GroupB>, U> Kita0<U, GroupB> for T
     where
-        u32: Dispatch<Group = GroupB>,
+        u32: Dispatch<GroupA, Group = U>,
     {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<_0> Kita for _0
+    impl<T, _TŠČ1, _TŠČ2> Kita for T
     where
-        _0: Dispatch,
-        Self: Kita0<<_0 as Dispatch>::Group>,
+        Self: Kita0<_TŠČ1, _TŠČ2>,
+        u32: Dispatch<GroupA, Group = _TŠČ1>,
+        T: Dispatch<_TŠČ1, Group = _TŠČ2>,
     {
-        const NAME: &'static str = <Self as Kita0<<_0 as Dispatch>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<_TŠČ1, _TŠČ2>>::NAME;
     }
 };
- */
+*/
 
-#[test]
-fn dispatch_on_concrete_type() {
+fn main() {
     assert_eq!("Blanket A", <String as Kita>::NAME);
     assert_eq!("Blanket A", <Vec::<u32> as Kita>::NAME);
 

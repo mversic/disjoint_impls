@@ -4,9 +4,9 @@ pub trait Dispatch<'a, T> {
     type Group;
 }
 
-trait T<'a> {}
-impl T<'_> for String {}
-impl T<'_> for Vec<u32> {}
+trait Tr<'a> {}
+impl Tr<'_> for String {}
+impl Tr<'_> for Vec<u32> {}
 
 pub enum GroupA {}
 impl Dispatch<'_, ()> for String {
@@ -37,16 +37,15 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    // NOTE: Dispatch trait parameters must be the same
     impl<'a, T: Dispatch<'a, (), Group = GroupC>> Kita for &T {
         const NAME: &'static str = "Blanket C";
     }
-    impl<'a, 'c, T: Dispatch<'a, (), Group = GroupB>> Kita for &'c T {
+    impl<'a, T: Dispatch<'a, (), Group = GroupB>> Kita for &T {
         const NAME: &'static str = "Blanket B";
     }
-    impl<'b, 'k, 'a, T: Dispatch<'b, (), Group = GroupA>> Kita for &'a T
+    impl<'b, 'k, T: Dispatch<'b, (), Group = GroupA>> Kita for &T
     where
-        T: T<'k>,
+        T: Tr<'k>,
     {
         const NAME: &'static str = "Blanket A";
     }
@@ -58,26 +57,34 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_0: ?Sized> {
+    pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<'_2, '_3, '_0, _1: Dispatch<'_2, (), Group = GroupA>> Kita0<GroupA> for &'_0 _1
+    impl<'a, '_lšč0, T: Dispatch<'a, (), Group = GroupC>> Kita0<GroupC>
+    for &'_lšč0 T {
+        const NAME: &'static str = "Blanket C";
+    }
+    impl<'a, '_lšč0, T: Dispatch<'a, (), Group = GroupB>> Kita0<GroupB>
+    for &'_lšč0 T {
+        const NAME: &'static str = "Blanket B";
+    }
+    impl<'b, 'k, '_lšč0, T: Dispatch<'b, (), Group = GroupA>> Kita0<GroupA>
+    for &'_lšč0 T
     where
-        _1: T<'_3>,
+        T: Tr<'k>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<'_2, '_0, _1: Dispatch<'_2, (), Group = GroupB>> Kita0<GroupB> for &'_0 _1 {
-        const NAME: &'static str = "Blanket B";
-    }
 
-    impl<'_0, '_2, _1> Kita for &'_0 _1
+    impl<'_lšč0, '_lšč1, T: '_lšč0> Kita for &'_lšč0 T
     where
-        _1: Dispatch<'_2, ()>,
-        Self: Kita0<<_1 as Dispatch<'_2, ()>>::Group>,
+        Self: Kita0<<T as Dispatch<'_lšč1, ()>>::Group>,
+        T: Dispatch<'_lšč1, ()>,
     {
-        const NAME: &'static str = <Self as Kita0<<_1 as Dispatch<'_2, ()>>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<
+            <T as Dispatch<'_lšč1, ()>>::Group,
+        >>::NAME;
     }
 };
 */

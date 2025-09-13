@@ -29,18 +29,18 @@ disjoint_impls! {
         const U: &'static str;
     }
 
-    impl<U, T: Dispatch<Group = GroupA>> U<U> for T
+    impl<K, T: Dispatch<Group = GroupA>> U<K> for T
     where
-        U: From<u8>,
+        K: From<u8>,
     {
-        type U = U;
+        type U = K;
         const U: &'static str = "Blanket A";
     }
-    impl<U, T: Dispatch<Group = GroupB>> U<U> for T
+    impl<K, T: Dispatch<Group = GroupB>> U<K> for T
     where
-        U: From<u8>,
+        K: From<u8>,
     {
-        type U = U;
+        type U = K;
         const U: &'static str = "Blanket B";
     }
 }
@@ -55,7 +55,7 @@ where
 }
 
 const _: () = {
-    pub trait U0<_1: ?Sized, U>
+    pub trait U0<_TŠČ1: ?Sized, U>
     where
         U: From<u8>,
     {
@@ -63,35 +63,36 @@ const _: () = {
         const U: &'static str;
     }
 
-    impl<_0, _1: Dispatch<Group = GroupA>> U0<GroupA, _0> for _1
+    impl<K, T: Dispatch<Group = GroupA>> U0<GroupA, K> for T
     where
-        _0: From<u8>,
+        K: From<u8>,
     {
-        type U = _0;
+        type U = K;
         const U: &'static str = "Blanket A";
     }
-    impl<_0, _1: Dispatch<Group = GroupB>> U0<GroupB, _0> for _1
+    impl<K, T: Dispatch<Group = GroupB>> U0<GroupB, K> for T
     where
-        _0: From<u8>,
+        K: From<u8>,
     {
-        type U = _0;
+        type U = K;
         const U: &'static str = "Blanket B";
     }
 
-    impl<_0, _1> U<_0> for _1
+    impl<K, T, _TŠČ2> U<K> for T
     where
-        _0: From<u8>,
-        _1: Dispatch,
-        Self: U0<<_1 as Dispatch>::Group, _0>,
+        K: From<u8>,
+        Self: U0<_TŠČ2, K>,
+        T: Dispatch<Group = _TŠČ2>,
+        K: From<u8>,
     {
-        type U = <Self as U0<<_1 as Dispatch>::Group, _0>>::U;
-        const U: &'static str = <Self as U0<<_1 as Dispatch>::Group, _0>>::U;
+        type U = <Self as U0<_TŠČ2, K>>::U;
+        const U: &'static str = <Self as U0<_TŠČ2, K>>::U;
     }
 };
 */
 
 #[test]
-fn overlapping_trait_and_param_idents() {
+fn overlapping_idents() {
     assert_eq!("Blanket A", <String as U<u8>>::U);
     assert_eq!("Blanket A", <Vec::<u32> as U<u16>>::U);
     assert_eq!("Blanket B", <u32 as U<u32>>::U);

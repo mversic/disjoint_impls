@@ -36,6 +36,12 @@ disjoint_impls! {
             "Blanket B".to_owned()
         }
     }
+
+    impl<T: Dispatch<Group = GroupB> + ?Sized, U> Kita<U, str> for T {
+        fn kita(&self) -> String {
+            "Blanket for str".to_owned()
+        }
+    }
 }
 
 /*
@@ -44,36 +50,35 @@ pub trait Kita<T: ?Sized, U: ?Sized> {
 }
 
 const _: () = {
-    pub trait Kita0<_2: ?Sized, T: ?Sized, U: ?Sized> {
+    pub trait Kita0<_TŠČ2: ?Sized, T: ?Sized, U: ?Sized> {
         fn kita(&self) -> String;
     }
 
-    impl<
-        _2: Dispatch<Group = GroupA>,
-        _0: ?Sized,
-        _1,
-    > Kita0<GroupA, _0, _1> for _2 {
+    impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita0<GroupA, U, V> for T {
         fn kita(&self) -> String {
             "Blanket A".to_owned()
         }
     }
-    impl<
-        _2: Dispatch<Group = GroupB> + ?Sized,
-        _0,
-        _1,
-    > Kita0<GroupB, _0, _1> for _2 {
+    impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita0<GroupB, U, V> for T {
         fn kita(&self) -> String {
             "Blanket B".to_owned()
         }
     }
+    impl<T: Dispatch<Group = GroupB> + ?Sized, U> Kita0<GroupB, U, str> for T {
+        fn kita(&self) -> String {
+            "Blanket for str".to_owned()
+        }
+    }
 
-    impl<_0: ?Sized, _1: ?Sized, _2: ?Sized> Kita<_0, _1> for _2
+    impl<U: ?Sized, V: ?Sized, T: ?Sized, _TŠČ3> Kita<U, V> for T
     where
-        _2: Dispatch,
-        Self: Kita0<<_2 as Dispatch>::Group, _0, _1>,
+        U:,
+        V:,
+        Self: Kita0<_TŠČ3, U, V>,
+        T: Dispatch<Group = _TŠČ3>,
     {
         fn kita(&self) -> String {
-            <Self as Kita0<<_2 as Dispatch>::Group, _0, _1>>::kita(self)
+            { <Self as Kita0<_TŠČ3, U, V>>::kita(self) }
         }
     }
 };
@@ -86,6 +91,9 @@ fn unsized_type() {
         <String as Kita<str, u32>>::kita(&String::new())
     );
     assert_eq!("Blanket A", <Vec<u8> as Kita<str, u32>>::kita(&Vec::new()));
-    assert_eq!("Blanket B", <str as Kita<u32, u32>>::kita(&""));
+    assert_eq!("Blanket B", <str as Kita<u32, u32>>::kita(""));
     assert_eq!("Blanket B", <[u8] as Kita<u32, u32>>::kita(&[]));
+
+    assert_eq!("Blanket for str", <str as Kita<u32, str>>::kita(""));
+    assert_eq!("Blanket for str", <[u8] as Kita<u32, str>>::kita(&[]));
 }

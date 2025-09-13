@@ -52,46 +52,46 @@ pub trait Kita<U> {
 }
 
 const _: () = {
-    pub trait Kita0<_1: ?Sized, U> {
+    pub trait Kita0<_TŠČ1: ?Sized, U> {
         const NAME: &'static str;
     }
-    pub trait Kita1<_1: ?Sized, U> {
+    pub trait Kita1<_TŠČ1: ?Sized, U> {
         const NAME: &'static str;
     }
 
-    impl<_2, _0, _1> Kita0<GroupA, (_0, _1)> for _2
+    impl<T, U, C> Kita0<GroupA, (U, C)> for T
     where
-        (_0, _1): Dispatch<Group = GroupA>,
+        (U, C): Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "1st Blanket A";
     }
-    impl<_2, _0, _1> Kita0<GroupB, (_0, _1)> for _2
+    impl<T, U, C> Kita0<GroupB, (U, C)> for T
     where
-        (_0, _1): Dispatch<Group = GroupB>,
+        (U, C): Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "1st Blanket B";
     }
 
-    impl<_0: Dispatch<Group = GroupA>> Kita1<GroupA, (i32,)> for _0 {
+    impl<T: Dispatch<Group = GroupA>> Kita1<GroupA, (i32,)> for T {
         const NAME: &'static str = "2nd Blanket A";
     }
-    impl<_0: Dispatch<Group = GroupB>> Kita1<GroupB, (i32,)> for _0 {
+    impl<T: Dispatch<Group = GroupB>> Kita1<GroupB, (i32,)> for T {
         const NAME: &'static str = "2nd Blanket B";
     }
 
-    impl<_0, _1, _2> Kita<(_0, _1)> for _2
+    impl<U, C, T, _TŠČ3> Kita<(U, C)> for T
     where
-        (_0, _1): Dispatch,
-        Self: Kita0<<(_0, _1) as Dispatch>::Group, (_0, _1)>,
+        Self: Kita0<_TŠČ3, (U, C)>,
+        (U, C): Dispatch<Group = _TŠČ3>,
     {
-        const NAME: &'static str = <Self as Kita0<<(_0, _1) as Dispatch>::Group, (_0, _1)>>::NAME;
+        const NAME: &'static str = <Self as Kita0<_TŠČ3, (U, C)>>::NAME;
     }
-    impl<_0> Kita<(i32,)> for _0
+    impl<T, _TŠČ1> Kita<(i32,)> for T
     where
-        _0: Dispatch,
-        Self: Kita1<<_0 as Dispatch>::Group, (i32,)>,
+        Self: Kita1<_TŠČ1, (i32,)>,
+        T: Dispatch<Group = _TŠČ1>,
     {
-        const NAME: &'static str = <Self as Kita1<<_0 as Dispatch>::Group, (i32,)>>::NAME;
+        const NAME: &'static str = <Self as Kita1<_TŠČ1, (i32,)>>::NAME;
     }
 };
 */

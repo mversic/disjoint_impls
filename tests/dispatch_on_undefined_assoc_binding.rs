@@ -57,40 +57,37 @@ disjoint_impls! {
 
 /*
 pub trait Kita {
-    const NAME: &'static str;
+    const NAME: &str;
 }
 
 const _: () = {
-    pub trait Kita0<_ŠČ0: ?Sized, _ŠČ1: ?Sized> {
-        const NAME: &'static str;
+    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
+        const NAME: &str;
     }
 
-    impl<
-        _ŠČ0: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>,
-    > Kita0<GroupA, GroupA> for _ŠČ0 {
-        const NAME: &'static str = "Blanket A";
+    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA, GroupA>
+    for T {
+        const NAME: &str = "Blanket A";
     }
     impl<
-        _ŠČ0: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>,
-    > Kita0<GroupB, <_ŠČ0 as Dispatch2>::Group> for _ŠČ0 {
+        T: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>,
+    > Kita0<GroupB, <T as Dispatch2>::Group> for T {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<_ŠČ0> Kita for _ŠČ0
+    impl<T, _TŠČ1, _TŠČ2> Kita for T
     where
-        _ŠČ0: Dispatch1 + Dispatch2,
-        Self: Kita0<<_ŠČ0 as Dispatch1>::Group, <_ŠČ0 as Dispatch2>::Group>,
+        Self: Kita0<_TŠČ1, _TŠČ2>,
+        T: Dispatch1<Group = _TŠČ1>,
+        T: Dispatch2<Group = _TŠČ2>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <_ŠČ0 as Dispatch1>::Group,
-            <_ŠČ0 as Dispatch2>::Group,
-        >>::NAME;
+        const NAME: &str = <Self as Kita0<_TŠČ1, _TŠČ2>>::NAME;
     }
 };
 */
 
 #[test]
-fn ignored_assoc_bound() {
+fn dispatch_on_undefined_assoc_binding() {
     assert_eq!("Blanket A", String::NAME);
     assert_eq!("Blanket B", u32::NAME);
     assert_eq!("Blanket B", i32::NAME);

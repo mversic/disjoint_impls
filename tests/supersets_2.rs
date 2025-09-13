@@ -58,43 +58,41 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_0: ?Sized> {
+    pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
 
-    impl<_0, _1> Kita0<GroupA> for (_0, _1)
+    impl<T, U> Kita0<GroupA> for (T, U)
     where
-        (_0, _1): Dispatch<Group = GroupA>,
+        (T, U): Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<_0, _1> Kita0<GroupB> for (Vec<_0>, _1)
+    impl<T, U> Kita0<GroupB> for (Vec<T>, U)
     where
-        (Vec<_0>, _1): Dispatch<Group = GroupB>,
+        (Vec<T>, U): Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
     }
-    impl<_0, _1> Kita0<GroupC> for (_0, Vec<_1>)
+    impl<T, U> Kita0<GroupC> for (T, Vec<U>)
     where
-        (_0, Vec<_1>): Dispatch<Group = GroupC>,
+        (T, Vec<U>): Dispatch<Group = GroupC>,
     {
         const NAME: &'static str = "Blanket C";
     }
-    impl<_0, _1> Kita0<GroupD> for (Vec<_0>, Vec<_1>)
+    impl<T, U> Kita0<GroupD> for (Vec<T>, Vec<U>)
     where
-        (Vec<_0>, Vec<_1>): Dispatch<Group = GroupD>,
+        (Vec<T>, Vec<U>): Dispatch<Group = GroupD>,
     {
         const NAME: &'static str = "Blanket D";
     }
 
-    impl<_0, _1> Kita for (_0, _1)
+    impl<T, U, _TŠČ2> Kita for (T, U)
     where
-        (_0, _1): Dispatch,
-        Self: Kita0<<(_0, _1) as Dispatch>::Group>,
+        Self: Kita0<_TŠČ2>,
+        (T, U): Dispatch<Group = _TŠČ2>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <(_0, _1) as Dispatch>::Group,
-        >>::NAME;
+        const NAME: &'static str = <Self as Kita0<_TŠČ2>>::NAME;
     }
 };
 */

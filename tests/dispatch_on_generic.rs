@@ -4,14 +4,14 @@ pub trait Dispatch {
     type Group;
 }
 
-trait A {
+trait Tr {
     type A;
 }
 
-impl A for u8 {
+impl Tr for u8 {
     type A = u16;
 }
-impl A for i8 {
+impl Tr for i8 {
     type A = i16;
 }
 
@@ -54,7 +54,7 @@ disjoint_impls! {
         }
     }
 
-    impl<T: Dispatch<Group = (U,)>, U: A<A = A>, A> Kita<u32, U> for T {}
+    impl<T: Dispatch<Group = (U,)>, U: Tr<A = A>, A> Kita<u32, U> for T {}
 }
 
 /*
@@ -65,33 +65,34 @@ pub trait Kita<U, V> {
 }
 
 const _: () = {
-    pub trait Kita0<_2: ?Sized, U, V> {
+    pub trait Kita0<_TŠČ2: ?Sized, U, V> {
         fn kita(_a: U, _b: V) -> String {
             "Default Blanket".to_owned()
         }
     }
 
-    impl<_2: Dispatch<Group = (_0, _1)>, _0, _1> Kita0<(_0, _1), (_0,), _1> for _2 {
-        fn kita(_a: (_0,), _b: _1) -> String {
+    impl<T: Dispatch<Group = (U, V)>, U, V> Kita0<(U, V), (U,), V> for T {
+        fn kita(_a: (U,), _b: V) -> String {
             "Generic Blanket A".to_owned()
         }
     }
-    impl<_2: Dispatch<Group = [(_1, _0); 1]>, _1: ToString, _0> Kita0<[(_1, _0); 1], (_0,), _1> for _2 {
-        fn kita(_a: (_0,), b: _1) -> String {
+    impl<T: Dispatch<Group = [(U, V); 1]>, U: ToString, V> Kita0<[(U, V); 1], (V,), U>
+    for T {
+        fn kita(_a: (V,), b: U) -> String {
             b.to_string()
         }
     }
 
-    impl<_0, _1, _2> Kita<(_0,), _1> for _2
+    impl<U, V, T, _TŠČ3> Kita<(U,), V> for T
     where
-        _2: Dispatch,
-        Self: Kita0<<_2 as Dispatch>::Group, (_0,), _1>,
+        Self: Kita0<_TŠČ3, (U,), V>,
+        T: Dispatch<Group = _TŠČ3>,
     {
-        fn kita(_a: (_0,), _b: _1) -> String {
-            <Self as Kita0<<_2 as Dispatch>::Group, (_0,), _1>>::kita(_a, _b)
+        fn kita(_a: (U,), _b: V) -> String {
+            { <Self as Kita0<_TŠČ3, (U,), V>>::kita(_a, _b) }
         }
     }
-    impl<_1: Dispatch<Group = (_0,)>, _0: A<A = _2>, _2> Kita<u32, _0> for _1 {}
+    impl<T: Dispatch<Group = (U,)>, U: Tr<A = A>, A> Kita<u32, U> for T {}
 };
 */
 

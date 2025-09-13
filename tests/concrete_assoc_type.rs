@@ -46,41 +46,36 @@ disjoint_impls! {
 /*
 pub trait Kita {
     type Item;
-
     fn kita() -> Self::Item;
 }
 
 const _: () = {
-    pub trait Kita0<_0: ?Sized> {
+    pub trait Kita0<_TŠČ0: ?Sized> {
         type Item;
-
         fn kita() -> Self::Item;
     }
 
-    impl<_0: Dispatch<Group = GroupA>> Kita0<GroupA> for _0 {
+    impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
         type Item = u32;
-
         fn kita() -> u32 {
             1
         }
     }
-    impl<_0: Dispatch<Group = GroupB> + Default> Kita0<GroupB> for _0 {
-        type Item = _0;
-
+    impl<U: Dispatch<Group = GroupB> + Default> Kita0<GroupB> for U {
+        type Item = U;
         fn kita() -> Self::Item {
-            <_0>::default()
+            <U as Default>::default()
         }
     }
 
-    impl<_0> Kita for _0
+    impl<T, _TŠČ1> Kita for T
     where
-        _0: Dispatch,
-        Self: Kita0<<_0 as Dispatch>::Group>,
+        Self: Kita0<_TŠČ1>,
+        T: Dispatch<Group = _TŠČ1>,
     {
-        type Item = <Self as Kita0<<_0 as Dispatch>::Group>>::Item;
-
+        type Item = <Self as Kita0<_TŠČ1>>::Item;
         fn kita() -> Self::Item {
-            <Self as Kita0<<_0 as Dispatch>::Group>>::kita()
+            { <Self as Kita0<_TŠČ1>>::kita() }
         }
     }
 };

@@ -86,6 +86,79 @@ disjoint_impls! {
     }
 }
 
+/*
+pub trait Kita {
+    type Item;
+    fn kita(&mut self) -> Self::Item;
+}
+
+const _: () = {
+    pub trait Kita0<_TŠČ0: ?Sized> {
+        type Item;
+        fn kita(&mut self) -> Self::Item;
+    }
+    pub trait Kita1<_TŠČ0: ?Sized> {
+        type Item;
+        fn kita(&mut self) -> Self::Item;
+    }
+
+    impl<T: Dispatch<Group = GroupA> + Counter> Kita0<GroupA> for T {
+        type Item = u32;
+        fn kita(&mut self) -> u32 {
+            let _value = self.decrement();
+            let _value = Self::decrement(self);
+            let value = T::decrement(self);
+            if value == 0 {
+                return 0;
+            }
+            let _value = <Self as Kita>::kita(self);
+            let value = <T as Kita>::kita(self);
+            value + 1
+        }
+    }
+    impl<U: Dispatch<Group = GroupB> + Default> Kita0<GroupB> for U {
+        type Item = U;
+        fn kita(&mut self) -> Self::Item {
+            <U as Default>::default()
+        }
+    }
+    impl<T: Dispatch<Group = GroupA>> Kita1<GroupA> for (T,) {
+        type Item = u32;
+        fn kita(&mut self) -> u32 {
+            let a: Self::Item = <u32 as Kita>::kita(&mut 33);
+            a
+        }
+    }
+    impl<U: Dispatch<Group = GroupB> + Default> Kita1<GroupB> for (U,) {
+        type Item = U;
+        fn kita(&mut self) -> Self::Item {
+            <U as Default>::default()
+        }
+    }
+
+    impl<T, _TŠČ1> Kita for T
+    where
+        Self: Kita0<_TŠČ1>,
+        T: Dispatch<Group = _TŠČ1>,
+    {
+        type Item = <Self as Kita0<_TŠČ1>>::Item;
+        fn kita(&mut self) -> Self::Item {
+            { <Self as Kita0<_TŠČ1>>::kita(self) }
+        }
+    }
+    impl<T, _TŠČ1> Kita for (T,)
+    where
+        Self: Kita1<_TŠČ1>,
+        T: Dispatch<Group = _TŠČ1>,
+    {
+        type Item = <Self as Kita1<_TŠČ1>>::Item;
+        fn kita(&mut self) -> Self::Item {
+            { <Self as Kita1<_TŠČ1>>::kita(self) }
+        }
+    }
+};
+*/
+
 #[test]
 fn recursive_call() {
     assert_eq!(0, Counted::<String>::kita(&mut Counted(2, "a".to_string())));
