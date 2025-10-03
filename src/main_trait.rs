@@ -437,13 +437,23 @@ pub mod param {
                 });
             }
         }
+
+        fn visit_item_trait(&mut self, node: &syn::ItemTrait) {
+            for supertrait in &node.supertraits {
+                self.0.push(parse_quote!(Self: #supertrait));
+            }
+
+            self.visit_generics(&node.generics);
+        }
     }
 
-    pub fn rewrite_main_trait_bounds_to_where_clause(generics: &mut syn::Generics) {
+    pub fn rewrite_main_trait_bounds_to_where_clause(trait_: &mut syn::ItemTrait) {
         let mut param_bound_mover = ParamBoundToWherePredicateMover::new();
 
-        param_bound_mover.visit_generics(generics);
-        generics.params = core::mem::take(&mut generics.params)
+        param_bound_mover.visit_item_trait(trait_);
+        trait_.supertraits = Default::default();
+
+        trait_.generics.params = core::mem::take(&mut trait_.generics.params)
             .into_iter()
             .map(|mut param| {
                 match &mut param {
@@ -460,7 +470,7 @@ pub mod param {
             })
             .collect();
 
-        let where_clause = generics.make_where_clause();
+        let where_clause = trait_.generics.make_where_clause();
         where_clause.predicates = core::mem::take(&mut where_clause.predicates)
             .into_iter()
             .chain(param_bound_mover.0)
@@ -468,7 +478,7 @@ pub mod param {
     }
 
     pub fn resolve_main_trait_params(main_trait: &mut syn::ItemTrait, impl_trait: &syn::Path) {
-        rewrite_main_trait_bounds_to_where_clause(&mut main_trait.generics);
+        rewrite_main_trait_bounds_to_where_clause(main_trait);
 
         let mut lifetimes = IndexMap::new();
         let mut type_params = IndexMap::new();

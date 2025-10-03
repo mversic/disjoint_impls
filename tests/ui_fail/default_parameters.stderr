@@ -1,0 +1,5 @@
+error: Specify all trait arguments (including default)
+  --> tests/ui_fail/default_parameters.rs:33:39
+   |
+33 |     impl<T: Dispatch<Group = GroupA>> Kita for T {
+   |                                       ^^^^

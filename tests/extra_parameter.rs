@@ -73,8 +73,6 @@ const _: () = {
         U: From<u8> + From<bool>,
         Self: Kita0<_TŠČ2, U>,
         T: Dispatch<Group = _TŠČ2>,
-        U: From<u8>,
-        U: From<bool>,
     {
         const NAME: &'static str = <Self as Kita0<_TŠČ2, U>>::NAME;
     }

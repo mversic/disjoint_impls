@@ -1,5 +1,3 @@
-use proc_macro_error2::OptionExt;
-
 use super::*;
 
 struct Validator<'a>(IndexSet<&'a syn::Ident>);
@@ -47,17 +45,21 @@ pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
     I::IntoIter: Clone,
 {
     let item_impls = item_impls.into_iter();
+    let nparams = trait_.generics.params.len();
 
     for item_impl in item_impls.clone() {
         if let Some((_, trait_path, _)) = &item_impl.trait_ {
-            let item_trait_ident = trait_path
-                .segments
-                .last()
-                .map(|seg| &seg.ident)
-                .expect_or_abort("Trait definition given but found inherent impl");
+            let last_seg = trait_path.segments.last().unwrap();
 
-            if &trait_.ident != item_trait_ident {
-                abort!(item_trait_ident, "Doesn't match trait definition");
+            match &last_seg.arguments {
+                syn::PathArguments::AngleBracketed(bracketed)
+                    if bracketed.args.len() == nparams => {}
+                syn::PathArguments::None if nparams == 0 => {}
+                _ => abort!(last_seg, "Specify all trait arguments (including default)"),
+            }
+
+            if trait_.ident != last_seg.ident {
+                abort!(last_seg.ident, "Doesn't match trait definition");
             }
         } else {
             abort!(item_impl, "Expected trait impl, found inherent impl");
