@@ -47,13 +47,13 @@ pub fn generate(
     let where_clause = main_trait_impl.generics.make_where_clause();
 
     let helper_trait_bound =
-        gen_helper_trait_bound(impl_group, &helper_trait_ident, &impl_group.assoc_bindings);
+        gen_helper_trait_bound(impl_group, &helper_trait_ident, &impl_group.trait_bounds);
     where_clause
         .predicates
         .push(parse_quote! { Self: #helper_trait_bound });
     where_clause
         .predicates
-        .extend(impl_group.assoc_bindings.0.iter().map(
+        .extend(impl_group.trait_bounds.0.iter().map(
             |((bounded, trait_bound), (_, bindings))| -> syn::WherePredicate {
                 let mut trait_ = trait_bound.0.path.clone();
 
@@ -89,7 +89,7 @@ fn gen_dummy_impl_from_inherent_impl(impl_group: &ImplGroup) -> syn::ItemImpl {
     let ImplGroup {
         id,
 
-        impl_items:
+        items:
             Some(ImplItems {
                 fns,
                 assoc_types,
@@ -196,7 +196,7 @@ fn gen_dummy_impl_from_trait_definition(
 }
 
 fn combine_generic_args(
-    assoc_bindings: &TraitBoundGroup,
+    assoc_bindings: &TraitBounds,
     path: &syn::Path,
 ) -> impl Iterator<Item = syn::GenericArgument> {
     let arguments = &path.segments.last().unwrap().arguments;
@@ -223,7 +223,7 @@ fn combine_generic_args(
 fn gen_helper_trait_bound(
     impl_group: &ImplGroup,
     helper_trait_ident: &syn::Ident,
-    assoc_bindings: &TraitBoundGroup,
+    assoc_bindings: &TraitBounds,
 ) -> syn::Path {
     let mut self_ty = impl_group.id.self_ty.clone();
 
@@ -267,7 +267,7 @@ fn gen_inherent_self_ty_args<'a>(
 impl ImplItemResolver {
     fn new(impl_group: &ImplGroup, helper_trait_ident: &syn::Ident) -> Self {
         let helper_trait_bound =
-            gen_helper_trait_bound(impl_group, helper_trait_ident, &impl_group.assoc_bindings);
+            gen_helper_trait_bound(impl_group, helper_trait_ident, &impl_group.trait_bounds);
 
         Self {
             self_as_helper_trait: quote! {

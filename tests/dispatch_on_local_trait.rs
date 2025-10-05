@@ -55,16 +55,20 @@ pub trait Kita {
 const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &str;
+        type Kita;
     }
 
     impl<T: Dispatch<Group = LocalType>> Kita0<LocalType> for T {
         const NAME: &'static str = "Blanket A";
+        type Kita = u32;
     }
     impl<T: Dispatch<Group = u32>> Kita0<u32> for T {
         const NAME: &'static str = "Blanket B";
+        type Kita = u32;
     }
     impl<U: Dispatch<Group = T>, T: LocalTrait> Kita0<T> for U {
         const NAME: &'static str = "Blanket C";
+        type Kita = U::Group;
     }
 
     impl<T, _TŠČ1> Kita for T
@@ -73,6 +77,7 @@ const _: () = {
         T: Dispatch<Group = _TŠČ1>,
     {
         const NAME: &str = <Self as Kita0<_TŠČ1>>::NAME;
+        type Kita = <Self as Kita0<_TŠČ1>>::Kita;
     }
 };
 */

@@ -12,12 +12,12 @@ pub fn generate(
     impl_group_idx: usize,
     impl_group: &ImplGroup,
 ) -> Option<syn::ItemTrait> {
-    let assoc_binding_count = &impl_group.assoc_bindings.generalized_idents().count();
+    let assoc_binding_count = &impl_group.trait_bounds.generalized_idents().count();
 
     let mut helper_trait = if let Some(helper_trait) = main_trait {
         helper_trait.clone()
     } else {
-        let impl_items = gen_inherent_trait_items(impl_group.impl_items.as_ref().unwrap());
+        let impl_items = gen_inherent_trait_items(impl_group.items.as_ref().unwrap());
 
         let mut self_ty = impl_group.id.self_ty.clone();
         if let syn::Type::Path(type_path) = &mut self_ty {

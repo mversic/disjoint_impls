@@ -36,7 +36,7 @@ pub fn generate(
     }
 
     let mut impl_assoc_bindings = impl_group
-        .assoc_bindings
+        .trait_bounds
         .0
         .values()
         .flat_map(|(orig_trait_bound, assoc_bindings)| {
