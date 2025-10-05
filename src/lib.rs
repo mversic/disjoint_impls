@@ -1208,9 +1208,11 @@ impl Parse for ImplGroups {
             .filter_map(|(i, superset_count)| (*superset_count == 0).then_some(i))
             .collect::<Vec<_>>()
             .into_iter()
-            .flat_map(|impl_group_id| {
-                find_impl_groups(impl_group_id, &mut supersets, &subsets, &impls).unwrap_or_else(
+            .flat_map(|impl_group_idx| {
+                find_impl_groups(impl_group_idx, &mut supersets, &subsets, &impls).unwrap_or_else(
                     || {
+                        let impl_group_id = &impls[impl_group_idx].0.id;
+
                         let msg = format!(
                             "Conflicting implementations of `{}`",
                             quote!(#impl_group_id)
@@ -1398,7 +1400,9 @@ fn find_impl_groups_rec<'a, 'b>(
     }
 
     // NOTE: Try create a new group if shorter solution is possible
-    if min.as_ref().is_none_or(|m| m.len() > 1 + impl_groups.len()) {
+    if min.as_ref().is_none_or(|m| m.len() > 1 + impl_groups.len())
+        && !impl_groups.contains_key(&curr_impl.0.id)
+    {
         impl_groups.insert(
             curr_impl.0.id.clone(),
             (
