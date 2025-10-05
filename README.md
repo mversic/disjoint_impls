@@ -5,9 +5,7 @@ Crate will be maintained (at least) until [this idiom](https://github.com/rust-l
 
 ## Description
 
-This library enables you to write certain types of disjoint impls that Rust compiler doesn't (yet?) allow.
-Namely, disjoint impls where a type is bounded by an associated type. One would expect the following
-syntax to compile without the need to invoke `disjoint_impls!`, but it doesn't:
+Enables writing non-overlapping (*disjoint*) impls distinguished by a set of associated types.
 
 ```rs
 use disjoint_impls::disjoint_impls;
@@ -17,16 +15,22 @@ pub trait Dispatch {
 }
 
 pub enum GroupA {}
+pub enum GroupB {}
+
 impl Dispatch for String {
     type Group = GroupA;
 }
-
-pub enum GroupB {}
 impl Dispatch for i32 {
     type Group = GroupB;
 }
 
-// Basic example
+impl Dispatch for Option<String> {
+    type Group = GroupA;
+}
+impl Dispatch for Option<i32> {
+    type Group = GroupB;
+}
+
 disjoint_impls! {
     pub trait BasicKita {
         const BASIC_NAME: &'static str;
@@ -48,7 +52,6 @@ disjoint_impls! {
     }
 }
 
-// Complex example
 disjoint_impls! {
     pub trait ComplexKita {
         const COMPLEX_NAME: &'static str;
@@ -68,10 +71,10 @@ disjoint_impls! {
         const COMPLEX_NAME: &'static str = "Blanket B*";
     }
 
-    impl<T: Dispatch<Group = GroupA>> ComplexKita for T {
+    impl<T> ComplexKita for T where Option<T>: Dispatch<Group = GroupA> {
         const COMPLEX_NAME: &'static str = "Blanket A";
     }
-    impl<U: Dispatch<Group = GroupB>> ComplexKita for U {
+    impl<U> ComplexKita for U where Option<U>: Dispatch<Group = GroupB> {
         const COMPLEX_NAME: &'static str = "Blanket B";
     }
 }
@@ -92,15 +95,17 @@ fn main() {
 }
 ```
 
+Other, much more complex examples can be found in tests.
+
 ## Foreign(remote) traits
 
-If the trait you are writing disjoint impls for is defined in outside of the current crate,
-you can use `#[disjoint_impls(remote)]` on the trait while providing copy of the internals:
+For traits defined outside the current crate (a.k.a. foreign or remote traits), duplicate
+the trait definition inside the macro and annotate it with `#[disjoint_impls(remote)]`.
 
 ```rs
 use disjoint_impls::disjoint_impls;
-// NOTE: Foreign trait must be pulled into the current crate
-// so that the `disjoint_impls!` macro can refer to it in impls
+// A foreign trait must be brought into scope so
+// the `disjoint_impls!` macro can refer to it.
 use remote_trait::ForeignKita;
 
 pub trait Dispatch {
@@ -117,29 +122,27 @@ impl Dispatch for i32 {
     type Group = GroupB;
 }
 
-// NOTE: (orphan rule): You can define blanket impls
-// only for types that are defined in the current crate
-struct LocalType<T>(T);
+// (orphan rule): You can define blanket impls only
+// for types that are defined in the current crate
+pub struct LocalType<T>(T);
 
 disjoint_impls! {
-    // NOTE: Trait annotated with `#[disjoint_impls(remote)]` must be
-    // an exact copy of the trait it refers to in the foreign/remote crate
+    // Trait annotated with `#[disjoint_impls(remote)]` must be an exact duplicate
+    // of the foreign/remote trait it refers to (values and function bodies excluded)
     #[disjoint_impls(remote)]
     pub trait ForeignKita<U> {
         fn kita() -> &'static str;
     }
 
-    impl<U, T: Dispatch<Group = GroupA>> ForeignKita<U> for LocalType<T> {
+    impl<T: Dispatch<Group = GroupA>, U> ForeignKita<U> for LocalType<T> {
         fn kita() -> &'static str {
             "Blanket A"
         }
     }
-    impl<U, T: Dispatch<Group = GroupB>> ForeignKita<U> for LocalType<T> {
+    impl<T: Dispatch<Group = GroupB>, U> ForeignKita<U> for LocalType<T> {
         fn kita() -> &'static str {
             "Blanket B"
         }
     }
 }
 ```
-
-Other much more complex examples can be found in `tests`
