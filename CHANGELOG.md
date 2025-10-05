@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-10-05
+
+### Fixed
+- handle overlapping payloads when forming an impl group
+
+### Changed
+- new impl resolution mechanism
+
+### Removed
+- disallow unspecified default trait arguments
+
 ## [1.0.9] - 2025-09-09
 
 ### Added

@@ -40,9 +40,16 @@ impl Generalize for syn::Local {
         let pat = self
             .pat
             .generalize(&other.pat, params1, params2, substitutions)?;
+        let prev_expected_type = match (&self.pat, &other.pat) {
+            (syn::Pat::Type(ty), _) | (_, syn::Pat::Type(ty)) => substitutions
+                .curr_expr_expected_type
+                .replace((*ty.ty).clone()),
+            _ => None,
+        };
         let init = self
             .init
             .generalize(&other.init, params1, params2, substitutions)?;
+        substitutions.curr_expr_expected_type = prev_expected_type;
 
         Some(Self {
             attrs,

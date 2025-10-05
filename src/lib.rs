@@ -1,4 +1,27 @@
-//! Unlock support for a variety of mutually disjoint implementations.
+//! Unlock support for a variety of mutually disjoint implementations that the Rust compiler
+//! [does not (yet?) support](https://github.com/rust-lang/rust/issues/20400).
+//!
+//! # Example
+//!
+//! ```
+//! use disjoint_impls::disjoint_impls;
+//!
+//! pub enum GroupA {}
+//! pub enum GroupB {}
+//!
+//! pub trait Dispatch {
+//!     type Group;
+//! }
+//!
+//! disjoint_impls! {
+//!     pub trait Kita {}
+//!
+//!     impl<T: Dispatch<Group = GroupA>> Kita for T {}
+//!     impl<U: Dispatch<Group = GroupB>> Kita for U {}
+//! }
+//! ```
+//!
+//! See the [`disjoint_impls!`] macro for details.
 
 use generalize::Generalizations;
 use indexmap::{IndexMap, IndexSet};
@@ -15,7 +38,7 @@ use syn::{
 };
 
 use crate::{
-    generalize::{Generalize, Params, Sizedness, as_generics, is_superset},
+    generalize::{Generalize, GenericParam, Params, Sizedness, as_generics, is_superset},
     main_trait::is_remote,
     validate::validate_impl_syntax,
 };
@@ -24,7 +47,7 @@ mod disjoint;
 mod generalize;
 mod helper_trait;
 mod main_trait;
-mod param;
+mod normalize;
 mod validate;
 
 /// Per impl count of supersets.
@@ -315,7 +338,14 @@ impl TraitBoundsBuilder {
                 let bindings = bindings
                     .into_iter()
                     .map(|(ident, (p, payloads))| {
-                        let ty_params = params.0.iter().map(|(i, _)| i).cloned().collect();
+                        let ty_params = params
+                            .iter()
+                            .filter_map(|(ident, param)| match param {
+                                GenericParam::Type(_, _) => Some(ident),
+                                _ => None,
+                            })
+                            .cloned()
+                            .collect();
                         let mut param_finder = GenericParamFinder(ty_params, IndexSet::new());
 
                         param_finder.visit_type(&p);
@@ -339,7 +369,7 @@ impl TraitBoundsBuilder {
                                 Some(p)
                             } else {
                                 for &unbound_param in &unbound_params {
-                                    params.0.swap_remove(unbound_param);
+                                    params.swap_remove(unbound_param);
                                 }
 
                                 None
@@ -587,11 +617,11 @@ impl ImplGroupBuilder {
             stack.extend(substack);
         }
 
+        // NOTE: Only pick out trait bounds that, when generalized, don't introduce a new type
+        // unbounded parameter that is not found in any of the associated binding payloads
         let results = results
             .into_iter()
             .filter_map(|mut remaining| {
-                // TODO: This could be sorted topologically to reduce complexity
-
                 let mut subs = Generalizations::default();
                 let mut result = Vec::new();
 
@@ -700,6 +730,8 @@ impl ImplGroupBuilder {
                     }
                 });
 
+                // NOTE: After adding new impl into this group all pairs of impls have to be checked
+                // because a dispatch trait could have been removed thus resulting in an overlap
                 impls.insert(other_idx, other);
                 for (i, p1) in payload_rows.iter().enumerate() {
                     for (j, p2) in payload_rows.iter().enumerate() {
@@ -829,80 +861,75 @@ impl ItemImplDescVisitor {
     fn find(item_impl: &ItemImpl) -> ItemImplDesc {
         let trait_ = item_impl.trait_.as_ref().map(|(_, trait_, _)| trait_);
 
-        let mut visitor = Self {
-            curr_bounded_ty: None,
-            curr_trait_bound: None,
+        let mut visitor =
+            Self {
+                curr_bounded_ty: None,
+                curr_trait_bound: None,
 
-            impl_desc: ItemImplDesc {
-                id: ImplGroupId {
-                    trait_: trait_.cloned(),
-                    self_ty: (*item_impl.self_ty).clone(),
-                },
-                params: (
-                    item_impl
+                impl_desc: ItemImplDesc {
+                    id: ImplGroupId {
+                        trait_: trait_.cloned(),
+                        self_ty: (*item_impl.self_ty).clone(),
+                    },
+                    params: item_impl
                         .generics
                         .type_params()
                         .map(|param| {
-                            (
-                                param.ident.clone(),
-                                (
-                                    if param.bounds.iter().any(|bound| {
-                                        matches!(
-                                            bound,
-                                            syn::TypeParamBound::Trait(syn::TraitBound {
-                                                modifier: syn::TraitBoundModifier::Maybe(_),
-                                                ..
-                                            })
-                                        )
-                                    }) {
-                                        Sizedness::Unsized
-                                    } else {
-                                        Sizedness::Sized
-                                    },
-                                    IndexSet::new(),
-                                ),
-                            )
+                            let ident = param.ident.clone();
+
+                            let sizedness = if param.bounds.iter().any(|bound| {
+                                matches!(
+                                    bound,
+                                    syn::TypeParamBound::Trait(syn::TraitBound {
+                                        modifier: syn::TraitBoundModifier::Maybe(_),
+                                        ..
+                                    })
+                                )
+                            }) {
+                                Sizedness::Unsized
+                            } else {
+                                Sizedness::Sized
+                            };
+
+                            (ident, GenericParam::Type(sizedness, IndexSet::new()))
                         })
+                        .chain(item_impl.generics.const_params().map(|param| {
+                            (param.ident.clone(), GenericParam::Const(param.ty.clone()))
+                        }))
                         .collect(),
-                    item_impl
-                        .generics
-                        .const_params()
-                        .map(|param| (param.ident.clone(), param.ty.clone()))
-                        .collect(),
-                ),
-                trait_bounds: IndexMap::new(),
-                items: ImplItems {
-                    fns: item_impl
-                        .items
-                        .iter()
-                        .filter_map(|item| match item {
-                            syn::ImplItem::Fn(item) => {
-                                Some((item.sig.ident.clone(), item.sig.clone()))
-                            }
-                            _ => None,
-                        })
-                        .collect(),
-                    assoc_types: item_impl
-                        .items
-                        .iter()
-                        .filter_map(|item| match item {
-                            syn::ImplItem::Type(item) => Some(item.ident.clone()),
-                            _ => None,
-                        })
-                        .collect(),
-                    assoc_consts: item_impl
-                        .items
-                        .iter()
-                        .filter_map(|item| match item {
-                            syn::ImplItem::Const(item) => {
-                                Some((item.ident.clone(), item.ty.clone()))
-                            }
-                            _ => None,
-                        })
-                        .collect(),
+                    trait_bounds: IndexMap::new(),
+                    items: ImplItems {
+                        fns: item_impl
+                            .items
+                            .iter()
+                            .filter_map(|item| match item {
+                                syn::ImplItem::Fn(item) => {
+                                    Some((item.sig.ident.clone(), item.sig.clone()))
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                        assoc_types: item_impl
+                            .items
+                            .iter()
+                            .filter_map(|item| match item {
+                                syn::ImplItem::Type(item) => Some(item.ident.clone()),
+                                _ => None,
+                            })
+                            .collect(),
+                        assoc_consts: item_impl
+                            .items
+                            .iter()
+                            .filter_map(|item| match item {
+                                syn::ImplItem::Const(item) => {
+                                    Some((item.ident.clone(), item.ty.clone()))
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                    },
                 },
-            },
-        };
+            };
         visitor.visit_generics(&item_impl.generics);
         visitor.impl_desc
     }
@@ -972,9 +999,9 @@ impl Visit<'_> for ItemImplDescVisitor {
     }
 }
 
-/// This library enables you to write certain types of disjoint impls that Rust compiler doesn't (yet?) allow.
-/// Namely, disjoint impls where a type is bounded by an associated type. One would expect the following
-/// syntax to compile without the need to invoke `disjoint_impls!`, but it doesn't:
+/// Enables writing non-overlapping (*disjoint*) impls distinguished by a set of associated types.
+///
+/// # Example
 ///
 /// ```
 /// use disjoint_impls::disjoint_impls;
@@ -984,16 +1011,22 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// }
 ///
 /// pub enum GroupA {}
+/// pub enum GroupB {}
+///
 /// impl Dispatch for String {
 ///     type Group = GroupA;
 /// }
-///
-/// pub enum GroupB {}
 /// impl Dispatch for i32 {
 ///     type Group = GroupB;
 /// }
 ///
-/// // Basic example
+/// impl Dispatch for Option<String> {
+///     type Group = GroupA;
+/// }
+/// impl Dispatch for Option<i32> {
+///     type Group = GroupB;
+/// }
+///
 /// disjoint_impls! {
 ///     pub trait BasicKita {
 ///         const BASIC_NAME: &'static str;
@@ -1015,7 +1048,6 @@ impl Visit<'_> for ItemImplDescVisitor {
 ///     }
 /// }
 ///
-/// // Complex example
 /// disjoint_impls! {
 ///     pub trait ComplexKita {
 ///         const COMPLEX_NAME: &'static str;
@@ -1035,10 +1067,10 @@ impl Visit<'_> for ItemImplDescVisitor {
 ///         const COMPLEX_NAME: &'static str = "Blanket B*";
 ///     }
 ///
-///     impl<T: Dispatch<Group = GroupA>> ComplexKita for T {
+///     impl<T> ComplexKita for T where Option<T>: Dispatch<Group = GroupA> {
 ///         const COMPLEX_NAME: &'static str = "Blanket A";
 ///     }
-///     impl<U: Dispatch<Group = GroupB>> ComplexKita for U {
+///     impl<U> ComplexKita for U where Option<U>: Dispatch<Group = GroupB> {
 ///         const COMPLEX_NAME: &'static str = "Blanket B";
 ///     }
 /// }
@@ -1059,15 +1091,17 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// }
 /// ```
 ///
-/// ## Foreign(remote) traits
+/// Other, much more complex examples can be found in tests.
 ///
-/// If the trait you are writing disjoint impls for is defined in outside of the current crate,
-/// you can use `#[disjoint_impls(remote)]` on the trait while providing copy of the internals:
+/// # Foreign(remote) traits
+///
+/// For traits defined outside the current crate (a.k.a. foreign or remote traits), duplicate
+/// the trait definition inside the macro and annotate it with `#[disjoint_impls(remote)]`.
 ///
 /// ```
 /// use disjoint_impls::disjoint_impls;
-/// // NOTE: Foreign trait must be pulled into the current crate
-/// // so that the `disjoint_impls!` macro can refer to it in impls
+/// // A foreign trait must be brought into scope so
+/// // the `disjoint_impls!` macro can refer to it.
 /// use remote_trait::ForeignKita;
 ///
 /// pub trait Dispatch {
@@ -1084,24 +1118,24 @@ impl Visit<'_> for ItemImplDescVisitor {
 ///     type Group = GroupB;
 /// }
 ///
-/// // NOTE: (orphan rule): You can define blanket impls
-/// // only for types that are defined in the current crate
-/// struct LocalType<T>(T);
+/// // (orphan rule): You can define blanket impls only
+/// // for types that are defined in the current crate
+/// pub struct LocalType<T>(T);
 ///
 /// disjoint_impls! {
-///     // NOTE: Trait annotated with `#[disjoint_impls(remote)]` must be
-///     // an exact copy of the trait it refers to in the foreign/remote crate
+///     // Trait annotated with `#[disjoint_impls(remote)]` must be an exact duplicate
+///     // of the foreign/remote trait it refers to (values and function bodies excluded)
 ///     #[disjoint_impls(remote)]
 ///     pub trait ForeignKita<U> {
 ///         fn kita() -> &'static str;
 ///     }
 ///
-///     impl<U, T: Dispatch<Group = GroupA>> ForeignKita<U> for LocalType<T> {
+///     impl<T: Dispatch<Group = GroupA>, U> ForeignKita<U> for LocalType<T> {
 ///         fn kita() -> &'static str {
 ///             "Blanket A"
 ///         }
 ///     }
-///     impl<U, T: Dispatch<Group = GroupB>> ForeignKita<U> for LocalType<T> {
+///     impl<T: Dispatch<Group = GroupB>, U> ForeignKita<U> for LocalType<T> {
 ///         fn kita() -> &'static str {
 ///             "Blanket B"
 ///         }
@@ -1161,7 +1195,7 @@ impl Parse for ImplGroups {
         while let Ok(item) = input.parse::<ItemImpl>() {
             validate_impl_syntax(&item);
 
-            let item = param::normalize(item);
+            let item = normalize::normalize(item);
             let param_bounds = ItemImplDescVisitor::find(&item);
             impls.push((param_bounds, item));
         }
@@ -1432,8 +1466,8 @@ fn make_sets(impl_groups: &[(ItemImplDesc, ItemImpl)]) -> (Supersets, Subsets<'_
     let iter = impl_groups.iter().enumerate();
     for ((i1, (g1, _)), (i2, (g2, _))) in iter.clone().cartesian_product(iter) {
         // FIXME: Too much cloning
-        let params1 = (g1.params.0.clone(), g1.params.1.clone());
-        let params2 = (g2.params.0.clone(), g2.params.1.clone());
+        let params1 = g1.params.clone();
+        let params2 = g2.params.clone();
 
         if !subsets[i2].contains_key(&i1)
             && let Some(subs) = is_superset(&g1.id, &g2.id, &params1, &params2)

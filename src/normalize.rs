@@ -1,4 +1,4 @@
-//! Contains logic related to uniform position based (re-)naming of parameters
+//! Contains logic for normalizing impls
 
 use proc_macro2::Span;
 
@@ -46,7 +46,6 @@ impl VisitMut for SelfReplacer<'_> {
 
 /// Normalizes an impl in the following ways:
 ///
-/// * Assign default values for elided type arguments in trait impls
 /// * Replace all occurrences of `Self` with concrete `self_ty`
 /// * Uniquely name all elided lifetimes as `_lšč{idx}`
 pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {

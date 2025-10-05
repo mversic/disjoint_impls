@@ -312,9 +312,9 @@ impl VisitMut for ImplItemResolver {
             syn::FnArg::Typed(arg) => arg.pat.clone(),
         });
 
-        node.block = parse_quote!({
-            #unsafety { #self_as_helper_trait::#ident(#(#inputs,)* #variadic) }
-        });
+        node.block = parse_quote!({ #unsafety {
+            #self_as_helper_trait::#ident(#(#inputs,)* #variadic)
+        }});
     }
 }
 
@@ -354,7 +354,7 @@ pub mod param {
             let first_seg = ty.segments.first().unwrap();
 
             if let Some(&replacement) = self.type_param_replacements.get(&first_seg.ident) {
-                return Some(crate::param::replace_path(ty, replacement));
+                return Some(crate::normalize::replace_path(ty, replacement));
             }
 
             None

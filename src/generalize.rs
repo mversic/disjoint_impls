@@ -13,41 +13,30 @@ mod stmt;
 mod token;
 mod ty;
 
-pub type Params = (
-    IndexMap<syn::Ident, (Sizedness, IndexSet<syn::LifetimeParam>)>,
-    IndexMap<syn::Ident, syn::Type>,
+/// Type or constant generic parameters
+pub type Params = IndexMap<syn::Ident, GenericParam>;
+
+type TypeGeneralization<'a> = (
+    GeneralizationKind,
+    Sizedness,
+    IndexSet<(&'a syn::Lifetime, &'a syn::Lifetime)>,
 );
 
-pub fn as_generics(params: &Params) -> impl Iterator<Item = syn::GenericParam> {
-    params
-        .0
-        .iter()
-        .map(|(param, (sizedness, lifetimes))| {
-            let type_param: syn::TypeParam = if *sizedness == Sizedness::Unsized {
-                let lifetimes = lifetimes.iter();
-                parse_quote! { #param: ?Sized #(+ #lifetimes)*}
-            } else if !lifetimes.is_empty() {
-                let lifetimes = lifetimes.iter();
-                parse_quote! { #param: #(#lifetimes) + *}
-            } else {
-                parse_quote! { #param }
-            };
+type ExprGeneralization = (GeneralizationKind, syn::Type, ExprTypeKind);
 
-            syn::GenericParam::Type(type_param)
-        })
-        .chain(
-            params
-                .1
-                .iter()
-                .map(|(param, ty)| syn::GenericParam::Const(parse_quote! { const #param: #ty })),
-        )
-}
-
+/// Types that can be generalized to a common supertype
+///
+/// # Example
+///
+/// 1. `Vec<u32>` and `Vec<i32>` can be generalized into `Vec<T>`
+/// 2. `Vec<T>` and `Vec<T>` can be generalized into `Vec<T>`
+/// 3. `[u32; 2]` and `[u32; 2]` can be generalized into `[u32; 2]`
+/// 4. `[u32; 2]` and `(i32, u32)` can be generalized into `T`
 pub trait Generalize: ToOwned {
-    /// Find a set of substitutions that generalize `self` and `other` to a common implementation.
+    /// Find and return a common generalization of `self` and `other` if it exists.
     ///
     /// If `self` and `other` are identical but are not concrete types (i.e. they are generic types),
-    /// returned substitutions contain identity mappings of type parameters (e.g. `T` -> `T`).
+    /// substitutions will contain identity mappings of type parameters (e.g. `T` -> `T`).
     ///
     /// If the substitutions are empty, `self` and `other are identical concrete types.
     fn generalize<'a>(
@@ -57,6 +46,26 @@ pub trait Generalize: ToOwned {
         params2: &Params,
         substitutions: &mut Generalizations<'a>,
     ) -> Option<Self::Owned>;
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Generalizations<'a> {
+    /// List of mappings transforming lifetimes such as:
+    /// `'a -> `'b in `Vec<&'a [u32; 2]>` and `Vec<&'b i32>`
+    lifetime_generalizations: IndexMap<(&'a syn::Ident, &'a syn::Ident), GeneralizationKind>,
+
+    /// Type mappings that share a common parent such as:
+    /// `(T, U)` and `[T; 2]` in `Vec<(T, U)>` and `Vec<[T; 2]>`
+    type_generalizations: IndexMap<(&'a syn::Type, &'a syn::Type), TypeGeneralization<'a>>,
+    /// Expression mappings that share a common parent such as:
+    /// `2 * N` and `N + 2` in `[T; 2 * N]` and `[T; N + 2]`
+    expr_generalizations: IndexMap<(Expr<'a>, Expr<'a>), ExprGeneralization>,
+
+    /// Helper that keeps track of the expected type of the constant parameter
+    curr_expr_expected_type: Option<syn::Type>,
+
+    /// Helper that keeps track of the lifetime to be attached to type parameters
+    curr_ref_lifetime: Vec<(&'a syn::Lifetime, &'a syn::Lifetime)>,
 }
 
 /// Defines how [`syn::Type`]s and [`syn::Expr`]s are generalized
@@ -86,6 +95,43 @@ pub enum Expr<'a> {
 enum ExprTypeKind {
     Inferred,
     Given,
+}
+
+#[derive(Debug, Clone)]
+pub enum GenericParam {
+    Type(Sizedness, IndexSet<syn::LifetimeParam>),
+    Const(syn::Type),
+}
+
+/// Convert [`Params`] to a list of [`syn::GenericParam`]
+pub fn as_generics(params: &Params) -> impl Iterator<Item = syn::GenericParam> {
+    let type_params = params.iter().filter_map(|(ident, param)| {
+        if let GenericParam::Type(sizedness, lifetimes) = param {
+            let type_param: syn::TypeParam = if *sizedness == Sizedness::Unsized {
+                let lifetimes = lifetimes.iter();
+                parse_quote! { #ident: ?Sized #(+ #lifetimes)*}
+            } else if !lifetimes.is_empty() {
+                let lifetimes = lifetimes.iter();
+                parse_quote! { #ident: #(#lifetimes) + *}
+            } else {
+                parse_quote! { #ident }
+            };
+
+            return Some(syn::GenericParam::Type(type_param));
+        }
+
+        None
+    });
+
+    let const_params = params.iter().filter_map(|(ident, param)| {
+        if let GenericParam::Const(ty) = param {
+            return Some(syn::GenericParam::Const(parse_quote! { const #ident: #ty }));
+        }
+
+        None
+    });
+
+    type_params.chain(const_params)
 }
 
 impl PartialEq for Expr<'_> {
@@ -152,33 +198,6 @@ impl ToTokens for Expr<'_> {
     }
 }
 
-type TypeGeneralization<'a> = (
-    GeneralizationKind,
-    Sizedness,
-    IndexSet<(&'a syn::Lifetime, &'a syn::Lifetime)>,
-);
-
-type ExprGeneralization = (GeneralizationKind, syn::Type, ExprTypeKind);
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Generalizations<'a> {
-    /// List of mappings transforming lifetimes such as:
-    /// `'a -> `'b in `Vec<&'a [u32; 2]>` and `Vec<&'b i32>`
-    lifetime_generalizations: IndexMap<(&'a syn::Ident, &'a syn::Ident), GeneralizationKind>,
-
-    /// Type mappings that share a common parent such as:
-    /// `(T, U)` and `[T; 2]` in `Vec<(T, U)>` and `Vec<[T; 2]>`
-    type_generalizations: IndexMap<(&'a syn::Type, &'a syn::Type), TypeGeneralization<'a>>,
-    /// Expression mappings that share a common parent such as:
-    /// `2 * N` and `N + 2` in `[T; 2 * N]` and `[T; N + 2]`
-    expr_generalizations: IndexMap<(Expr<'a>, Expr<'a>), ExprGeneralization>,
-
-    // FIXME: works only for arrays afaik?
-    curr_expr_expected_type: Option<syn::Type>,
-
-    curr_ref_lifetime: Vec<(&'a syn::Lifetime, &'a syn::Lifetime)>,
-}
-
 impl<'a> Generalizations<'a> {
     fn insert_lifetime(
         &mut self,
@@ -213,9 +232,11 @@ impl<'a> Generalizations<'a> {
                         }
 
                         return params
-                            .0
                             .get(ident)
-                            .map(|(sizedness, _)| *sizedness)
+                            .map(|param| match param {
+                                &GenericParam::Type(sizedness, _) => sizedness,
+                                _ => unreachable!(),
+                            })
                             .unwrap_or_default();
                     }
 
@@ -312,7 +333,13 @@ impl<'a> Generalizations<'a> {
 
                 Expr::Path(p) => {
                     if let Some(ident) = p.path.get_ident()
-                        && let Some(ty) = params.1.get(ident).cloned()
+                        && let Some(ty) = params
+                            .get(ident)
+                            .map(|param| match param {
+                                GenericParam::Const(ty) => ty,
+                                _ => unreachable!(),
+                            })
+                            .cloned()
                     {
                         return Some((ty, ExprTypeKind::Given));
                     }
@@ -446,7 +473,10 @@ impl<'a> Generalizations<'a> {
             (expected_ty.clone(), ExprTypeKind::Given)
         } else {
             let src = match src {
-                Expr::Ident(ident) => Some((params1.1[ident].clone(), ExprTypeKind::Given)),
+                Expr::Ident(ident) => match &params1[ident] {
+                    GenericParam::Const(ty) => Some((ty.clone(), ExprTypeKind::Given)),
+                    _ => unreachable!(),
+                },
                 Expr::Expr(expr) => infer_expr_type(expr, params1),
             };
 
@@ -454,8 +484,11 @@ impl<'a> Generalizations<'a> {
                 (src_ty, ExprTypeKind::Given)
             } else {
                 let dst = match dst {
-                    Expr::Ident(ident) => Some((params2.1[ident].clone(), ExprTypeKind::Given)),
-                    Expr::Expr(expr) => infer_expr_type(expr, params2),
+                    Expr::Ident(ident) => match &params2[ident] {
+                        GenericParam::Const(ty) => Some((ty.clone(), ExprTypeKind::Given)),
+                        _ => unreachable!(),
+                    },
+                    Expr::Expr(expr) => infer_expr_type(expr, params1),
                 };
 
                 match dst {
@@ -639,55 +672,52 @@ impl<'a> Generalizations<'a> {
             ))
         };
 
-        let type_params = self
-            .type_generalizations
-            .into_iter()
+        let lifetimes = self
+            .lifetime_generalizations
+            .iter()
             .enumerate()
-            .map(
-                |(i, ((src, _), (generalization_kind, is_unsized, lifetimes)))| {
-                    (
-                        if generalization_kind == GeneralizationKind::Superset {
-                            parse_quote!(#src)
-                        } else {
-                            format_ident!("_TŠČ{}", i)
-                        },
-                        (
-                            is_unsized,
-                            lifetimes
-                                .into_iter()
-                                .map(|(src, dst)| {
-                                    let (idx, _, &kind) = self
-                                        .lifetime_generalizations
-                                        .get_full(&(&src.ident, &dst.ident))
-                                        .unwrap();
+            .map(|(i, (&(src, _), &generalization_kind))| {
+                build_lifetime(i, src, generalization_kind)
+            })
+            .collect::<Vec<_>>();
 
-                                    build_lifetime(idx, &src.ident, kind)
-                                })
-                                .collect(),
-                        ),
-                    )
-                },
-            )
-            .collect();
+        let type_params = self.type_generalizations.into_iter().enumerate().map(
+            |(i, ((src, _), (generalization_kind, is_unsized, lifetimes)))| {
+                let ident = if generalization_kind == GeneralizationKind::Superset {
+                    parse_quote!(#src)
+                } else {
+                    format_ident!("_TŠČ{}", i)
+                };
 
-        let const_params = self.expr_generalizations.into_iter().enumerate().map(
-            |(i, ((src, _), (generalization_kind, ty, _)))| {
-                (
-                    if generalization_kind == GeneralizationKind::Superset {
-                        parse_quote!(#src)
-                    } else {
-                        format_ident!("_CŠČ{}", i)
-                    },
-                    ty,
-                )
+                let lifetimes = lifetimes
+                    .into_iter()
+                    .map(|(src, dst)| {
+                        let (idx, _, &kind) = self
+                            .lifetime_generalizations
+                            .get_full(&(&src.ident, &dst.ident))
+                            .unwrap();
+
+                        build_lifetime(idx, &src.ident, kind)
+                    })
+                    .collect();
+
+                (ident, GenericParam::Type(is_unsized, lifetimes))
             },
         );
 
-        let lifetimes = self.lifetime_generalizations.into_iter().enumerate().map(
-            |(i, ((src, _), generalization_kind))| build_lifetime(i, src, generalization_kind),
+        let const_params = self.expr_generalizations.into_iter().enumerate().map(
+            |(i, ((src, _), (generalization_kind, ty, _)))| {
+                let ident = if generalization_kind == GeneralizationKind::Superset {
+                    parse_quote!(#src)
+                } else {
+                    format_ident!("_CŠČ{}", i)
+                };
+
+                (ident, GenericParam::Const(ty))
+            },
         );
 
-        (lifetimes.collect(), (type_params, const_params.collect()))
+        (lifetimes, type_params.chain(const_params).collect())
     }
 }
 
@@ -731,7 +761,7 @@ pub fn is_superset<'a, T: Generalize>(
                 syn::Type::Path(syn::TypePath { path, .. }) => {
                     let ident = path.get_ident()?;
 
-                    if !params1.0.contains_key(ident) {
+                    if !params1.contains_key(ident) {
                         return None;
                     }
                 }
@@ -762,7 +792,7 @@ pub fn is_superset<'a, T: Generalize>(
                 Expr::Expr(syn::Expr::Path(syn::ExprPath { path, .. })) => {
                     let ident = path.get_ident()?;
 
-                    if !params1.1.contains_key(ident) {
+                    if !params1.contains_key(ident) {
                         return None;
                     }
                 }
@@ -1005,15 +1035,11 @@ mod tests {
 
     #[test]
     fn combine_ty_and_expr_params() {
-        let p = (
-            indexmap! {
-                format_ident!("T0") => (Sizedness::Sized, IndexSet::new()),
-                format_ident!("T1") => (Sizedness::Sized, IndexSet::new()),
-            },
-            indexmap! {
-                format_ident!("N") => parse_quote!(usize)
-            },
-        );
+        let p = indexmap! {
+            format_ident!("T0") => GenericParam::Type(Sizedness::Sized, IndexSet::new()),
+            format_ident!("T1") => GenericParam::Type(Sizedness::Sized, IndexSet::new()),
+            format_ident!("N") => GenericParam::Const(parse_quote!(usize))
+        };
 
         let l1_ty: syn::Type = parse_quote!(([T0; N], T1));
         let l2_ty: syn::Type = parse_quote!(([T1; N], T0));

@@ -34,20 +34,10 @@ impl Generalize for syn::Type {
                 .map(Never),
             (x1, Paren(x2)) => x1.generalize(&*x2.elem, params1, params2, substitutions),
             (Paren(x1), x2) => (*x1.elem).generalize(x2, params1, params2, substitutions),
-            (Path(x1), _)
-                if x1
-                    .path
-                    .get_ident()
-                    .is_some_and(|i| params1.0.contains_key(i)) =>
-            {
+            (Path(x1), _) if x1.path.get_ident().is_some_and(|i| params1.contains_key(i)) => {
                 Some(substitutions.insert_type(self, other, params1, params2))
             }
-            (_, Path(x2))
-                if x2
-                    .path
-                    .get_ident()
-                    .is_some_and(|i| params2.0.contains_key(i)) =>
-            {
+            (_, Path(x2)) if x2.path.get_ident().is_some_and(|i| params2.contains_key(i)) => {
                 Some(substitutions.insert_type(self, other, params1, params2))
             }
             (Path(x1), Path(x2)) => x1.generalize(x2, params1, params2, substitutions).map(Path),
@@ -453,12 +443,9 @@ mod tests {
 
     #[test]
     fn identity_type_generalize() {
-        let p1 = (
-            indexmap! {
-                format_ident!("T") => (Sizedness::Sized, IndexSet::new())
-            },
-            indexmap! {},
-        );
+        let p1 = indexmap! {
+            format_ident!("T") => GenericParam::Type(Sizedness::Sized, IndexSet::new())
+        };
 
         let t1: syn::Type = parse_quote!(T);
         let mut subs1 = Generalizations::default();
@@ -515,7 +502,7 @@ mod tests {
 
     #[test]
     fn concrete_type_generalize() {
-        let p1 = (indexmap! {}, indexmap! {});
+        let p1 = indexmap! {};
 
         let t1: syn::Type = parse_quote!(i32);
         let mut subs1 = Generalizations::default();
@@ -558,10 +545,9 @@ mod tests {
 
     #[test]
     fn different_qself() {
-        let p = (
-            indexmap! {format_ident!("_ŠČ") => (Sizedness::Sized, IndexSet::new())},
-            indexmap! {},
-        );
+        let p = indexmap! {
+            format_ident!("_ŠČ") => GenericParam::Type(Sizedness::Sized, IndexSet::new())
+        };
 
         let a: syn::Type = parse_quote!(<Option<_ŠČ> as Deref>::Target);
         let b: syn::Type = parse_quote!(<Vec<_ŠČ> as Deref>::Target);
@@ -598,10 +584,9 @@ mod tests {
 
     #[test]
     fn t_and_vec_t() {
-        let p = (
-            indexmap! {format_ident!("_ŠČ") => (Sizedness::Sized, IndexSet::new())},
-            indexmap! {},
-        );
+        let p = indexmap! {
+            format_ident!("_ŠČ") => GenericParam::Type(Sizedness::Sized, IndexSet::new())
+        };
 
         let a: syn::Type = parse_quote!(_ŠČ);
         let b: syn::Type = parse_quote!(Vec<_ŠČ>);
@@ -635,10 +620,9 @@ mod tests {
 
     #[test]
     fn common_ident_generalize() {
-        let p = (
-            indexmap! {format_ident!("_ŠČ") => (Sizedness::Sized, IndexSet::new())},
-            indexmap! {},
-        );
+        let p = indexmap! {
+            format_ident!("_ŠČ") => GenericParam::Type(Sizedness::Sized, IndexSet::new())
+        };
 
         let a: syn::Type = parse_quote!((_ŠČ, Vec<_ŠČ>));
         let b: syn::Type = parse_quote!((Vec<_ŠČ>, Vec<_ŠČ>));
@@ -681,13 +665,10 @@ mod tests {
 
     #[test]
     fn type_full_generalization() {
-        let p = (
-            indexmap! {
-                format_ident!("_ŠČ0") => (Sizedness::Sized, IndexSet::new()),
-                format_ident!("_ŠČ1") => (Sizedness::Sized, IndexSet::new()),
-            },
-            indexmap! {},
-        );
+        let p = indexmap! {
+            format_ident!("_ŠČ0") => GenericParam::Type(Sizedness::Sized, IndexSet::new()),
+            format_ident!("_ŠČ1") => GenericParam::Type(Sizedness::Sized, IndexSet::new()),
+        };
 
         let l1: syn::Type = parse_quote!((_ŠČ0, _ŠČ1));
         let l2: syn::Type = parse_quote!((Vec<_ŠČ0>, Vec<_ŠČ1>));

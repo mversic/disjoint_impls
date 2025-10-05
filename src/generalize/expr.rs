@@ -72,20 +72,10 @@ impl Generalize for syn::Expr {
             (Paren(x1), Paren(x2)) => x1
                 .generalize(x2, params1, params2, substitutions)
                 .map(Paren),
-            (Path(x1), _)
-                if x1
-                    .path
-                    .get_ident()
-                    .is_some_and(|i| params1.1.contains_key(i)) =>
-            {
+            (Path(x1), _) if x1.path.get_ident().is_some_and(|i| params1.contains_key(i)) => {
                 substitutions.insert_expr(self, other, params1, params2)
             }
-            (_, Path(x2))
-                if x2
-                    .path
-                    .get_ident()
-                    .is_some_and(|i| params2.1.contains_key(i)) =>
-            {
+            (_, Path(x2)) if x2.path.get_ident().is_some_and(|i| params2.contains_key(i)) => {
                 substitutions.insert_expr(self, other, params1, params2)
             }
             (Path(x1), Path(x2)) => x1.generalize(x2, params1, params2, substitutions).map(Path),
@@ -1195,10 +1185,9 @@ mod tests {
 
     #[test]
     fn identity_expr_generalize() {
-        let p1 = (
-            indexmap! {},
-            indexmap! {format_ident!("N") => parse_quote!(usize)},
-        );
+        let p1 = indexmap! {
+            format_ident!("N") => GenericParam::Const(parse_quote!(usize))
+        };
 
         let e1: syn::Expr = parse_quote!(N);
         let mut subs1 = Generalizations::default();
@@ -1250,7 +1239,7 @@ mod tests {
 
     #[test]
     fn concrete_expr_generalize() {
-        let p1 = (indexmap! {}, indexmap! {});
+        let p1 = indexmap! {};
 
         let e1: syn::Expr = parse_quote!(420);
         let mut subs1 = Generalizations::default();
@@ -1292,14 +1281,11 @@ mod tests {
 
     #[test]
     fn expr_full_generalization() {
-        let p = (
-            indexmap! {},
-            indexmap! {
-                format_ident!("_ŠČ0") => parse_quote!(usize),
-                format_ident!("_ŠČ1") => parse_quote!(usize),
-                format_ident!("_ŠČ3") => parse_quote!(usize),
-            },
-        );
+        let p = indexmap! {
+            format_ident!("_ŠČ0") => GenericParam::Const(parse_quote!(usize)),
+            format_ident!("_ŠČ1") => GenericParam::Const(parse_quote!(usize)),
+            format_ident!("_ŠČ3") => GenericParam::Const(parse_quote!(usize)),
+        };
 
         let a: syn::Expr = parse_quote!({
             let a = [_ŠČ0, _ŠČ1];
@@ -1352,9 +1338,9 @@ mod tests {
         assert_eq!(
             subs2.expr_generalizations,
             indexmap! {
-                (Expr::Expr(&r5), Expr::Ident(p.1.get_index(0).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
-                (Expr::Expr(&r4), Expr::Ident(p.1.get_index(1).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
-                (Expr::Expr(&r6), Expr::Ident(p.1.get_index(2).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given)
+                (Expr::Expr(&r5), Expr::Ident(p.get_index(0).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
+                (Expr::Expr(&r4), Expr::Ident(p.get_index(1).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
+                (Expr::Expr(&r6), Expr::Ident(p.get_index(2).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given)
             }
         );
     }

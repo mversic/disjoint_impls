@@ -141,8 +141,12 @@ impl Generalize for syn::GenericArgument {
                 if let (syn::Type::Path(p1), syn::Type::Path(p2)) = (p1, p2)
                     && let Some(ident1) = p1.path.get_ident()
                     && let Some(ident2) = p2.path.get_ident()
-                    && params1.1.contains_key(ident1)
-                    && params2.1.contains_key(ident2)
+                    && params1
+                        .get(ident1)
+                        .is_some_and(|param| matches!(param, GenericParam::Const(_)))
+                    && params2
+                        .get(ident2)
+                        .is_some_and(|param| matches!(param, GenericParam::Const(_)))
                 {
                     substitutions
                         .insert_expr(ident1, ident2, params1, params2)
@@ -231,13 +235,10 @@ mod tests {
 
     #[test]
     fn substitute_path() {
-        let p = (
-            indexmap! {
-                format_ident!("U") => (Sizedness::Sized, IndexSet::new()),
-                format_ident!("V") => (Sizedness::Sized, IndexSet::new()),
-            },
-            indexmap! {},
-        );
+        let p = indexmap! {
+            format_ident!("U") => GenericParam::Type(Sizedness::Sized, IndexSet::new()),
+            format_ident!("V") => GenericParam::Type(Sizedness::Sized, IndexSet::new()),
+        };
 
         let l1: syn::Path = parse_quote!(Kita<U, V>);
         let l2: syn::Path = parse_quote!(Kita<U, V>);
@@ -277,73 +278,4 @@ mod tests {
         assert!(subs1.expr_generalizations.is_empty());
         assert!(subs2.expr_generalizations.is_empty());
     }
-
-    //#[test]
-    //fn substitute_constraint() {
-    //    let p = (
-    //        indexmap! { format_ident!("T") => Sizedness::Sized},
-    //        indexmap! {},
-    //    );
-
-    //    let l1: syn::Type = parse_quote!(Kita<Target1: Bound1 + Bound2<T> + 'a>);
-    //    let l2: syn::Type = parse_quote!(Kita<Target1: 'b + Bound2<T> + Bound1>);
-
-    //    let mut subs1 = Generalizations::default();
-    //    let mut subs2 = Generalizations::default();
-
-    //    let ty1 = l1.generalize(&l2, &p, &p, &mut subs1).unwrap();
-    //    let ty2 = l2.generalize(&l1, &p, &p, &mut subs2).unwrap();
-
-    //    let expected_ty = parse_quote!(Kita<Target1: Bound1 + Bound2<_TŠČ0>>);
-
-    //    assert_eq!(ty1, expected_ty);
-    //    assert_eq!(ty2, expected_ty);
-
-    //    let t: syn::Type = parse_quote!(T);
-    //    let a = parse_quote!('a);
-    //    let b = parse_quote!('b);
-
-    //    assert_eq!(
-    //        subs1.type_generalizations,
-    //        indexmap! { (&t, &t) => (GeneralizationKind::Common, Sizedness::Sized) }
-    //    );
-    //    assert_eq!(
-    //        subs2.type_generalizations,
-    //        indexmap! { (&t, &t) => (GeneralizationKind::Common, Sizedness::Sized) }
-    //    );
-
-    //    assert!(subs1.expr_generalizations.is_empty());
-    //    assert!(subs2.expr_generalizations.is_empty());
-
-    //    assert_eq!(
-    //        subs1.lifetime_substitutions,
-    //        indexmap! { (&a, &b) => GeneralizationKind::Common }
-    //    );
-    //    assert_eq!(
-    //        subs2.lifetime_substitutions,
-    //        indexmap! { (&b, &a) => GeneralizationKind::Common }
-    //    );
-    //}
-
-    //#[test]
-    //fn reduce_constraint() {
-    //    let p = (
-    //        indexmap! { format_ident!("T") => Sizedness::Sized },
-    //        indexmap! {},
-    //    );
-
-    //    let l1: syn::Type = parse_quote!(Kita<Target1: 'a + Bound0 + Bound2<T>>);
-    //    let l2: syn::Type = parse_quote!(Kita<Target1: Bound2<T> + Bound1>);
-
-    //    let mut subs1 = Generalizations::default();
-    //    let mut subs2 = Generalizations::default();
-
-    //    let ty1 = l1.generalize(&l2, &p, &p, &mut subs1).unwrap();
-    //    let ty2 = l2.generalize(&l1, &p, &p, &mut subs2).unwrap();
-
-    //    let expected_ty = parse_quote!(Kita<Target1: Bound2<_TŠČ0>>);
-
-    //    assert_eq!(ty1, expected_ty);
-    //    assert_eq!(ty2, expected_ty);
-    //}
 }
