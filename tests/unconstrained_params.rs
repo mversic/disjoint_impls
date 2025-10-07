@@ -84,6 +84,7 @@ const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized, _TŠČ2: ?Sized> {
         const NAME: &'static str;
     }
+
     pub trait Kita1<_TŠČ0: ?Sized, _TŠČ1: ?Sized, _TŠČ2: ?Sized> {
         const NAME: &'static str;
     }
@@ -98,6 +99,7 @@ const _: () = {
     {
         const NAME: &'static str = "1st Blanket AA";
     }
+
     impl<
         T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>,
         A: Dispatch<Group = [Z; 2]>,
@@ -105,6 +107,7 @@ const _: () = {
     > Kita0<GroupA, [A; 1], [Z; 2]> for T {
         const NAME: &'static str = "1st Blanket AB";
     }
+
     impl<
         T: Dispatch<Group = GroupB> + Tr<A = [A; 2]>,
         A: Dispatch,
@@ -118,12 +121,14 @@ const _: () = {
     > Kita1<GroupA, [A; 1], [u16; 1]> for [T; 1] {
         const NAME: &'static str = "2nd Blanket AA";
     }
+
     impl<
         T: Dispatch<Group = GroupA> + Tr<A = [A; 1]>,
         A: Dispatch<Group = [u16; 2]>,
     > Kita1<GroupA, [A; 1], [u16; 2]> for [T; 1] {
         const NAME: &'static str = "2nd Blanket AB";
     }
+
     impl<
         T: Dispatch<Group = GroupB> + Tr<A = [A; 2]>,
         A: Dispatch,
@@ -131,30 +136,39 @@ const _: () = {
         const NAME: &'static str = "2nd Blanket B*";
     }
 
-    impl<T, _TŠČ1, _TŠČ2, _TŠČ3, const _CŠČ0: usize> Kita for T
+    impl<T, _TŠČ2, const _CŠČ0: usize> Kita for T
     where
-        Self: Kita0<_TŠČ1, [_TŠČ2; _CŠČ0], _TŠČ3>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<
+            <T as Dispatch>::Group,
+            [_TŠČ2; _CŠČ0],
+            <_TŠČ2 as Dispatch>::Group,
+        >,
+        T: Dispatch,
         T: Tr<A = [_TŠČ2; _CŠČ0]>,
-        _TŠČ2: Dispatch<Group = _TŠČ3>,
+        _TŠČ2: Dispatch,
     {
         const NAME: &'static str = <Self as Kita0<
-            _TŠČ1,
+            <T as Dispatch>::Group,
             [_TŠČ2; _CŠČ0],
-            _TŠČ3,
+            <_TŠČ2 as Dispatch>::Group,
         >>::NAME;
     }
-    impl<T, _TŠČ1, _TŠČ2, _TŠČ3, const _CŠČ0: usize> Kita for [T; 1]
+
+    impl<T, _TŠČ2, const _CŠČ0: usize> Kita for [T; 1]
     where
-        Self: Kita1<_TŠČ1, [_TŠČ2; _CŠČ0], _TŠČ3>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita1<
+            <T as Dispatch>::Group,
+            [_TŠČ2; _CŠČ0],
+            <_TŠČ2 as Dispatch>::Group,
+        >,
+        T: Dispatch,
         T: Tr<A = [_TŠČ2; _CŠČ0]>,
-        _TŠČ2: Dispatch<Group = _TŠČ3>,
+        _TŠČ2: Dispatch,
     {
         const NAME: &'static str = <Self as Kita1<
-            _TŠČ1,
+            <T as Dispatch>::Group,
             [_TŠČ2; _CŠČ0],
-            _TŠČ3,
+            <_TŠČ2 as Dispatch>::Group,
         >>::NAME;
     }
 };

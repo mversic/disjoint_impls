@@ -68,6 +68,7 @@ const _: () = {
             "Blanket A"
         }
     }
+
     impl<'a, 'b, 'c, '_lšč0, T, U> Kita0<'a, 'b, &'_lšč0 GroupB, U> for &'c T
     where
         &'c T: Dispatch<Group = &'_lšč0 GroupB>,
@@ -84,16 +85,20 @@ const _: () = {
         '_lšč3,
         U,
         T: '_lšč2,
-        _TŠČ2: '_lšč3,
     > Kita<'_lšč0, '_lšč1, U> for &'_lšč2 T
     where
         '_lšč0:,
         '_lšč1:,
-        Self: Kita0<'_lšč0, '_lšč1, &'_lšč3 _TŠČ2, U>,
-        &'_lšč2 T: Dispatch<Group = &'_lšč3 _TŠČ2>,
+        Self: Kita0<'_lšč0, '_lšč1, <&'_lšč2 T as Dispatch>::Group, U>,
+        &'_lšč2 T: Dispatch,
     {
         fn get_name(&self) -> &str {
-            { <Self as Kita0<'_lšč0, '_lšč1, &'_lšč3 _TŠČ2, U>>::get_name(self) }
+            <Self as Kita0<
+                '_lšč0,
+                '_lšč1,
+                <&'_lšč2 T as Dispatch>::Group,
+                U,
+            >>::get_name(self)
         }
     }
 };

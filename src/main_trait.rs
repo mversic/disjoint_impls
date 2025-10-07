@@ -57,9 +57,9 @@ pub fn generate(
             |((bounded, trait_bound), (_, bindings))| -> syn::WherePredicate {
                 let mut trait_ = trait_bound.0.path.clone();
 
-                let bindings = bindings
-                    .iter()
-                    .map(|(ident, (payload, _))| payload.as_ref().map(|p| quote!(#ident = #p)));
+                let bindings = bindings.iter().filter_map(|(ident, (payload, _))| {
+                    payload.as_ref().map(|p| quote!(#ident = #p))
+                });
 
                 trait_.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
                 match &trait_bound.0.path.segments.last().unwrap().arguments {
@@ -312,9 +312,19 @@ impl VisitMut for ImplItemResolver {
             syn::FnArg::Typed(arg) => arg.pat.clone(),
         });
 
-        node.block = parse_quote!({ #unsafety {
+        let block = quote! {
             #self_as_helper_trait::#ident(#(#inputs,)* #variadic)
-        }});
+        };
+
+        node.block = if unsafety.is_none() {
+            parse_quote!({
+                #block
+            })
+        } else {
+            parse_quote!({ #unsafety {
+                #block
+            }})
+        };
     }
 }
 

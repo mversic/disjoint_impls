@@ -56,6 +56,7 @@ const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
+
     pub trait Kita1<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
         const NAME: &'static str;
     }
@@ -63,13 +64,16 @@ const _: () = {
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
         const NAME: &'static str = "Blanket A";
     }
+
     impl<U: Dispatch<Group = GroupB>> Kita0<GroupB> for U {
         const NAME: &'static str = "Blanket B";
     }
+
     impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> Kita1<GroupA, GroupA>
     for (T, U) {
         const NAME: &'static str = "Blanket AA";
     }
+
     impl<U, T> Kita1<GroupA, GroupB> for (U, T)
     where
         U: Dispatch<Group = GroupA>,
@@ -77,25 +81,30 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket AB";
     }
+
     impl<T: Dispatch<Group = GroupB>, U: Dispatch> Kita1<GroupB, <U as Dispatch>::Group>
     for (T, U) {
         const NAME: &'static str = "Blanket B*";
     }
 
-    impl<T, _TŠČ1> Kita for T
+    impl<T> Kita for T
     where
-        Self: Kita0<_TŠČ1>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<<T as Dispatch>::Group>,
+        T: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ1>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group>>::NAME;
     }
-    impl<T, U, _TŠČ2, _TŠČ3> Kita for (T, U)
+
+    impl<T, U> Kita for (T, U)
     where
-        Self: Kita1<_TŠČ2, _TŠČ3>,
-        T: Dispatch<Group = _TŠČ2>,
-        U: Dispatch<Group = _TŠČ3>,
+        Self: Kita1<<T as Dispatch>::Group, <U as Dispatch>::Group>,
+        T: Dispatch,
+        U: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita1<_TŠČ2, _TŠČ3>>::NAME;
+        const NAME: &'static str = <Self as Kita1<
+            <T as Dispatch>::Group,
+            <U as Dispatch>::Group,
+        >>::NAME;
     }
 };
 */

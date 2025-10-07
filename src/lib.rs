@@ -161,7 +161,7 @@ struct ImplGroupBuilder {
     /// List of all trait bounds common to this impl (optionally with associated bindings)
     trait_bounds: TraitBoundsBuilder,
 
-    /// Generalized items of this impl group
+    /// Generalized items of the impl group if the impls are inherent, `None` otherwise
     items: Option<ImplItems>,
 }
 
@@ -286,118 +286,148 @@ impl quote::ToTokens for ImplGroupId {
 }
 
 impl TraitBoundsBuilder {
+    /// Try to remove all unconstrained params because Rust's trait solver can overflow
+    /// when exploring valid implementations that have too many degrees of freedom.
+    ///
+    /// Prefer `impl<T> Kita for T where Self: Kita0<<T as Dispatch>::Group>, T: Dispatch {}`
+    /// instead of: `impl<T, U> Kita for T where Self: Kita0<<U>, T: Dispatch<Group = U> {}`
     fn build(self, impl_group_id: &ImplGroupId, params: &mut Params) -> TraitBounds {
-        struct GenericParamFinder<'a>(IndexSet<syn::Ident>, IndexSet<&'a syn::Ident>);
-        struct GenericParamMatcher<'a>(IndexSet<&'a syn::Ident>, bool);
+        struct ParamsPartitioner<'a>(IndexSet<&'a syn::Ident>, IndexSet<&'a syn::Ident>);
+        struct UnboundedParamFinder<'a>(IndexSet<&'a syn::Ident>, IndexSet<&'a syn::Ident>);
 
-        impl<'a> Visit<'a> for GenericParamFinder<'a> {
+        struct RequiredPayloadDetector<'a> {
+            unbounded_params: &'a mut IndexSet<syn::Ident>,
+            required_params: IndexSet<&'a syn::Ident>,
+            all_params: &'a IndexSet<syn::Ident>,
+
+            is_required: bool,
+        }
+
+        impl<'a> Visit<'a> for ParamsPartitioner<'a> {
+            fn visit_path(&mut self, node: &'a syn::Path) {
+                let first_seg = node.segments.first().unwrap();
+
+                if self.0.swap_remove(&first_seg.ident) {
+                    self.1.insert(&first_seg.ident);
+                } else {
+                    syn::visit::visit_path(self, node);
+                }
+            }
+        }
+
+        impl<'a> Visit<'a> for UnboundedParamFinder<'a> {
             fn visit_path(&mut self, node: &'a syn::Path) {
                 let first_seg = node.segments.first().unwrap();
 
                 if self.0.contains(&first_seg.ident) {
                     self.1.insert(&first_seg.ident);
+                } else {
+                    syn::visit::visit_path(self, node);
                 }
-
-                syn::visit::visit_path(self, node);
             }
         }
 
-        impl<'a> Visit<'a> for GenericParamMatcher<'a> {
+        impl<'a> Visit<'a> for RequiredPayloadDetector<'a> {
             fn visit_path(&mut self, node: &'a syn::Path) {
                 let first_seg = node.segments.first().unwrap();
 
-                if !self.0.contains(&first_seg.ident) {
-                    self.1 = true;
+                let ident = &first_seg.ident;
+                if self.unbounded_params.swap_remove(ident) {
+                    self.is_required = true;
+                } else if self.all_params.contains(ident) {
+                    self.required_params.insert(ident);
+                } else {
+                    syn::visit::visit_path(self, node);
                 }
-
-                syn::visit::visit_path(self, node);
             }
         }
 
-        let (valid, maybe) = self.0.into_iter().partition::<Vec<_>, _>(|(bound_id, _)| {
-            let last_seg = bound_id.1.0.path.segments.last().unwrap();
+        let mut params_partitioner = ParamsPartitioner(
+            params.iter().map(|(ident, _)| ident).collect(),
+            IndexSet::new(),
+        );
 
-            if let syn::PathArguments::AngleBracketed(bracketed) = &last_seg.arguments {
-                return !matches!(
-                    bracketed.args.first(),
-                    Some(syn::GenericArgument::Lifetime(_))
-                );
+        params_partitioner.visit_type(&impl_group_id.self_ty);
+        if let Some(trait_) = &impl_group_id.trait_ {
+            params_partitioner.visit_path(trait_);
+        }
+
+        let (maybe_redundant_params, mut unbounded_params) = if impl_group_id.trait_.is_none() {
+            let unbounded_params = params_partitioner.0.into_iter().cloned().collect();
+
+            (IndexSet::new(), unbounded_params)
+        } else {
+            let mut unbounded_param_finder =
+                UnboundedParamFinder(params_partitioner.0, IndexSet::new());
+            for (bounded, trait_bound) in self.0.keys() {
+                unbounded_param_finder.visit_type(&bounded.0);
+                unbounded_param_finder.visit_trait_bound(&trait_bound.0);
             }
 
-            true
-        });
+            let maybe_redundant_params = unbounded_param_finder
+                .0
+                .into_iter()
+                .cloned()
+                .collect::<IndexSet<_>>();
+            let unbounded_params = unbounded_param_finder
+                .1
+                .into_iter()
+                .cloned()
+                .collect::<IndexSet<_>>();
 
-        let valid_payloads = valid
-            .iter()
-            .flat_map(|(_, (_, bindings))| bindings.iter().map(|(_, (p, _))| p))
-            .collect::<Vec<_>>();
+            (maybe_redundant_params, unbounded_params)
+        };
 
-        let validated_maybe = maybe
+        let mut required_params = params_partitioner
+            .1
             .into_iter()
-            .map(|(bound_id, (orig_bounds, bindings))| {
+            .cloned()
+            .chain(unbounded_params.clone())
+            .collect::<IndexSet<_>>();
+
+        let trait_bounds = self
+            .0
+            .into_iter()
+            .map(|(bound_id, (orig_idents, bindings))| {
                 let bindings = bindings
                     .into_iter()
-                    .map(|(ident, (p, payloads))| {
-                        let ty_params = params
-                            .iter()
-                            .filter_map(|(ident, param)| match param {
-                                GenericParam::Type(_, _) => Some(ident),
-                                _ => None,
-                            })
-                            .cloned()
-                            .collect();
-                        let mut param_finder = GenericParamFinder(ty_params, IndexSet::new());
+                    .map(|(ident, (payload, payloads))| {
+                        let mut required_payload_detector = RequiredPayloadDetector {
+                            unbounded_params: &mut unbounded_params,
+                            all_params: &maybe_redundant_params,
+                            required_params: IndexSet::new(),
 
-                        param_finder.visit_type(&p);
-                        let unbound_params = param_finder.1;
-
-                        let x = if unbound_params.is_empty() {
-                            Some(p)
-                        } else {
-                            let mut matcher = GenericParamMatcher(unbound_params.clone(), true);
-
-                            matcher.visit_type(&impl_group_id.self_ty);
-                            if let Some(trait_) = &impl_group_id.trait_ {
-                                matcher.visit_path(trait_);
-                            }
-
-                            for &valid_payload in &valid_payloads {
-                                matcher.visit_type(valid_payload);
-                            }
-
-                            if !matcher.1 {
-                                Some(p)
-                            } else {
-                                for &unbound_param in &unbound_params {
-                                    params.swap_remove(unbound_param);
-                                }
-
-                                None
-                            }
+                            is_required: false,
                         };
 
-                        (ident, (x, payloads))
+                        required_payload_detector.visit_type(&payload);
+                        let payload = if required_payload_detector.is_required {
+                            required_params.extend(
+                                required_payload_detector
+                                    .required_params
+                                    .into_iter()
+                                    .cloned(),
+                            );
+
+                            Some(payload)
+                        } else {
+                            None
+                        };
+
+                        (ident, (payload, payloads))
                     })
-                    .collect::<IndexMap<_, _>>();
+                    .collect();
 
-                (bound_id, (orig_bounds, bindings))
+                (bound_id, (orig_idents, bindings))
             })
-            .collect::<Vec<_>>();
+            .collect();
 
-        TraitBounds(
-            valid
-                .into_iter()
-                .map(|(bound_id, (orig_bounds, bindings))| {
-                    let bindings = bindings
-                        .into_iter()
-                        .map(|(ident, (p, payloads))| (ident, (Some(p), payloads)))
-                        .collect::<IndexMap<_, _>>();
+        *params = core::mem::take(params)
+            .into_iter()
+            .filter(|(ident, _)| required_params.contains(ident))
+            .collect();
 
-                    (bound_id, (orig_bounds, bindings))
-                })
-                .chain(validated_maybe)
-                .collect(),
-        )
+        TraitBounds(trait_bounds)
     }
 }
 
@@ -517,8 +547,7 @@ impl ImplGroupBuilder {
         let mut results = Vec::new();
         let mut stack = Vec::new();
 
-        // FIXME: Use stack or queue? the order matters very much!
-        // how to eliminate redundant results?
+        // TODO: Use stack or queue? eliminate redundant results
         stack.push((group_bounds, other_bounds, Vec::new()));
         while let Some((mut rem_group_bounds, rem_other_bounds, acc)) = stack.pop() {
             let Some(group_bound_idx) = rem_group_bounds.pop() else {
@@ -1001,6 +1030,8 @@ impl Visit<'_> for ItemImplDescVisitor {
 
 /// Enables writing non-overlapping (*disjoint*) impls distinguished by a set of associated types.
 ///
+/// Works for trait and inherent impls alike. You write regular old `Rust` code (no special syntax).
+///
 /// # Example
 ///
 /// ```
@@ -1091,7 +1122,41 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// }
 /// ```
 ///
-/// Other, much more complex examples can be found in tests.
+/// # Inherent impls
+///
+/// ```
+/// use disjoint_impls::disjoint_impls;
+///
+/// pub trait Dispatch {
+///     type Group;
+/// }
+///
+/// pub enum GroupA {}
+/// pub enum GroupB {}
+///
+/// impl Dispatch for String {
+///     type Group = GroupA;
+/// }
+/// impl Dispatch for i32 {
+///     type Group = GroupB;
+/// }
+///
+/// struct Wrapper<T>(T);
+///
+/// disjoint_impls! {
+///     impl<T: Dispatch<Group = GroupA>> Wrapper<T> {
+///         const NAME: &'static str = "Blanket A";
+///     }
+///     impl<T: Dispatch<Group = GroupB>> Wrapper<T> {
+///         const NAME: &'static str = "Blanket B";
+///     }
+/// }
+///
+/// fn main() {
+///     assert_eq!("Blanket A", Wrapper::<String>::NAME);
+///     assert_eq!("Blanket B", Wrapper::<i32>::NAME);
+/// }
+/// ```
 ///
 /// # Foreign(remote) traits
 ///
@@ -1142,6 +1207,8 @@ impl Visit<'_> for ItemImplDescVisitor {
 ///     }
 /// }
 /// ```
+///
+/// Other, much more complex examples can be found in tests.
 #[proc_macro]
 #[proc_macro_error]
 pub fn disjoint_impls(input: TokenStream) -> TokenStream {
@@ -1236,7 +1303,7 @@ impl Parse for ImplGroups {
                         .trait_bounds
                         .0
                         .values()
-                        .flat_map(|(_, payloads)| payloads.values())
+                        .flat_map(|(_, bindings)| bindings.values())
                         .collect::<Vec<_>>();
 
                     (0..nrows)

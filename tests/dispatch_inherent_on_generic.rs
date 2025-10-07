@@ -67,6 +67,7 @@ const _: () = {
     pub trait Wrapper0<_TŠČ4: ?Sized, T, U, V, _TŠČ3> {
         fn kita(_a: (U,), _b: V) -> String;
     }
+
     pub trait Wrapper1<
         _TŠČ4: ?Sized,
         _TŠČ5: ?Sized,
@@ -77,12 +78,14 @@ const _: () = {
     > {
         fn kara(_a: (U,), b: _TŠČ2) -> String;
     }
+
     impl<T: Dispatch<Group = (U, V)>, U, V> Wrapper0<(U, V), T, U, V, (U, V)>
     for Wrapper<T, (U,), V> {
         fn kita(_a: (U,), _b: V) -> String {
             "Generic Blanket A".to_owned()
         }
     }
+
     impl<
         T: Dispatch<Group = [(U, V); 1]>,
         U: ToString,
@@ -92,6 +95,7 @@ const _: () = {
             b.to_string()
         }
     }
+
     impl<
         T: Dispatch<Group = (U,)>,
         U: A<A = [Z; 1]>,
@@ -101,6 +105,7 @@ const _: () = {
             b.to_string()
         }
     }
+
     impl<
         T: Dispatch<Group = (U,)>,
         U: A<A = [Z; 2]>,
@@ -110,32 +115,39 @@ const _: () = {
             "Generic Blanket B".to_owned()
         }
     }
+
     impl<T, U, V, _TŠČ3> Wrapper<T, (U,), V>
     where
         Self: Wrapper0<_TŠČ3, T, U, V, _TŠČ3>,
         T: Dispatch<Group = _TŠČ3>,
     {
         fn kita(_a: (U,), _b: V) -> String {
-            { <Self as Wrapper0<_TŠČ3, T, U, V, _TŠČ3>>::kita(_a, _b) }
+            <Self as Wrapper0<_TŠČ3, T, U, V, _TŠČ3>>::kita(_a, _b)
         }
     }
+
     impl<T, U, _TŠČ2, const _CŠČ0: usize> Wrapper<T, u32, U>
     where
-        Self: Wrapper1<(U,), [_TŠČ2; _CŠČ0], T, U, _TŠČ2, _CŠČ0>,
-        T: Dispatch<Group = (U,)>,
+        Self: Wrapper1<
+            <T as Dispatch>::Group,
+            [_TŠČ2; _CŠČ0],
+            T,
+            U,
+            _TŠČ2,
+            _CŠČ0,
+        >,
+        T: Dispatch,
         U: A<A = [_TŠČ2; _CŠČ0]>,
     {
         fn kara(_a: (U,), b: _TŠČ2) -> String {
-            {
-                <Self as Wrapper1<
-                    (U,),
-                    [_TŠČ2; _CŠČ0],
-                    T,
-                    U,
-                    _TŠČ2,
-                    _CŠČ0,
-                >>::kara(_a, b)
-            }
+            <Self as Wrapper1<
+                <T as Dispatch>::Group,
+                [_TŠČ2; _CŠČ0],
+                T,
+                U,
+                _TŠČ2,
+                _CŠČ0,
+            >>::kara(_a, b)
         }
     }
 };

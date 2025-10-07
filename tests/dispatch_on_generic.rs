@@ -76,6 +76,7 @@ const _: () = {
             "Generic Blanket A".to_owned()
         }
     }
+
     impl<T: Dispatch<Group = [(U, V); 1]>, U: ToString, V> Kita0<[(U, V); 1], (V,), U>
     for T {
         fn kita(_a: (V,), b: U) -> String {
@@ -83,15 +84,16 @@ const _: () = {
         }
     }
 
-    impl<U, V, T, _TŠČ3> Kita<(U,), V> for T
+    impl<U, V, T> Kita<(U,), V> for T
     where
-        Self: Kita0<_TŠČ3, (U,), V>,
-        T: Dispatch<Group = _TŠČ3>,
+        Self: Kita0<<T as Dispatch>::Group, (U,), V>,
+        T: Dispatch,
     {
         fn kita(_a: (U,), _b: V) -> String {
-            { <Self as Kita0<_TŠČ3, (U,), V>>::kita(_a, _b) }
+            <Self as Kita0<<T as Dispatch>::Group, (U,), V>>::kita(_a, _b)
         }
     }
+
     impl<T: Dispatch<Group = (U,)>, U: Tr<A = A>, A> Kita<u32, U> for T {}
 };
 */

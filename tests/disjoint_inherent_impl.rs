@@ -76,6 +76,7 @@ const _: () = {
             T: 'a,
             U: 'a;
     }
+
     pub trait Wrapper1<'c, _TŠČ3: ?Sized, T, _TŠČ1> {
         const NAME: &'static str;
     }
@@ -93,6 +94,7 @@ const _: () = {
             Self::NAME
         }
     }
+
     impl<'b, T, U> Wrapper0<'b, GroupB, T, U, GroupB> for Wrapper<'b, (T, U), 12>
     where
         T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB> + B,
@@ -113,6 +115,7 @@ const _: () = {
     > Wrapper1<'c, GroupA, T, GroupA> for Wrapper<'c, T, 14> {
         const NAME: &'static str = "2nd Blanket A";
     }
+
     impl<
         'c,
         T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB>,
@@ -130,10 +133,11 @@ const _: () = {
             T: 'a,
             U: 'a,
         {
-            { <Self as Wrapper0<'a, _TŠČ2, T, U, _TŠČ2>>::kita(_a, _b) }
+            <Self as Wrapper0<'a, _TŠČ2, T, U, _TŠČ2>>::kita(_a, _b)
         }
         const NAME: &'static str = <Self as Wrapper0<'a, _TŠČ2, T, U, _TŠČ2>>::NAME;
     }
+
     impl<'c, T, _TŠČ1> Wrapper<'c, T, 14>
     where
         Self: Wrapper1<'c, _TŠČ1, T, _TŠČ1>,

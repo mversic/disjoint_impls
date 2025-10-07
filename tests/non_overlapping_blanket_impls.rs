@@ -50,15 +50,18 @@ const _: () = {
     impl<T> Kita for (T,) {
         const NAME: &'static str = "Blanket 1";
     }
+
     impl Kita for Option<u32> {
         const NAME: &'static str = "Concrete Option<u32>";
     }
+
     impl<_0, _1> Kita for (_0, _1)
     where
         _0: Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket A";
     }
+
     impl<_0> Kita for (Vec<_0>, Vec<_0>)
     where
         _0: Dispatch<Group = GroupB>,

@@ -68,18 +68,21 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket A";
     }
+
     impl<T, U> Kita0<GroupB> for (Vec<T>, U)
     where
         (Vec<T>, U): Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
     }
+
     impl<T, U> Kita0<GroupC> for (T, Vec<U>)
     where
         (T, Vec<U>): Dispatch<Group = GroupC>,
     {
         const NAME: &'static str = "Blanket C";
     }
+
     impl<T, U> Kita0<GroupD> for (Vec<T>, Vec<U>)
     where
         (Vec<T>, Vec<U>): Dispatch<Group = GroupD>,
@@ -87,12 +90,12 @@ const _: () = {
         const NAME: &'static str = "Blanket D";
     }
 
-    impl<T, U, _TŠČ2> Kita for (T, U)
+    impl<T, U> Kita for (T, U)
     where
-        Self: Kita0<_TŠČ2>,
-        (T, U): Dispatch<Group = _TŠČ2>,
+        Self: Kita0<<(T, U) as Dispatch>::Group>,
+        (T, U): Dispatch,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ2>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<(T, U) as Dispatch>::Group>>::NAME;
     }
 };
 */

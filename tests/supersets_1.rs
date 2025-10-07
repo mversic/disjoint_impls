@@ -58,18 +58,20 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket A";
     }
+
     impl<U> Kita0<GroupB> for Vec<U>
     where
         Option<Vec<U>>: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
     }
-    impl<T, _TŠČ1> Kita for T
+
+    impl<T> Kita for T
     where
-        Self: Kita0<_TŠČ1>,
-        Option<T>: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<<Option<T> as Dispatch>::Group>,
+        Option<T>: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ1>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<Option<T> as Dispatch>::Group>>::NAME;
     }
 
     impl<T> Kita for Option<T>

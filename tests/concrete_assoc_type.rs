@@ -52,30 +52,35 @@ pub trait Kita {
 const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         type Item;
+
         fn kita() -> Self::Item;
     }
 
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
         type Item = u32;
+
         fn kita() -> u32 {
             1
         }
     }
+
     impl<U: Dispatch<Group = GroupB> + Default> Kita0<GroupB> for U {
         type Item = U;
+
         fn kita() -> Self::Item {
             <U as Default>::default()
         }
     }
 
-    impl<T, _TŠČ1> Kita for T
+    impl<T> Kita for T
     where
-        Self: Kita0<_TŠČ1>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<<T as Dispatch>::Group>,
+        T: Dispatch,
     {
-        type Item = <Self as Kita0<_TŠČ1>>::Item;
+        type Item = <Self as Kita0<<T as Dispatch>::Group>>::Item;
+
         fn kita() -> Self::Item {
-            { <Self as Kita0<_TŠČ1>>::kita() }
+            <Self as Kita0<<T as Dispatch>::Group>>::kita()
         }
     }
 };

@@ -76,19 +76,21 @@ const _: () = {
             "Blanket A"
         }
     }
+
     unsafe impl<U, T: Dispatch<Group = GroupB>> Kita0<GroupB, U> for T {
         unsafe fn kita() -> &'static str {
             "Blanket B"
         }
     }
 
-    unsafe impl<U, T, _TŠČ2> Kita<U> for T
+    unsafe impl<U, T> Kita<U> for T
     where
-        Self: Kita0<_TŠČ2, U>,
-        T: Dispatch<Group = _TŠČ2>,
+        Self: Dispatch,
+        Self: Kita0<<T as Dispatch>::Group, U>,
+        T: Dispatch,
     {
         unsafe fn kita() -> &'static str {
-            unsafe { <Self as Kita0<_TŠČ2, U>>::kita() }
+            unsafe { <Self as Kita0<<T as Dispatch>::Group, U>>::kita() }
         }
     }
 };

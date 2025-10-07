@@ -95,7 +95,41 @@ fn main() {
 }
 ```
 
-Other, much more complex examples can be found in tests.
+## Inherent impls
+
+```rs
+use disjoint_impls::disjoint_impls;
+
+pub trait Dispatch {
+    type Group;
+}
+
+pub enum GroupA {}
+pub enum GroupB {}
+
+impl Dispatch for String {
+    type Group = GroupA;
+}
+impl Dispatch for i32 {
+    type Group = GroupB;
+}
+
+struct Wrapper<T>(T);
+
+disjoint_impls! {
+    impl<T: Dispatch<Group = GroupA>> Wrapper<T> {
+        const NAME: &'static str = "Blanket A";
+    }
+    impl<T: Dispatch<Group = GroupB>> Wrapper<T> {
+        const NAME: &'static str = "Blanket B";
+    }
+}
+
+fn main() {
+    assert_eq!("Blanket A", Wrapper::<String>::NAME);
+    assert_eq!("Blanket B", Wrapper::<i32>::NAME);
+}
+```
 
 ## Foreign(remote) traits
 
@@ -146,3 +180,5 @@ disjoint_impls! {
     }
 }
 ```
+
+Other, much more complex examples can be found in tests.

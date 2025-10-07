@@ -65,10 +65,12 @@ const _: () = {
     for &'_lšč0 T {
         const NAME: &'static str = "Blanket C";
     }
+
     impl<'a, '_lšč0, T: Dispatch<'a, (), Group = GroupB>> Kita0<GroupB>
     for &'_lšč0 T {
         const NAME: &'static str = "Blanket B";
     }
+
     impl<'b, 'k, '_lšč0, T: Dispatch<'b, (), Group = GroupA>> Kita0<GroupA>
     for &'_lšč0 T
     where

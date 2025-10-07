@@ -69,19 +69,23 @@ const _: () = {
     for T {
         const NAME: &str = "Blanket A";
     }
+
     impl<
         T: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>,
     > Kita0<GroupB, <T as Dispatch2>::Group> for T {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<T, _TŠČ1, _TŠČ2> Kita for T
+    impl<T> Kita for T
     where
-        Self: Kita0<_TŠČ1, _TŠČ2>,
-        T: Dispatch1<Group = _TŠČ1>,
-        T: Dispatch2<Group = _TŠČ2>,
+        Self: Kita0<<T as Dispatch1>::Group, <T as Dispatch2>::Group>,
+        T: Dispatch1,
+        T: Dispatch2,
     {
-        const NAME: &str = <Self as Kita0<_TŠČ1, _TŠČ2>>::NAME;
+        const NAME: &str = <Self as Kita0<
+            <T as Dispatch1>::Group,
+            <T as Dispatch2>::Group,
+        >>::NAME;
     }
 };
 */

@@ -61,23 +61,24 @@ const _: () = {
             "Blanket A"
         }
     }
+
     impl<'a, 'b: 'a, T: Dispatch<Group = GroupB>> Kita0<'a, 'b, GroupB, u32> for T {
         fn get_name(&'b self) -> &'a str {
             "Blanket B"
         }
     }
 
-    impl<'a, 'x, T, _TŠČ1> Kita<'a, 'x, u32> for T
+    impl<'a, 'x, T> Kita<'a, 'x, u32> for T
     where
         u32: 'a,
         'a:,
         'x: 'a,
         u32: 'x,
-        Self: Kita0<'a, 'x, _TŠČ1, u32>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<'a, 'x, <T as Dispatch>::Group, u32>,
+        T: Dispatch,
     {
         fn get_name(&'x self) -> &'a str {
-            { <Self as Kita0<'a, 'x, _TŠČ1, u32>>::get_name(self) }
+            <Self as Kita0<'a, 'x, <T as Dispatch>::Group, u32>>::get_name(self)
         }
     }
 };

@@ -49,6 +49,7 @@ where
 {
     const NAME: &'static str;
 }
+
 const _: () = {
     pub trait Kita0<_TŠČ1: ?Sized, U>: Dispatch
     where
@@ -68,13 +69,16 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket B";
     }
-    impl<U, T, _TŠČ2> Kita<U> for T
+    impl<U, T> Kita<U> for T
     where
         U: From<u8> + From<bool>,
-        Self: Kita0<_TŠČ2, U>,
-        T: Dispatch<Group = _TŠČ2>,
+        Self: Dispatch,
+        Self: Kita0<<T as Dispatch>::Group, U>,
+        T: Dispatch,
+        U: From<u8>,
+        U: From<bool>,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ2, U>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group, U>>::NAME;
     }
 };
 */

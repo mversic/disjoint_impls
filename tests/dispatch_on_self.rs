@@ -48,16 +48,17 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket A";
     }
+
     impl<T: Dispatch<Group = GroupB>> Kita0<GroupB> for T {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<T, _TŠČ1> Kita for T
+    impl<T> Kita for T
     where
-        Self: Kita0<_TŠČ1>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<<T as Dispatch>::Group>,
+        T: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ1>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group>>::NAME;
     }
 };
 */

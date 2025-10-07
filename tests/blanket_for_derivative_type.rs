@@ -76,12 +76,14 @@ const _: () = {
     {
         const NAME: &str = "Blanket AA";
     }
+
     impl<T: Dispatch<Group = GroupB>> Kita0<GroupB, GroupA> for Option<T>
     where
         Option<T>: Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket BA";
     }
+
     impl<T: Dispatch> Kita0<<T as Dispatch>::Group, GroupB> for Option<T>
     where
         Option<T>: Dispatch<Group = GroupB>,
@@ -89,13 +91,16 @@ const _: () = {
         const NAME: &'static str = "Blanket *B";
     }
 
-    impl<T, _TŠČ1, _TŠČ2> Kita for Option<T>
+    impl<T> Kita for Option<T>
     where
-        Self: Kita0<_TŠČ2, _TŠČ1>,
-        T: Dispatch<Group = _TŠČ2>,
-        Option<T>: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<<T as Dispatch>::Group, <Option<T> as Dispatch>::Group>,
+        T: Dispatch,
+        Option<T>: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ2, _TŠČ1>>::NAME;
+        const NAME: &'static str = <Self as Kita0<
+            <T as Dispatch>::Group,
+            <Option<T> as Dispatch>::Group,
+        >>::NAME;
     }
 };
 */

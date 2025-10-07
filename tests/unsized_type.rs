@@ -59,26 +59,28 @@ const _: () = {
             "Blanket A".to_owned()
         }
     }
+
     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita0<GroupB, U, V> for T {
         fn kita(&self) -> String {
             "Blanket B".to_owned()
         }
     }
-    impl<T: Dispatch<Group = GroupB> + ?Sized, U> Kita0<GroupB, U, str> for T {
-        fn kita(&self) -> String {
-            "Blanket for str".to_owned()
-        }
-    }
 
-    impl<U: ?Sized, V: ?Sized, T: ?Sized, _TŠČ3> Kita<U, V> for T
+    impl<U: ?Sized, V, T: ?Sized> Kita<U, V> for T
     where
         U:,
         V:,
-        Self: Kita0<_TŠČ3, U, V>,
-        T: Dispatch<Group = _TŠČ3>,
+        Self: Kita0<<T as Dispatch>::Group, U, V>,
+        T: Dispatch,
     {
         fn kita(&self) -> String {
-            { <Self as Kita0<_TŠČ3, U, V>>::kita(self) }
+            <Self as Kita0<<T as Dispatch>::Group, U, V>>::kita(self)
+        }
+    }
+
+    impl<T: Dispatch<Group = GroupB> + ?Sized, U> Kita<U, str> for T {
+        fn kita(&self) -> String {
+            "Blanket for str".to_owned()
         }
     }
 };

@@ -62,22 +62,24 @@ const _: () = {
         const NAME: &'static str = "Blanket A";
         type Kita = u32;
     }
+
     impl<T: Dispatch<Group = u32>> Kita0<u32> for T {
         const NAME: &'static str = "Blanket B";
         type Kita = u32;
     }
+
     impl<U: Dispatch<Group = T>, T: LocalTrait> Kita0<T> for U {
         const NAME: &'static str = "Blanket C";
         type Kita = U::Group;
     }
 
-    impl<T, _TŠČ1> Kita for T
+    impl<T> Kita for T
     where
-        Self: Kita0<_TŠČ1>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita0<<T as Dispatch>::Group>,
+        T: Dispatch,
     {
-        const NAME: &str = <Self as Kita0<_TŠČ1>>::NAME;
-        type Kita = <Self as Kita0<_TŠČ1>>::Kita;
+        const NAME: &str = <Self as Kita0<<T as Dispatch>::Group>>::NAME;
+        type Kita = <Self as Kita0<<T as Dispatch>::Group>>::Kita;
     }
 };
 */

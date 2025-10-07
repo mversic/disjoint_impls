@@ -57,6 +57,7 @@ const _: () = {
             "Blanket A"
         }
     }
+
     impl<'_lšč0, X> Kita for &'_lšč0 (Vec<X>, Vec<X>)
     where
         Vec<X>: Dispatch<Group = GroupB>,

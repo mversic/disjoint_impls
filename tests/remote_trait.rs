@@ -56,19 +56,20 @@ const _: () = {
             "Blanket A"
         }
     }
+
     impl<U, T: Dispatch<Group = GroupB>> ForeignKita0<GroupB, U> for LocalType<T> {
         fn kita() -> &'static str {
             "Blanket B"
         }
     }
 
-    impl<U, T, _TŠČ2> ForeignKita<U> for LocalType<T>
+    impl<U, T> ForeignKita<U> for LocalType<T>
     where
-        Self: ForeignKita0<_TŠČ2, U>,
-        T: Dispatch<Group = _TŠČ2>,
+        Self: ForeignKita0<<T as Dispatch>::Group, U>,
+        T: Dispatch,
     {
         fn kita() -> &'static str {
-            { <Self as ForeignKita0<_TŠČ2, U>>::kita() }
+            <Self as ForeignKita0<<T as Dispatch>::Group, U>>::kita()
         }
     }
 };

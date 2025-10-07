@@ -92,6 +92,7 @@ const _: () = {
     {
         const NAME: &'static str;
     }
+
     pub trait Kita1<_TŠČ2: ?Sized, U: A<B = u32>, T = u32>
     where
         (T, U): A<B = i32>,
@@ -106,6 +107,7 @@ const _: () = {
     {
         const NAME: &'static str = "1st Blanket A";
     }
+
     impl<T, U, C> Kita0<GroupB, u32, i32, (U, C), u32> for T
     where
         (U, C): Dispatch<Group = GroupB> + A<B = u32>,
@@ -117,29 +119,47 @@ const _: () = {
     impl<T: Dispatch<Group = GroupA>> Kita1<GroupA, (i32,), u32> for T {
         const NAME: &'static str = "2nd Blanket A";
     }
+
     impl<T: Dispatch<Group = GroupB>> Kita1<GroupB, (i32,), u32> for T {
         const NAME: &'static str = "2nd Blanket B";
     }
 
-    impl<U, C, T, _TŠČ3> Kita<(U, C), u32> for T
+    impl<U, C, T> Kita<(U, C), u32> for T
     where
         (u32, (U, C)): A<B = i32>,
         (U, C): A<B = u32>,
-        Self: Kita0<_TŠČ3, u32, i32, (U, C), u32>,
-        (U, C): Dispatch<Group = _TŠČ3>,
-        (U, C): A<B = u32>,
-        (u32, (U, C)): A<B = i32>,
+        Self: Kita0<
+            <(U, C) as Dispatch>::Group,
+            <(U, C) as A>::B,
+            <(u32, (U, C)) as A>::B,
+            (U, C),
+            u32,
+        >,
+        (U, C): Dispatch,
+        (U, C): A,
+        (u32, (U, C)): A,
     {
-        const NAME: &'static str = <Self as Kita0<_TŠČ3, u32, i32, (U, C), u32>>::NAME;
+        const NAME: &'static str = <Self as Kita0<
+            <(U, C) as Dispatch>::Group,
+            <(U, C) as A>::B,
+            <(u32, (U, C)) as A>::B,
+            (U, C),
+            u32,
+        >>::NAME;
     }
-    impl<T, _TŠČ1> Kita<(i32,), u32> for T
+
+    impl<T> Kita<(i32,), u32> for T
     where
         (u32, (i32,)): A<B = i32>,
         (i32,): A<B = u32>,
-        Self: Kita1<_TŠČ1, (i32,), u32>,
-        T: Dispatch<Group = _TŠČ1>,
+        Self: Kita1<<T as Dispatch>::Group, (i32,), u32>,
+        T: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita1<_TŠČ1, (i32,), u32>>::NAME;
+        const NAME: &'static str = <Self as Kita1<
+            <T as Dispatch>::Group,
+            (i32,),
+            u32,
+        >>::NAME;
     }
 };
 */
