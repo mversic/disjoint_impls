@@ -1247,6 +1247,7 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     quote! {
         #main_trait
 
+        #[allow(clippy::needless_lifetimes)]
         const _: () = {
             #( #helper_traits )*
             #( #item_impls )*
