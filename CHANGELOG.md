@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2025-10-07
+### Changed
+- don't use unconstrained type parameters in associated bindings
+
 ## [1.1.1] - 2025-10-06
 ### Fixed
 - make all impls present in the output

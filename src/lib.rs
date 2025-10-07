@@ -1,13 +1,12 @@
 //! Unlock support for a variety of mutually disjoint implementations that the Rust compiler
 //! [does not (yet?) support](https://github.com/rust-lang/rust/issues/20400).
 //!
-//! # Example
+//! Works for trait and inherent implementations alike (no special syntax).
+//!
+//! # Trait implementations
 //!
 //! ```
 //! use disjoint_impls::disjoint_impls;
-//!
-//! pub enum GroupA {}
-//! pub enum GroupB {}
 //!
 //! pub trait Dispatch {
 //!     type Group;
@@ -16,8 +15,25 @@
 //! disjoint_impls! {
 //!     pub trait Kita {}
 //!
-//!     impl<T: Dispatch<Group = GroupA>> Kita for T {}
-//!     impl<U: Dispatch<Group = GroupB>> Kita for U {}
+//!     impl<T: Dispatch<Group = u32>> Kita for T {}
+//!     impl<T: Dispatch<Group = i32>> Kita for T {}
+//! }
+//! ```
+//!
+//! # Inherent implementations
+//!
+//! ```
+//! use disjoint_impls::disjoint_impls;
+//!
+//! pub trait Dispatch {
+//!     type Group;
+//! }
+//!
+//! struct Wrapper<T>(T);
+//!
+//! disjoint_impls! {
+//!     impl<T: Dispatch<Group = u32>> Wrapper<T> {}
+//!     impl<T: Dispatch<Group = i32>> Wrapper<T> {}
 //! }
 //! ```
 //!
@@ -1030,9 +1046,7 @@ impl Visit<'_> for ItemImplDescVisitor {
 
 /// Enables writing non-overlapping (*disjoint*) impls distinguished by a set of associated types.
 ///
-/// Works for trait and inherent impls alike. You write regular old `Rust` code (no special syntax).
-///
-/// # Example
+/// # Trait implementations
 ///
 /// ```
 /// use disjoint_impls::disjoint_impls;
@@ -1044,85 +1058,72 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// pub enum GroupA {}
 /// pub enum GroupB {}
 ///
-/// impl Dispatch for String {
+/// impl Dispatch for u32 {
 ///     type Group = GroupA;
 /// }
 /// impl Dispatch for i32 {
 ///     type Group = GroupB;
 /// }
 ///
-/// impl Dispatch for Option<String> {
+/// impl Dispatch for Option<u32> {
 ///     type Group = GroupA;
-/// }
-/// impl Dispatch for Option<i32> {
-///     type Group = GroupB;
 /// }
 ///
 /// disjoint_impls! {
-///     pub trait BasicKita {
-///         const BASIC_NAME: &'static str;
+///     pub trait Kita {
+///         const NAME: &'static str;
 ///
-///         fn basic_name() -> &'static str {
+///         fn name() -> &'static str {
 ///             "Default blanket"
 ///         }
 ///     }
 ///
-///     impl<T: Dispatch<Group = GroupA>> BasicKita for T {
-///         const BASIC_NAME: &'static str = "Blanket A";
+///     impl<T, U> Kita for (T, U)
+///     where
+///         T: Dispatch<Group = GroupA>,
+///         U: Dispatch<Group = GroupA>,
+///     {
+///         const NAME: &'static str = "Blanket AA";
 ///     }
-///     impl<U: Dispatch<Group = GroupB>> BasicKita for U {
-///         const BASIC_NAME: &'static str = "Blanket B";
 ///
-///         fn basic_name() -> &'static str {
-///             "Blanket B"
+///     impl<T, U> Kita for (T, U)
+///     where
+///         T: Dispatch<Group = GroupA>,
+///         U: Dispatch<Group = GroupB>,
+///     {
+///         const NAME: &'static str = "Blanket AB";
+///     }
+///
+///     impl<T, U> Kita for (T, U)
+///     where
+///         T: Dispatch<Group = GroupB>,
+///         U: Dispatch,
+///     {
+///         const NAME: &'static str = "Blanket B*";
+///     }
+///
+///     impl<T> Kita for T
+///     where
+///         Option<T>: Dispatch<Group = GroupA>,
+///     {
+///         const NAME: &'static str = "Option blanket";
+///
+///         fn name() -> &'static str {
+///             <Self as Kita>::NAME
 ///         }
 ///     }
 /// }
 ///
-/// disjoint_impls! {
-///     pub trait ComplexKita {
-///         const COMPLEX_NAME: &'static str;
-///     }
-///
-///     impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> ComplexKita for (T, U) {
-///         const COMPLEX_NAME: &'static str = "Blanket AA";
-///     }
-///     impl<U, T> ComplexKita for (U, T)
-///     where
-///         U: Dispatch<Group = GroupA>,
-///         T: Dispatch<Group = GroupB>
-///     {
-///         const COMPLEX_NAME: &'static str = "Blanket AB";
-///     }
-///     impl<T: Dispatch<Group = GroupB>, U: Dispatch> ComplexKita for (T, U) {
-///         const COMPLEX_NAME: &'static str = "Blanket B*";
-///     }
-///
-///     impl<T> ComplexKita for T where Option<T>: Dispatch<Group = GroupA> {
-///         const COMPLEX_NAME: &'static str = "Blanket A";
-///     }
-///     impl<U> ComplexKita for U where Option<U>: Dispatch<Group = GroupB> {
-///         const COMPLEX_NAME: &'static str = "Blanket B";
-///     }
-/// }
-///
 /// fn main() {
-///     assert_eq!("Blanket A", String::BASIC_NAME);
-///     assert_eq!("Blanket B", i32::BASIC_NAME);
+///     assert_eq!("Blanket AA", <(u32, u32)>::NAME);
+///     assert_eq!("Blanket AB", <(u32, i32)>::NAME);
+///     assert_eq!("Blanket B*", <(i32, u32)>::NAME);
 ///
-///     assert_eq!("Default blanket", String::basic_name());
-///     assert_eq!("Blanket B", i32::basic_name());
-///
-///     assert_eq!("Blanket A", String::COMPLEX_NAME);
-///     assert_eq!("Blanket B", i32::COMPLEX_NAME);
-///
-///     assert_eq!("Blanket AA", <(String, String)>::COMPLEX_NAME);
-///     assert_eq!("Blanket AB", <(String, i32)>::COMPLEX_NAME);
-///     assert_eq!("Blanket B*", <(i32, String)>::COMPLEX_NAME);
+///     assert_eq!("Option blanket", u32::name());
 /// }
 /// ```
 ///
-/// # Inherent impls
+/// # Inherent implementations
 ///
 /// ```
 /// use disjoint_impls::disjoint_impls;
@@ -1131,29 +1132,26 @@ impl Visit<'_> for ItemImplDescVisitor {
 ///     type Group;
 /// }
 ///
-/// pub enum GroupA {}
-/// pub enum GroupB {}
-///
-/// impl Dispatch for String {
-///     type Group = GroupA;
+/// impl Dispatch for u32 {
+///     type Group = Self;
 /// }
 /// impl Dispatch for i32 {
-///     type Group = GroupB;
+///     type Group = Self;
 /// }
 ///
 /// struct Wrapper<T>(T);
 ///
 /// disjoint_impls! {
-///     impl<T: Dispatch<Group = GroupA>> Wrapper<T> {
+///     impl<T: Dispatch<Group = U>, U: Dispatch<Group = u32>> Wrapper<T> {
 ///         const NAME: &'static str = "Blanket A";
 ///     }
-///     impl<T: Dispatch<Group = GroupB>> Wrapper<T> {
+///     impl<T: Dispatch<Group = U>, U: Dispatch<Group = i32>> Wrapper<T> {
 ///         const NAME: &'static str = "Blanket B";
 ///     }
 /// }
 ///
 /// fn main() {
-///     assert_eq!("Blanket A", Wrapper::<String>::NAME);
+///     assert_eq!("Blanket A", Wrapper::<u32>::NAME);
 ///     assert_eq!("Blanket B", Wrapper::<i32>::NAME);
 /// }
 /// ```
@@ -1174,11 +1172,11 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// }
 ///
 /// pub enum GroupA {}
-/// impl Dispatch for String {
+/// pub enum GroupB {}
+///
+/// impl Dispatch for u32 {
 ///     type Group = GroupA;
 /// }
-///
-/// pub enum GroupB {}
 /// impl Dispatch for i32 {
 ///     type Group = GroupB;
 /// }
@@ -1188,27 +1186,32 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// pub struct LocalType<T>(T);
 ///
 /// disjoint_impls! {
-///     // Trait annotated with `#[disjoint_impls(remote)]` must be an exact duplicate
-///     // of the foreign/remote trait it refers to (values and function bodies excluded)
+///     // Trait annotated with `#[disjoint_impls(remote)]` must be an exact duplicate of
+///     // the foreign/remote trait it refers to (default values and fn bodies excluded)
 ///     #[disjoint_impls(remote)]
 ///     pub trait ForeignKita<U> {
 ///         fn kita() -> &'static str;
 ///     }
 ///
-///     impl<T: Dispatch<Group = GroupA>, U> ForeignKita<U> for LocalType<T> {
+///     impl<T: Dispatch<Group = GroupA>> ForeignKita<T> for LocalType<T> {
 ///         fn kita() -> &'static str {
 ///             "Blanket A"
 ///         }
 ///     }
-///     impl<T: Dispatch<Group = GroupB>, U> ForeignKita<U> for LocalType<T> {
+///     impl<T: Dispatch<Group = GroupB>> ForeignKita<T> for LocalType<T> {
 ///         fn kita() -> &'static str {
 ///             "Blanket B"
 ///         }
 ///     }
 /// }
+///
+/// fn main() {
+///     assert_eq!("Blanket A", LocalType::<u32>::kita());
+///     assert_eq!("Blanket B", LocalType::<i32>::kita());
+/// }
 /// ```
 ///
-/// Other, much more complex examples can be found in tests.
+/// Other, much more complex examples, can be found in tests.
 #[proc_macro]
 #[proc_macro_error]
 pub fn disjoint_impls(input: TokenStream) -> TokenStream {
