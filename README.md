@@ -43,7 +43,7 @@ disjoint_impls! {
 }
 ```
 
-## Foreign(remote) traits
+# Foreign(remote) traits
 
 For traits defined outside the current crate (a.k.a. foreign or remote traits), duplicate
 the trait definition inside the macro and annotate it with `#[disjoint_impls(remote)]`.
