@@ -1,12 +1,8 @@
-error: Conflicting implementations of `impl Wrapper < T >`
-  --> tests/ui_fail/conflicting_inherent_items.rs:19:1
+error[E0592]: duplicate definitions with name `kita`
+  --> tests/ui_fail/conflicting_inherent_items.rs:21:9
    |
-19 | / disjoint_impls! {
-20 | |     impl<T: Dispatch<Group = GroupA>> Wrapper<T> {
-21 | |         fn kita() -> &'static str {
-22 | |             "Blanket A"
-...  |
-30 | | }
-   | |_^
-   |
-   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)
+21 |         fn kita() -> &'static str {
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^ duplicate definitions for `kita`
+...
+26 |         fn kita() -> String {
+   |         ------------------- other definition for `kita`

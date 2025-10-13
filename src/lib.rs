@@ -1283,27 +1283,16 @@ impl Parse for ImplGroups {
             .collect::<Vec<_>>()
             .into_iter()
             .flat_map(|impl_group_idx| {
-                find_impl_groups(impl_group_idx, &mut supersets, &subsets, &impls).unwrap_or_else(
-                    || {
-                        let impl_group_id = &impls[impl_group_idx].0.id;
-
-                        let msg = format!(
-                            "Conflicting implementations of `{}`",
-                            quote!(#impl_group_id)
-                        );
-
-                        abort!(impl_group_id, msg)
-                    },
-                )
+                find_impl_groups(impl_group_idx, &mut supersets, &subsets, &impls)
             })
-            .collect::<IndexMap<_, _>>();
+            .collect::<Vec<_>>();
 
         let args = impl_groups
             .iter()
-            .map(|(impl_group_id, (impl_group_builder, impl_group))| {
+            .map(|(impl_group_builder, impl_group)| {
                 let impls = impl_group.iter().map(|&i| &impls[i]).collect::<Vec<_>>();
 
-                if impl_group_id.trait_.is_none() && impl_group.len() > 1 {
+                if impl_group_builder.id.trait_.is_none() && impl_group.len() > 1 {
                     let nrows = impl_group_builder.trait_bounds.0[0].0.len();
 
                     let payloads = impl_group_builder
@@ -1347,41 +1336,40 @@ impl Parse for ImplGroups {
         let impl_groups = impl_groups
             .into_iter()
             .zip_eq(args)
-            .map(
-                |((impl_group_id, (mut impl_group_builder, impl_group)), args)| {
-                    let impls = impl_group
-                        .iter()
-                        .map(|&i| impls[i].take().unwrap())
-                        .collect::<Vec<_>>();
+            .map(|((mut impl_group_builder, impl_group), args)| {
+                let impls = impl_group
+                    .iter()
+                    .map(|&i| impls[i].take().unwrap())
+                    .collect::<Vec<_>>();
 
-                    let impls = if impl_group_id.trait_.is_none() && impl_group.len() > 1 {
-                        args.into_iter().zip_eq(impls).collect()
-                    } else {
-                        impls.into_iter().map(|impl_| (vec![], impl_)).collect()
-                    };
+                let impl_group_id = impl_group_builder.id;
+                let impls = if impl_group_id.trait_.is_none() && impl_group.len() > 1 {
+                    args.into_iter().zip_eq(impls).collect()
+                } else {
+                    impls.into_iter().map(|impl_| (vec![], impl_)).collect()
+                };
 
-                    let assoc_bindings = impl_group_builder
-                        .trait_bounds
-                        .build(&impl_group_id, &mut impl_group_builder.params);
+                let assoc_bindings = impl_group_builder
+                    .trait_bounds
+                    .build(&impl_group_id, &mut impl_group_builder.params);
 
-                    let params = impl_group_builder
-                        .lifetimes
-                        .into_iter()
-                        .map(syn::GenericParam::Lifetime)
-                        .chain(as_generics(&impl_group_builder.params))
-                        .collect();
+                let params = impl_group_builder
+                    .lifetimes
+                    .into_iter()
+                    .map(syn::GenericParam::Lifetime)
+                    .chain(as_generics(&impl_group_builder.params))
+                    .collect();
 
-                    ImplGroup {
-                        id: impl_group_id,
-                        params,
+                ImplGroup {
+                    id: impl_group_id,
+                    params,
 
-                        trait_bounds: assoc_bindings,
-                        items: impl_group_builder.items,
+                    trait_bounds: assoc_bindings,
+                    items: impl_group_builder.items,
 
-                        impls,
-                    }
-                },
-            )
+                    impls,
+                }
+            })
             .collect();
 
         Ok(Self::new(main_trait, impl_groups))
@@ -1395,14 +1383,15 @@ fn find_impl_groups<'a, 'b>(
     subsets: &Subsets<'a>,
 
     item_impls: &'b [(ItemImplDesc, ItemImpl)],
-) -> Option<IndexMap<ImplGroupId, (ImplGroupBuilder, Vec<usize>)>> {
+) -> Vec<(ImplGroupBuilder, Vec<usize>)> {
     find_impl_groups_rec(
         curr_item_idx,
         supersets,
         subsets,
         item_impls,
-        &mut IndexMap::new(),
+        &mut Vec::new(),
     )
+    .expect("At least one solution must always exist")
 }
 
 fn find_impl_groups_rec<'a, 'b>(
@@ -1412,16 +1401,16 @@ fn find_impl_groups_rec<'a, 'b>(
     subsets: &Subsets<'a>,
 
     item_impls: &'b [(ItemImplDesc, ItemImpl)],
-    impl_groups: &mut IndexMap<ImplGroupId, (ImplGroupBuilder, Vec<usize>)>,
-) -> Option<IndexMap<ImplGroupId, (ImplGroupBuilder, Vec<usize>)>> {
+    impl_groups: &mut Vec<(ImplGroupBuilder, Vec<usize>)>,
+) -> Option<Vec<(ImplGroupBuilder, Vec<usize>)>> {
     let curr_impl = &item_impls[curr_item];
 
-    let mut min = None::<IndexMap<_, _>>;
+    let mut min = None::<Vec<_>>;
     let mut new_supersets = core::iter::repeat_n(0, supersets.len()).collect();
 
     let identity_subs = &subsets[curr_item][&curr_item];
-    'OUT: for impl_group_id in impl_groups.keys().cloned().collect::<Vec<_>>() {
-        let impl_group = &impl_groups[&impl_group_id];
+    'OUT: for impl_group_idx in 0..impl_groups.len() {
+        let impl_group = &impl_groups[impl_group_idx];
 
         let group_impls = impl_group
             .1
@@ -1435,7 +1424,7 @@ fn find_impl_groups_rec<'a, 'b>(
                 .intersection(curr_item, &curr_impl.0, subsets, group_impls);
 
         for intersection in intersections {
-            let impl_group = &mut impl_groups[&impl_group_id];
+            let impl_group = &mut impl_groups[impl_group_idx];
 
             let prev_assoc_bindings = core::mem::replace(&mut impl_group.0, intersection);
             impl_group.1.push(curr_item);
@@ -1462,7 +1451,7 @@ fn find_impl_groups_rec<'a, 'b>(
             }
 
             // NOTE: Restore changes to the impl group set for the next iteration
-            let impl_group_to_restore = impl_groups.get_mut(&impl_group_id).unwrap();
+            let impl_group_to_restore = impl_groups.get_mut(impl_group_idx).unwrap();
             impl_group_to_restore.0 = prev_assoc_bindings;
             impl_group_to_restore.1.pop();
 
@@ -1475,15 +1464,12 @@ fn find_impl_groups_rec<'a, 'b>(
 
     // NOTE: Try create a new group if shorter solution is possible
     if min.as_ref().is_none_or(|m| m.len() > 1 + impl_groups.len())
-        && !impl_groups.contains_key(&curr_impl.0.id)
+        && (impl_groups.iter().all(|g| g.0.id != curr_impl.0.id) || curr_impl.0.id.trait_.is_none())
     {
-        impl_groups.insert(
-            curr_impl.0.id.clone(),
-            (
-                ImplGroupBuilder::new(&curr_impl.0, identity_subs),
-                vec![curr_item],
-            ),
-        );
+        impl_groups.push((
+            ImplGroupBuilder::new(&curr_impl.0, identity_subs),
+            vec![curr_item],
+        ));
 
         let mut supersets = supersets.clone();
         let res =
@@ -1502,7 +1488,7 @@ fn find_impl_groups_rec<'a, 'b>(
         }
 
         // NOTE: Restore changes to impl groups
-        impl_groups.shift_remove(&curr_impl.0.id);
+        impl_groups.pop();
     }
 
     if min.is_some() {
@@ -1519,9 +1505,9 @@ fn unlock_subset_impl_groups<'a, 'b>(
     subsets: &Subsets<'a>,
 
     item_impls: &'b [(ItemImplDesc, ItemImpl)],
-    impl_groups: &mut IndexMap<ImplGroupId, (ImplGroupBuilder, Vec<usize>)>,
-) -> Option<IndexMap<ImplGroupId, (ImplGroupBuilder, Vec<usize>)>> {
-    let mut acc = impl_groups.clone();
+    impl_groups: &mut [(ImplGroupBuilder, Vec<usize>)],
+) -> Option<Vec<(ImplGroupBuilder, Vec<usize>)>> {
+    let mut acc = impl_groups.to_vec();
 
     for &subset_idx in subsets[curr_item].keys().filter(|&i| *i != curr_item) {
         let superset_count = supersets.get_mut(subset_idx).unwrap();
