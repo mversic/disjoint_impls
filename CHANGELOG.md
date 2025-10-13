@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-10-13
+### Fixed
+- require that at least one solution always exists even if overlapping
+- on intersection check if impl has generalization with the group
+
 ## [1.1.3] - 2025-10-07
 ### Fixed
 - silence `clippy::needless_lifetimes` lint
