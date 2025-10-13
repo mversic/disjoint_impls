@@ -1,0 +1,21 @@
+error[E0119]: conflicting implementations of trait `Kita` for type `&_`
+  --> tests/ui_fail/overlapping.rs:29:5
+   |
+26 |     impl<T: Dispatch<Group = GroupA>> Kita for T {
+   |     -------------------------------------------- first implementation here
+...
+29 |     impl<T: Dispatch<Group = GroupB>> Kita for &T {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `&_`
+   |
+   = note: downstream crates may implement trait `Dispatch` for type `&_`
+
+error[E0119]: conflicting implementations of trait `Kita` for type `&mut _`
+  --> tests/ui_fail/overlapping.rs:32:5
+   |
+26 |     impl<T: Dispatch<Group = GroupA>> Kita for T {
+   |     -------------------------------------------- first implementation here
+...
+32 |     impl<U: Dispatch<Group = GroupC>> Kita for &mut U {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `&mut _`
+   |
+   = note: downstream crates may implement trait `Dispatch` for type `&mut _`

@@ -760,7 +760,10 @@ impl ImplGroupBuilder {
     ) -> Vec<Self> {
         let mut implicit_params_container = vec![];
 
-        let id_subs = &subsets[*impls.first().unwrap().0][&other_idx];
+        let Some(id_subs) = subsets[*impls.first().unwrap().0].get(&other_idx) else {
+            return vec![];
+        };
+
         self.find_valid_trait_bound_groups(other, id_subs, &mut implicit_params_container)
             .into_iter()
             .filter_map(|(group, subs)| {
