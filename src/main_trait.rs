@@ -279,20 +279,22 @@ impl ImplItemResolver {
 
 impl VisitMut for ImplItemResolver {
     fn visit_impl_item_const_mut(&mut self, node: &mut syn::ImplItemConst) {
+        let (_, ty_generics, _) = &node.generics.split_for_impl();
         let self_as_helper_trait = &self.self_as_helper_trait;
 
         let ident = &node.ident;
         node.expr = parse_quote!(
-            #self_as_helper_trait::#ident
+            #self_as_helper_trait::#ident #ty_generics
         );
     }
 
     fn visit_impl_item_type_mut(&mut self, node: &mut syn::ImplItemType) {
+        let (_, ty_generics, _) = &node.generics.split_for_impl();
         let self_as_helper_trait = &self.self_as_helper_trait;
 
         let ident = &node.ident;
         node.ty = parse_quote!(
-            #self_as_helper_trait::#ident
+            #self_as_helper_trait::#ident #ty_generics
         );
     }
 
@@ -302,10 +304,17 @@ impl VisitMut for ImplItemResolver {
         let syn::Signature {
             unsafety,
             ident,
+            generics,
             inputs,
             variadic,
             ..
         } = &node.sig;
+
+        let ty_generics = generics.params.iter().filter_map(|param| match param {
+            syn::GenericParam::Type(param) => Some(&param.ident),
+            syn::GenericParam::Const(param) => Some(&param.ident),
+            _ => None,
+        });
 
         let inputs = inputs.iter().map(|input| match input {
             syn::FnArg::Receiver(_) => parse_quote!(self),
@@ -313,7 +322,7 @@ impl VisitMut for ImplItemResolver {
         });
 
         let block = quote! {
-            #self_as_helper_trait::#ident(#(#inputs,)* #variadic)
+            #self_as_helper_trait::#ident ::<#(#ty_generics),*>(#(#inputs,)* #variadic)
         };
 
         node.block = if unsafety.is_none() {
