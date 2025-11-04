@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2025-11-05
+### Fixed
+- dispatch on all possible trait combinations
+- separate disjoint impls eagerly
+
 ## [1.2.2] - 2025-11-04
 ### Fixed
 - generalize impl signatures, don't look for supersets
