@@ -263,15 +263,15 @@ mod tests {
         assert_eq!(
             subs1.type_generalizations,
             indexmap! {
-                (&r1, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-                (&r2, &r2) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+                (&r1, &r1) => (Sizedness::Sized, IndexSet::new()),
+                (&r2, &r2) => (Sizedness::Sized, IndexSet::new()),
             }
         );
         assert_eq!(
             subs2.type_generalizations,
             indexmap! {
-                (&r2, &r2) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-                (&r1, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+                (&r2, &r2) => (Sizedness::Sized, IndexSet::new()),
+                (&r1, &r1) => (Sizedness::Sized, IndexSet::new()),
             }
         );
 

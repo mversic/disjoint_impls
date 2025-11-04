@@ -27,7 +27,7 @@ pub fn generate(
         let impl_generics = &impl_group.params;
 
         parse_quote! {
-            trait #self_ty <#(#impl_generics,)*> {
+            trait #self_ty <#(#impl_generics),*> {
                 #(#impl_items)*
             }
         }

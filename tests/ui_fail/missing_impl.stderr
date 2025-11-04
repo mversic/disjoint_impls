@@ -24,8 +24,15 @@ note: required for `Vec<u32>` to implement `Kita0<GroupA>`
 44 | | }
    | |_^
 note: required for `Vec<u32>` to implement `Kita`
-  --> tests/ui_fail/missing_impl.rs:38:68
+  --> tests/ui_fail/missing_impl.rs:33:1
    |
-38 |     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita for T {
-   |                                                                    ^^^^     ^
+33 | / disjoint_impls! {
+34 | |     pub trait Kita {
+35 | |         const NAME: &'static str;
+...  |
+38 | |     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita for T {
+   | |                                                                    ^^^^
+...  |
+44 | | }
+   | |_^
    = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)

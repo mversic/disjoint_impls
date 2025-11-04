@@ -17,6 +17,9 @@ impl Generalize for syn::Signature {
         }
 
         let abi = self.abi.generalize(&other.abi, params1, params2, subs)?;
+        let generics = self
+            .generics
+            .generalize(&other.generics, params1, params2, subs)?;
         let inputs = self
             .inputs
             .generalize(&other.inputs, params1, params2, subs)?;
@@ -26,8 +29,69 @@ impl Generalize for syn::Signature {
 
         Some(syn::Signature {
             abi,
+            generics,
             inputs,
             output,
+            ..self.clone()
+        })
+    }
+}
+
+impl Generalize for syn::ImplItemConst {
+    fn generalize<'a>(
+        &'a self,
+        other: &'a Self,
+        params1: &Params,
+        params2: &Params,
+        subs: &mut Generalizations<'a>,
+    ) -> Option<Self> {
+        if self.vis != other.vis || self.ident != other.ident {
+            return None;
+        }
+
+        let attrs = self
+            .attrs
+            .generalize(&other.attrs, params1, params2, subs)?;
+        let generics = self
+            .generics
+            .generalize(&other.generics, params1, params2, subs)?;
+        let ty = self.ty.generalize(&other.ty, params1, params2, subs)?;
+        let expr = self.expr.generalize(&other.expr, params1, params2, subs)?;
+
+        Some(Self {
+            attrs,
+            generics,
+            ty,
+            expr,
+            ..self.clone()
+        })
+    }
+}
+
+impl Generalize for syn::ImplItemType {
+    fn generalize<'a>(
+        &'a self,
+        other: &'a Self,
+        params1: &Params,
+        params2: &Params,
+        subs: &mut Generalizations<'a>,
+    ) -> Option<Self> {
+        if self.vis != other.vis || self.ident != other.ident {
+            return None;
+        }
+
+        let attrs = self
+            .attrs
+            .generalize(&other.attrs, params1, params2, subs)?;
+        let generics = self
+            .generics
+            .generalize(&other.generics, params1, params2, subs)?;
+        let ty = self.ty.generalize(&other.ty, params1, params2, subs)?;
+
+        Some(Self {
+            attrs,
+            generics,
+            ty,
             ..self.clone()
         })
     }

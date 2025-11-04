@@ -13,16 +13,12 @@ mod stmt;
 mod token;
 mod ty;
 
-/// Type or constant generic parameters
+/// Collection of type or constant generic parameters
 pub type Params = IndexMap<syn::Ident, GenericParam>;
 
-type TypeGeneralization<'a> = (
-    GeneralizationKind,
-    Sizedness,
-    IndexSet<(&'a syn::Lifetime, &'a syn::Lifetime)>,
-);
+type TypeGeneralization<'a> = (Sizedness, IndexSet<(&'a syn::Lifetime, &'a syn::Lifetime)>);
 
-type ExprGeneralization = (GeneralizationKind, syn::Type, ExprTypeKind);
+type ExprGeneralization = (syn::Type, ExprTypeKind);
 
 /// Types that can be generalized to a common supertype
 ///
@@ -33,7 +29,7 @@ type ExprGeneralization = (GeneralizationKind, syn::Type, ExprTypeKind);
 /// 3. `[u32; 2]` and `[u32; 2]` can be generalized into `[u32; 2]`
 /// 4. `[u32; 2]` and `(i32, u32)` can be generalized into `T`
 pub trait Generalize: ToOwned {
-    /// Find and return a common generalization of `self` and `other` if it exists.
+    /// Find a generalization of `self` and `other` (if it exists).
     ///
     /// If `self` and `other` are identical but are not concrete types (i.e. they are generic types),
     /// substitutions will contain identity mappings of type parameters (e.g. `T` -> `T`).
@@ -52,7 +48,7 @@ pub trait Generalize: ToOwned {
 pub struct Generalizations<'a> {
     /// List of mappings transforming lifetimes such as:
     /// `'a -> `'b in `Vec<&'a [u32; 2]>` and `Vec<&'b i32>`
-    lifetime_generalizations: IndexMap<(&'a syn::Ident, &'a syn::Ident), GeneralizationKind>,
+    lifetime_generalizations: IndexSet<(&'a syn::Ident, &'a syn::Ident)>,
 
     /// Type mappings that share a common parent such as:
     /// `(T, U)` and `[T; 2]` in `Vec<(T, U)>` and `Vec<[T; 2]>`
@@ -68,13 +64,11 @@ pub struct Generalizations<'a> {
     curr_ref_lifetime: Vec<(&'a syn::Lifetime, &'a syn::Lifetime)>,
 }
 
-/// Defines how [`syn::Type`]s and [`syn::Expr`]s are generalized
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum GeneralizationKind {
-    /// Indicates that first [`syn::Type`]/[`syn::Expr`] is a superset of the second
-    Superset,
-    /// Indicates that the two [`syn::Type`]/[`syn::Expr`]s share a common parent
-    Common,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Disjointness {
+    Disjoint,
+    SoftOverlap,
+    ParamOverlap,
 }
 
 /// Tracks whether [`syn::Type`] is sized or unsized
@@ -132,6 +126,60 @@ pub fn as_generics(params: &Params) -> impl Iterator<Item = syn::GenericParam> {
     });
 
     type_params.chain(const_params)
+}
+
+impl ImplItems {
+    pub fn generalize(
+        &self,
+        other: &Self,
+        params1: &Params,
+        params2: &Params,
+        subs: &Generalizations<'_>,
+    ) -> Option<Self> {
+        let mut new_subs = subs.clone();
+
+        let generalized_fns = self
+            .fns
+            .iter()
+            .map(|(ident, sig)| {
+                let other_sig = other.fns.get(ident)?;
+
+                Some((
+                    ident.clone(),
+                    sig.generalize(other_sig, params1, params2, &mut new_subs)?,
+                ))
+            })
+            .collect::<Option<_>>()?;
+
+        let generalized_assoc_types = self
+            .assoc_types
+            .iter()
+            .all(|ident| other.assoc_types.contains(ident))
+            .then_some(self.assoc_types.clone())?;
+
+        let generalized_assoc_consts = self
+            .assoc_consts
+            .iter()
+            .map(|(ident, self_ty)| {
+                let other_ty = other.assoc_consts.get(ident)?;
+
+                Some((
+                    ident.clone(),
+                    self_ty.generalize(other_ty, params1, params2, &mut new_subs)?,
+                ))
+            })
+            .collect::<Option<_>>()?;
+
+        if !new_subs.difference(subs).is_empty() {
+            return None;
+        }
+
+        Some(ImplItems {
+            fns: generalized_fns,
+            assoc_types: generalized_assoc_types,
+            assoc_consts: generalized_assoc_consts,
+        })
+    }
 }
 
 impl PartialEq for Expr<'_> {
@@ -199,19 +247,9 @@ impl ToTokens for Expr<'_> {
 }
 
 impl<'a> Generalizations<'a> {
-    fn insert_lifetime(
-        &mut self,
-        src: &'a syn::Ident,
-        dst: &'a syn::Ident,
-    ) -> Option<syn::Lifetime> {
-        let entry = self.lifetime_generalizations.entry((src, dst));
-        let idx = entry.index();
-        entry.or_insert(GeneralizationKind::Common);
-
-        Some(syn::Lifetime::new(
-            &format!("'_lšč{}", idx),
-            Span::call_site(),
-        ))
+    fn insert_lifetime(&mut self, src: &'a syn::Ident, dst: &'a syn::Ident) -> syn::Lifetime {
+        let (idx, _) = self.lifetime_generalizations.insert_full((src, dst));
+        syn::Lifetime::new(&format!("'_lšč{}", idx), Span::call_site())
     }
 
     fn insert_type(
@@ -254,30 +292,10 @@ impl<'a> Generalizations<'a> {
             }
         };
 
-        let ident = match self.type_generalizations.entry((src, dst)) {
-            indexmap::map::Entry::Vacant(entry) => {
-                let ident = format_ident!("_TŠČ{}", entry.index());
-
-                entry.insert((
-                    GeneralizationKind::Common,
-                    sizedness,
-                    self.curr_ref_lifetime.iter().copied().collect(),
-                ));
-                ident
-            }
-            indexmap::map::Entry::Occupied(mut val) => {
-                val.get_mut()
-                    .2
-                    .extend(self.curr_ref_lifetime.iter().copied());
-
-                if val.get().0 == GeneralizationKind::Common {
-                    format_ident!("_TŠČ{}", val.index())
-                } else {
-                    let src = val.key().0;
-                    parse_quote!(#src)
-                }
-            }
-        };
+        let entry = self.type_generalizations.entry((src, dst));
+        let ident = format_ident!("_TŠČ{}", entry.index());
+        let val = entry.or_insert((sizedness, IndexSet::new()));
+        val.1.extend(self.curr_ref_lifetime.iter().copied());
 
         parse_quote! { #ident }
     }
@@ -498,21 +516,9 @@ impl<'a> Generalizations<'a> {
             }
         };
 
-        let ident = match self.expr_generalizations.entry((src, dst)) {
-            indexmap::map::Entry::Vacant(entry) => {
-                let ident = format_ident!("_CŠČ{}", entry.index());
-                entry.insert((GeneralizationKind::Common, ty, ty_kind));
-                ident
-            }
-            indexmap::map::Entry::Occupied(val) => {
-                if val.get().0 == GeneralizationKind::Common {
-                    format_ident!("_CŠČ{}", val.index())
-                } else {
-                    let src = val.key().0;
-                    parse_quote! { #src }
-                }
-            }
-        };
+        let entry = self.expr_generalizations.entry((src, dst));
+        let ident = format_ident!("_CŠČ{}", entry.index());
+        entry.or_insert((ty, ty_kind));
 
         Some(parse_quote! { #ident })
     }
@@ -535,7 +541,7 @@ impl<'a> Generalizations<'a> {
             .collect();
 
         Self {
-            lifetime_generalizations: IndexMap::new(),
+            lifetime_generalizations: IndexSet::new(),
             type_generalizations: type_substitutions,
             expr_generalizations: expr_substitutions,
 
@@ -553,16 +559,7 @@ impl<'a> Generalizations<'a> {
     #[must_use]
     pub fn unify(mut self, other: Self) -> Self {
         for (mapping, elem_val) in other.lifetime_generalizations {
-            match self.lifetime_generalizations.entry(mapping) {
-                indexmap::map::Entry::Vacant(entry) => {
-                    entry.insert(elem_val);
-                }
-                indexmap::map::Entry::Occupied(mut val) => {
-                    if elem_val == GeneralizationKind::Superset {
-                        *val.get_mut() = GeneralizationKind::Superset;
-                    }
-                }
-            }
+            self.lifetime_generalizations.insert((mapping, elem_val));
         }
 
         for (mapping, elem_val) in other.type_generalizations {
@@ -573,15 +570,11 @@ impl<'a> Generalizations<'a> {
                 indexmap::map::Entry::Occupied(mut val) => {
                     let val = val.get_mut();
 
-                    if elem_val.0 == GeneralizationKind::Superset {
-                        val.0 = GeneralizationKind::Superset;
-                    }
-
-                    if elem_val.1 == Sizedness::Unsized {
-                        val.1 = Sizedness::Unsized;
+                    if elem_val.0 == Sizedness::Unsized {
+                        val.0 = Sizedness::Unsized;
                     };
 
-                    val.2.extend(elem_val.2);
+                    val.1.extend(elem_val.1);
                 }
             }
         }
@@ -594,19 +587,15 @@ impl<'a> Generalizations<'a> {
                 indexmap::map::Entry::Occupied(mut val) => {
                     let val = val.get_mut();
 
-                    if elem_val.0 == GeneralizationKind::Superset {
-                        val.0 = GeneralizationKind::Superset;
-                    }
-
-                    match (val.2, elem_val.2) {
+                    match (val.1, elem_val.1) {
                         (ExprTypeKind::Given, ExprTypeKind::Given) => {
                             if elem_val.1 != val.1 {
                                 unreachable!();
                             }
                         }
                         (ExprTypeKind::Inferred, ExprTypeKind::Given) => {
-                            val.2 = ExprTypeKind::Given;
-                            val.1 = elem_val.1;
+                            val.1 = ExprTypeKind::Given;
+                            val.0 = elem_val.0;
                         }
                         _ => {}
                     }
@@ -620,7 +609,7 @@ impl<'a> Generalizations<'a> {
     pub fn generic_args(
         &self,
     ) -> impl Iterator<Item = (syn::GenericArgument, syn::GenericArgument)> {
-        let lifetimes = self.lifetime_generalizations.keys().map(|&(src, dst)| {
+        let lifetimes = self.lifetime_generalizations.iter().map(|&(src, dst)| {
             (
                 syn::GenericArgument::Lifetime(syn::Lifetime::new(
                     &format!("'{}", src),
@@ -658,46 +647,30 @@ impl<'a> Generalizations<'a> {
     }
 
     pub fn build_params(self) -> (Vec<syn::LifetimeParam>, Params) {
-        let build_lifetime = |index, src, generalization_kind| {
-            if generalization_kind == GeneralizationKind::Superset {
-                return syn::LifetimeParam::new(syn::Lifetime::new(
-                    &format!("'{}", src),
-                    Span::call_site(),
-                ));
-            }
-
+        let build_lifetime = |index| {
             syn::LifetimeParam::new(syn::Lifetime::new(
                 &format!("'_lšč{}", index),
                 Span::call_site(),
             ))
         };
 
-        let lifetimes = self
-            .lifetime_generalizations
-            .iter()
-            .enumerate()
-            .map(|(i, (&(src, _), &generalization_kind))| {
-                build_lifetime(i, src, generalization_kind)
-            })
+        let lifetimes = (0..self.lifetime_generalizations.len())
+            .map(build_lifetime)
             .collect::<Vec<_>>();
 
         let type_params = self.type_generalizations.into_iter().enumerate().map(
-            |(i, ((src, _), (generalization_kind, is_unsized, lifetimes)))| {
-                let ident = if generalization_kind == GeneralizationKind::Superset {
-                    parse_quote!(#src)
-                } else {
-                    format_ident!("_TŠČ{}", i)
-                };
+            |(i, (_, (is_unsized, lifetimes)))| {
+                let ident = format_ident!("_TŠČ{}", i);
 
                 let lifetimes = lifetimes
                     .into_iter()
                     .map(|(src, dst)| {
-                        let (idx, _, &kind) = self
+                        let idx = self
                             .lifetime_generalizations
-                            .get_full(&(&src.ident, &dst.ident))
+                            .get_index_of(&(&src.ident, &dst.ident))
                             .unwrap();
 
-                        build_lifetime(idx, &src.ident, kind)
+                        build_lifetime(idx)
                     })
                     .collect();
 
@@ -705,117 +678,118 @@ impl<'a> Generalizations<'a> {
             },
         );
 
-        let const_params = self.expr_generalizations.into_iter().enumerate().map(
-            |(i, ((src, _), (generalization_kind, ty, _)))| {
-                let ident = if generalization_kind == GeneralizationKind::Superset {
-                    parse_quote!(#src)
-                } else {
-                    format_ident!("_CŠČ{}", i)
-                };
-
-                (ident, GenericParam::Const(ty))
-            },
-        );
+        let const_params =
+            self.expr_generalizations
+                .into_iter()
+                .enumerate()
+                .map(|(i, (_, (ty, _)))| {
+                    let ident = format_ident!("_CŠČ{}", i);
+                    (ident, GenericParam::Const(ty))
+                });
 
         (lifetimes, type_params.chain(const_params).collect())
     }
-}
 
-/// If `self` is a superset of `other`, returns substitutions that are required to convert
-/// `other` into `self`, otherwise returns `None`.
-///
-/// If `self` and `other` are identical but are not concrete types (i.e. they are generic types),
-/// returned substitutions contain identity mappings of type parameters (e.g. `T` -> `T`).
-///
-/// If the substitutions are empty, `self` and `other are identical concrete types.
-pub fn is_superset<'a, T: Generalize>(
-    self_: &'a T,
-    other: &'a T,
-    params1: &Params,
-    params2: &Params,
-) -> Option<Generalizations<'a>> {
-    let mut subs = Generalizations::default();
-    self_.generalize(other, params1, params2, &mut subs)?;
+    pub fn is_disjoint(&self, params1: &Params, params2: &Params) -> Option<bool> {
+        fn is_param_type(ty: &syn::Type, params: &Params) -> bool {
+            if let syn::Type::Path(syn::TypePath { path, qself: None }) = ty
+                && let Some(ident) = path.get_ident()
+                && params.contains_key(ident)
+            {
+                return true;
+            }
 
-    if subs
-        .lifetime_generalizations
-        .iter_mut()
-        .any(|(&(src, dst), kind)| {
-            *kind = GeneralizationKind::Superset;
-            src == "static" && dst != "static"
-        })
-    {
-        return None;
+            false
+        }
+
+        fn is_param_expr(expr: Expr<'_>, params: &Params) -> bool {
+            match expr {
+                Expr::Ident(ident) => params
+                    .get(ident)
+                    .is_some_and(|param| matches!(param, GenericParam::Const(_))),
+                Expr::Expr(e) => {
+                    if let syn::Expr::Path(syn::ExprPath {
+                        path, qself: None, ..
+                    }) = e
+                        && let Some(ident) = path.get_ident()
+                    {
+                        return params
+                            .get(ident)
+                            .is_some_and(|param| matches!(param, GenericParam::Const(_)));
+                    }
+
+                    false
+                }
+            }
+        }
+
+        let mut soft_overlap = false;
+        let mut type_by_src: IndexMap<_, IndexSet<_>> = IndexMap::new();
+        let mut type_by_dst: IndexMap<_, IndexSet<_>> = IndexMap::new();
+        for &(src, dst) in self.type_generalizations.keys() {
+            let src_is_param = is_param_type(src, params1);
+            let dst_is_param = is_param_type(dst, params2);
+
+            if src != dst && !src_is_param && !dst_is_param {
+                return Some(true);
+            }
+
+            if src_is_param ^ dst_is_param {
+                soft_overlap = true;
+            }
+
+            type_by_src.entry(src).or_default().insert(dst_is_param);
+            type_by_dst.entry(dst).or_default().insert(src_is_param);
+        }
+
+        for dsts in type_by_src.values() {
+            if dsts.iter().filter(|&is_param| !is_param).count() >= 2 {
+                return Some(true);
+            }
+        }
+
+        for srcs in type_by_dst.values() {
+            if srcs.iter().filter(|&is_param| !is_param).count() >= 2 {
+                return Some(true);
+            }
+        }
+
+        let mut expr_by_src: IndexMap<_, IndexSet<_>> = IndexMap::new();
+        let mut expr_by_dst: IndexMap<_, IndexSet<_>> = IndexMap::new();
+        for &(src, dst) in self.expr_generalizations.keys() {
+            let src_is_param = is_param_expr(src, params1);
+            let dst_is_param = is_param_expr(dst, params2);
+
+            if src != dst && !src_is_param && !dst_is_param {
+                return Some(true);
+            }
+
+            if src_is_param ^ dst_is_param {
+                soft_overlap = true;
+            }
+
+            expr_by_src.entry(src).or_default().insert(dst_is_param);
+            expr_by_dst.entry(dst).or_default().insert(src_is_param);
+        }
+
+        for dsts in expr_by_src.values() {
+            if dsts.iter().filter(|&is_param| !is_param).count() >= 2 {
+                return Some(true);
+            }
+        }
+
+        for srcs in expr_by_dst.values() {
+            if srcs.iter().filter(|&is_param| !is_param).count() >= 2 {
+                return Some(true);
+            }
+        }
+
+        if soft_overlap {
+            return None;
+        }
+
+        Some(false)
     }
-
-    subs.lifetime_generalizations
-        .values_mut()
-        .for_each(|kind| *kind = GeneralizationKind::Superset);
-
-    subs.type_generalizations.iter_mut().try_fold(
-        IndexMap::<_, _>::new(),
-        |mut acc, (&(src, dst), (kind, _, _))| {
-            *kind = GeneralizationKind::Superset;
-
-            match src {
-                syn::Type::Path(syn::TypePath { path, .. }) => {
-                    let ident = path.get_ident()?;
-
-                    if !params1.contains_key(ident) {
-                        return None;
-                    }
-                }
-                _ => return None,
-            }
-
-            match acc.entry(src) {
-                indexmap::map::Entry::Occupied(val) => {
-                    if dst != *val.get() {
-                        return None;
-                    }
-                }
-                indexmap::map::Entry::Vacant(entry) => {
-                    entry.insert(dst);
-                }
-            }
-
-            Some(acc)
-        },
-    )?;
-
-    subs.expr_generalizations.iter_mut().try_fold(
-        IndexMap::<_, _>::new(),
-        |mut acc, (&(src, dst), (kind, _, _))| {
-            *kind = GeneralizationKind::Superset;
-
-            match src {
-                Expr::Expr(syn::Expr::Path(syn::ExprPath { path, .. })) => {
-                    let ident = path.get_ident()?;
-
-                    if !params1.contains_key(ident) {
-                        return None;
-                    }
-                }
-                Expr::Ident(_) => {}
-                _ => return None,
-            }
-
-            match acc.entry(src) {
-                indexmap::map::Entry::Occupied(val) => {
-                    if dst != *val.get() {
-                        return None;
-                    }
-                }
-                indexmap::map::Entry::Vacant(entry) => {
-                    entry.insert(dst);
-                }
-            }
-
-            Some(acc)
-        },
-    )?;
-
-    Some(subs)
 }
 
 impl Generalize for Bounded {
@@ -999,7 +973,7 @@ impl Generalize for syn::Lifetime {
             return Some(self.clone());
         }
 
-        subs.insert_lifetime(&self.ident, &other.ident)
+        Some(subs.insert_lifetime(&self.ident, &other.ident))
     }
 }
 
@@ -1062,24 +1036,24 @@ mod tests {
         assert!(subs2.lifetime_generalizations.is_empty());
 
         assert!(subs1.type_generalizations.iter().eq(&indexmap! {
-            (&t0, &t1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-            (&t1, &t0) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+            (&t0, &t1) => (Sizedness::Sized, IndexSet::new()),
+            (&t1, &t0) => (Sizedness::Sized, IndexSet::new()),
         }));
         assert!(subs2.type_generalizations.iter().eq(&indexmap! {
-            (&t1, &t0) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-            (&t0, &t1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+            (&t1, &t0) => (Sizedness::Sized, IndexSet::new()),
+            (&t0, &t1) => (Sizedness::Sized, IndexSet::new()),
         }));
 
         assert_eq!(
             subs1.expr_generalizations,
             indexmap! {
-                (Expr::Ident(&n), Expr::Ident(&n)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given)
+                (Expr::Ident(&n), Expr::Ident(&n)) => (parse_quote!(usize), ExprTypeKind::Given)
             }
         );
         assert_eq!(
             subs2.expr_generalizations,
             indexmap! {
-                (Expr::Ident(&n), Expr::Ident(&n)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given)
+                (Expr::Ident(&n), Expr::Ident(&n)) => (parse_quote!(usize), ExprTypeKind::Given)
             },
         );
     }

@@ -4,7 +4,7 @@ pub fn generate(
     impl_group_idx: usize,
     mut impl_group: ImplGroup,
 ) -> impl Iterator<Item = ItemImpl> {
-    if impl_group.id.trait_.is_none() {
+    if impl_group.id.is_inherent() {
         impl_group
             .impls
             .iter_mut()

@@ -40,11 +40,11 @@ disjoint_impls! {
             &1
         }
     }
-    impl<U> Kita for &U where Self: Dispatch<Group = GroupB> {
-        type Item<'a> = &'a U where Self: 'a;
-        type Other<'a, K> = K where Self: 'a;
+    impl<'a, U> Kita for &'a U where Self: Dispatch<Group = GroupB> {
+        type Item<'u> = &'u U where Self: 'u;
+        type Other<'u, K> = K where Self: 'u;
 
-        fn kita<'a>(&'a mut self) -> Self::Item<'a> {
+        fn kita<'u>(&'u mut self) -> Self::Item<'u> {
             self
         }
     }

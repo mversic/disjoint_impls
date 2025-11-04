@@ -12,10 +12,18 @@ note: required for `str` to implement `Kita0<GroupB, str, u32>`
    |                                                |
    |                                                unsatisfied trait bound introduced here
 note: required for `str` to implement `Kita<str, u32>`
-  --> tests/ui_fail/unsized.rs:28:53
+  --> tests/ui_fail/unsized.rs:23:1
    |
-28 |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
-   |                                                     ^^^^^^^^^^     ^
+23 | / disjoint_impls! {
+24 | |     pub trait Kita<T: ?Sized, U: ?Sized> {
+25 | |         fn kita(&self) -> String;
+...  |
+28 | |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
+   | |                                                     ^^^^^^^^^^
+...  |
+39 | | }
+   | |_^
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the size for values of type `str` cannot be known at compilation time
   --> tests/ui_fail/unsized.rs:43:30
@@ -25,12 +33,18 @@ error[E0277]: the size for values of type `str` cannot be known at compilation t
    |
    = help: the trait `Sized` is not implemented for `str`
 note: required for `Vec<u8>` to implement `Kita<str, str>`
-  --> tests/ui_fail/unsized.rs:28:53
+  --> tests/ui_fail/unsized.rs:23:1
    |
-28 |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
-   |                                                     ^^^^^^^^-^     ^
-   |                                                             |
-   |                                                             unsatisfied trait bound introduced here
+23 | / disjoint_impls! {
+24 | |     pub trait Kita<T: ?Sized, U: ?Sized> {
+25 | |         fn kita(&self) -> String;
+...  |
+28 | |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
+   | |                                                     ^^^^^^^^^^
+...  |
+39 | | }
+   | |_^
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `str: Kita<u32, str>` is not satisfied
   --> tests/ui_fail/unsized.rs:44:30
@@ -39,12 +53,18 @@ error[E0277]: the trait bound `str: Kita<u32, str>` is not satisfied
    |                              ^^^ the trait `Sized` is not implemented for `str`
    |
 note: required for `str` to implement `Kita<u32, str>`
-  --> tests/ui_fail/unsized.rs:28:53
+  --> tests/ui_fail/unsized.rs:23:1
    |
-28 |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
-   |                                                     ^^^^^^^^-^     ^
-   |                                                             |
-   |                                                             unsatisfied trait bound introduced here
+23 | / disjoint_impls! {
+24 | |     pub trait Kita<T: ?Sized, U: ?Sized> {
+25 | |         fn kita(&self) -> String;
+...  |
+28 | |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
+   | |                                                     ^^^^^^^^^^
+...  |
+39 | | }
+   | |_^
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the size for values of type `str` cannot be known at compilation time
   --> tests/ui_fail/unsized.rs:45:30
@@ -61,7 +81,15 @@ note: required for `[u8]` to implement `Kita0<GroupB, str, u32>`
    |                                                |
    |                                                unsatisfied trait bound introduced here
 note: required for `[u8]` to implement `Kita<str, u32>`
-  --> tests/ui_fail/unsized.rs:28:53
+  --> tests/ui_fail/unsized.rs:23:1
    |
-28 |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
-   |                                                     ^^^^^^^^^^     ^
+23 | / disjoint_impls! {
+24 | |     pub trait Kita<T: ?Sized, U: ?Sized> {
+25 | |         fn kita(&self) -> String;
+...  |
+28 | |     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
+   | |                                                     ^^^^^^^^^^
+...  |
+39 | | }
+   | |_^
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)

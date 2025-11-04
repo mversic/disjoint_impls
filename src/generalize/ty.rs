@@ -458,7 +458,7 @@ mod tests {
         assert_eq!(
             subs1.type_generalizations,
             indexmap! {
-                (&t1, &t1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new())
+                (&t1, &t1) => (Sizedness::Sized, IndexSet::new())
             }
         );
         assert!(subs1.expr_generalizations.is_empty());
@@ -476,7 +476,7 @@ mod tests {
         assert_eq!(
             subs2.type_generalizations,
             indexmap! {
-                (&t1, &t1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new())
+                (&t1, &t1) => (Sizedness::Sized, IndexSet::new())
             }
         );
         assert!(subs2.expr_generalizations.is_empty());
@@ -494,7 +494,7 @@ mod tests {
         assert_eq!(
             subs3.type_generalizations,
             indexmap! {
-                (&t1, &t1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new())
+                (&t1, &t1) => (Sizedness::Sized, IndexSet::new())
             }
         );
         assert!(subs3.expr_generalizations.is_empty());
@@ -571,11 +571,11 @@ mod tests {
 
         assert_eq!(
             subs1.type_generalizations,
-            indexmap! { (&r1, &r2) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()) }
+            indexmap! { (&r1, &r2) => (Sizedness::Sized, IndexSet::new()) }
         );
         assert_eq!(
             subs2.type_generalizations,
-            indexmap! { (&r2, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()) }
+            indexmap! { (&r2, &r1) => (Sizedness::Sized, IndexSet::new()) }
         );
 
         assert!(subs1.expr_generalizations.is_empty());
@@ -607,11 +607,11 @@ mod tests {
 
         assert_eq!(
             subs1.type_generalizations,
-            indexmap! { (&a, &b) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()) }
+            indexmap! { (&a, &b) => (Sizedness::Sized, IndexSet::new()) }
         );
         assert_eq!(
             subs2.type_generalizations,
-            indexmap! { (&b, &a) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()) }
+            indexmap! { (&b, &a) => (Sizedness::Sized, IndexSet::new()) }
         );
 
         assert!(subs1.expr_generalizations.is_empty());
@@ -647,15 +647,15 @@ mod tests {
         assert_eq!(
             subs1.type_generalizations,
             indexmap! {
-                (&r1, &r2) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-                (&r1, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+                (&r1, &r2) => (Sizedness::Sized, IndexSet::new()),
+                (&r1, &r1) => (Sizedness::Sized, IndexSet::new()),
             }
         );
         assert_eq!(
             subs2.type_generalizations,
             indexmap! {
-                (&r2, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-                (&r1, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+                (&r2, &r1) => (Sizedness::Sized, IndexSet::new()),
+                (&r1, &r1) => (Sizedness::Sized, IndexSet::new()),
             }
         );
 
@@ -695,15 +695,15 @@ mod tests {
         assert_eq!(
             subs1.type_generalizations,
             indexmap! {
-                (&r1, &r3) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-                (&r2, &r4) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+                (&r1, &r3) => (Sizedness::Sized, IndexSet::new()),
+                (&r2, &r4) => (Sizedness::Sized, IndexSet::new()),
             }
         );
         assert_eq!(
             subs2.type_generalizations,
             indexmap! {
-                (&r3, &r1) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
-                (&r4, &r2) => (GeneralizationKind::Common, Sizedness::Sized, IndexSet::new()),
+                (&r3, &r1) => (Sizedness::Sized, IndexSet::new()),
+                (&r4, &r2) => (Sizedness::Sized, IndexSet::new()),
             }
         );
 

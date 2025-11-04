@@ -54,7 +54,7 @@ use syn::{
 };
 
 use crate::{
-    generalize::{Generalize, GenericParam, Params, Sizedness, as_generics, is_superset},
+    generalize::{Generalize, GenericParam, Params, Sizedness, as_generics},
     main_trait::is_remote,
     validate::validate_impl_syntax,
 };
@@ -65,17 +65,6 @@ mod helper_trait;
 mod main_trait;
 mod normalize;
 mod validate;
-
-/// Per impl count of supersets.
-///
-/// Indices in this list correspond with the total order of impls
-type Supersets = Vec<usize>;
-
-/// Per impl list of subsets with generalizations converting from subset to the current item.
-///
-/// For superset relations generalizations of the superset impl are always identifiers, never complex types.
-/// Indices in this list correspond with the total order of impls
-type Subsets<'a> = Vec<IndexMap<usize, Generalizations<'a>>>;
 
 /// Identifier of a type bounded with a trait such as:
 ///     `Option<T>: Kita` in `impl<T> Foo for T where Option<T>: Kita`
@@ -194,7 +183,7 @@ struct ImplGroup {
     /// Contains associated bindings impls of this group are dispatched on (i.e. differentiated by)
     trait_bounds: TraitBounds,
 
-    /// Generalized items of this group
+    /// Generalized items of this group if the impls are inherent, `None` otherwise
     items: Option<ImplItems>,
 
     /// All [impl blocks](syn::ItemImpl) that are part of this group (in the order of appearance)
@@ -220,6 +209,12 @@ struct ItemImplDescVisitor {
     impl_desc: ItemImplDesc,
 }
 
+impl ImplGroupId {
+    fn is_inherent(&self) -> bool {
+        self.trait_.is_none()
+    }
+}
+
 impl From<&syn::TypeParam> for Bounded {
     fn from(source: &syn::TypeParam) -> Self {
         let ident = &source.ident;
@@ -235,6 +230,8 @@ impl From<syn::Type> for Bounded {
 
 impl From<syn::TraitBound> for TraitBound {
     fn from(mut source: syn::TraitBound) -> Self {
+        source.lifetimes = Default::default();
+
         source
             .path
             .segments
@@ -368,7 +365,7 @@ impl TraitBoundsBuilder {
             params_partitioner.visit_path(trait_);
         }
 
-        let (maybe_redundant_params, mut unbounded_params) = if impl_group_id.trait_.is_none() {
+        let (maybe_redundant_params, mut unbounded_params) = if impl_group_id.is_inherent() {
             let unbounded_params = params_partitioner.0.into_iter().cloned().collect();
 
             (IndexSet::new(), unbounded_params)
@@ -472,8 +469,17 @@ impl TraitBounds {
 }
 
 impl ImplGroupBuilder {
-    fn new<'a>(impl_desc: &ItemImplDesc, identity_subs: &Generalizations<'a>) -> Self {
-        let mut subs = identity_subs.clone();
+    fn new(impl_desc: &ItemImplDesc) -> Self {
+        let mut subs = Default::default();
+
+        let generalized_id = Generalize::generalize(
+            &impl_desc.id,
+            &impl_desc.id,
+            &impl_desc.params,
+            &impl_desc.params,
+            &mut subs,
+        )
+        .unwrap();
 
         for (assoc_ty1, assoc_ty2) in impl_desc
             .trait_bounds
@@ -483,7 +489,7 @@ impl ImplGroupBuilder {
                 group_bound.values().zip_eq(other_bound.values())
             })
         {
-            assoc_ty1
+            let _ = assoc_ty1
                 .generalize(assoc_ty2, &impl_desc.params, &impl_desc.params, &mut subs)
                 .unwrap();
         }
@@ -528,7 +534,7 @@ impl ImplGroupBuilder {
             )
             .collect();
 
-        let impl_items = impl_desc.id.trait_.is_none().then(|| {
+        let impl_items = impl_desc.id.is_inherent().then(|| {
             impl_desc
                 .items
                 .generalize(
@@ -543,7 +549,7 @@ impl ImplGroupBuilder {
         let (lifetimes, params) = subs.build_params();
 
         Self {
-            id: impl_desc.id.clone(),
+            id: generalized_id,
             lifetimes,
             params,
             trait_bounds: TraitBoundsBuilder(group_bounds),
@@ -667,7 +673,7 @@ impl ImplGroupBuilder {
         let results = results
             .into_iter()
             .filter_map(|mut remaining| {
-                let mut subs = Generalizations::default();
+                let mut subs = id_substitutions.clone();
                 let mut result = Vec::new();
 
                 loop {
@@ -755,16 +761,22 @@ impl ImplGroupBuilder {
         &self,
         other_idx: usize,
         other: &'a ItemImplDesc,
-        subsets: &Subsets<'_>,
         mut impls: IndexMap<usize, &'a ItemImplDesc>,
     ) -> Vec<Self> {
         let mut implicit_params_container = vec![];
+        let mut id_subs = Default::default();
 
-        let Some(id_subs) = subsets[*impls.first().unwrap().0].get(&other_idx) else {
+        let Some(generalized_id) = Generalize::generalize(
+            &self.id,
+            &other.id,
+            &self.params,
+            &other.params,
+            &mut id_subs,
+        ) else {
             return vec![];
         };
 
-        self.find_valid_trait_bound_groups(other, id_subs, &mut implicit_params_container)
+        self.find_valid_trait_bound_groups(other, &id_subs, &mut implicit_params_container)
             .into_iter()
             .filter_map(|(group, subs)| {
                 let nrows = group.0[0].0.len();
@@ -778,11 +790,10 @@ impl ImplGroupBuilder {
                     }
                 });
 
-                // NOTE: After adding new impl into this group all pairs of impls have to be checked
-                // because a dispatch trait could have been removed thus resulting in an overlap
                 impls.insert(other_idx, other);
                 for (i, p1) in payload_rows.iter().enumerate() {
-                    for (j, p2) in payload_rows.iter().enumerate() {
+                    for (j, p2) in payload_rows.iter().enumerate().skip(i + 1) {
+                        let mut subs = Default::default();
                         if i == j {
                             continue;
                         }
@@ -793,13 +804,19 @@ impl ImplGroupBuilder {
                         let params1 = &impls[i].params;
                         let params2 = &impls[j].params;
 
-                        if is_superset(impl_id1, impl_id2, params1, params2).is_none() {
+                        if impl_id1
+                            .generalize(impl_id2, params1, params2, &mut subs)
+                            .is_none()
+                            || subs
+                                .is_disjoint(params1, params2)
+                                .is_none_or(core::convert::identity)
+                        {
                             continue;
                         }
 
                         if p1.iter().zip_eq(p2).all(|(&p1, &p2)| {
-                            is_superset(p1, p2, params1, params2)
-                                .is_some_and(|subs| subs.is_empty())
+                            p1.generalize(p2, params1, params2, &mut subs).is_none()
+                                || subs.is_disjoint(params1, params2) == Some(false)
                         }) {
                             return None;
                         }
@@ -807,7 +824,7 @@ impl ImplGroupBuilder {
                 }
 
                 impls.pop();
-                let impl_items = if self.id.trait_.is_none() {
+                let impl_items = if self.id.is_inherent() {
                     Some(self.items.as_ref().unwrap().generalize(
                         &other.items,
                         &self.params,
@@ -821,7 +838,7 @@ impl ImplGroupBuilder {
                 let (lifetimes, params) = subs.build_params();
 
                 Some(Self {
-                    id: self.id.clone(),
+                    id: generalized_id.clone(),
                     lifetimes,
                     params,
                     trait_bounds: group,
@@ -829,60 +846,6 @@ impl ImplGroupBuilder {
                 })
             })
             .collect()
-    }
-}
-
-impl ImplItems {
-    fn generalize(
-        &self,
-        other: &Self,
-        params1: &Params,
-        params2: &Params,
-        subs: &Generalizations<'_>,
-    ) -> Option<Self> {
-        let mut new_subs = subs.clone();
-
-        let generalized_fns = self
-            .fns
-            .iter()
-            .map(|(ident, sig)| {
-                let other_sig = other.fns.get(ident)?;
-
-                Some((
-                    ident.clone(),
-                    sig.generalize(other_sig, params1, params2, &mut new_subs)?,
-                ))
-            })
-            .collect::<Option<_>>()?;
-
-        let generalized_assoc_types = self
-            .assoc_types
-            .iter()
-            .all(|ident| other.assoc_types.contains(ident))
-            .then_some(self.assoc_types.clone())?;
-
-        let generalized_assoc_consts = self
-            .assoc_consts
-            .iter()
-            .map(|(ident, self_ty)| {
-                let other_ty = other.assoc_consts.get(ident)?;
-
-                Some((
-                    ident.clone(),
-                    self_ty.generalize(other_ty, params1, params2, &mut new_subs)?,
-                ))
-            })
-            .collect::<Option<_>>()?;
-
-        if !new_subs.difference(subs).is_empty() {
-            return None;
-        }
-
-        Some(ImplItems {
-            fns: generalized_fns,
-            assoc_types: generalized_assoc_types,
-            assoc_consts: generalized_assoc_consts,
-        })
     }
 }
 
@@ -1261,6 +1224,47 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     .into()
 }
 
+struct Dsu {
+    parent: Vec<usize>,
+}
+
+impl Dsu {
+    fn new(n: usize) -> Self {
+        Self {
+            parent: (0..n).collect(),
+        }
+    }
+
+    fn find(&mut self, x: usize) -> usize {
+        if self.parent[x] != x {
+            let root = self.find(self.parent[x]);
+            self.parent[x] = root;
+        }
+
+        self.parent[x]
+    }
+
+    fn union(&mut self, a: usize, b: usize) {
+        let ra = self.find(a);
+        let rb = self.find(b);
+
+        if ra != rb {
+            self.parent[rb] = ra;
+        }
+    }
+
+    fn groups(mut self) -> Vec<Vec<usize>> {
+        let mut map: IndexMap<_, Vec<_>> = IndexMap::new();
+
+        for i in 0..self.parent.len() {
+            let root = self.find(i);
+            map.entry(root).or_default().push(i);
+        }
+
+        map.into_values().collect()
+    }
+}
+
 impl Parse for ImplGroups {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
         let main_trait = input.parse::<ItemTrait>().ok();
@@ -1274,17 +1278,32 @@ impl Parse for ImplGroups {
             impls.push((param_bounds, item));
         }
 
-        let (mut supersets, subsets) = make_sets(&impls);
+        let mut dsu = Dsu::new(impls.len());
+        for i in 0..impls.len() {
+            for j in (i + 1)..impls.len() {
+                let (desc_i, _) = &impls[i];
+                let (desc_j, _) = &impls[j];
+                let mut subs = Default::default();
 
-        let impl_groups = supersets
+                if Generalize::generalize(
+                    &desc_i.id,
+                    &desc_j.id,
+                    &desc_i.params,
+                    &desc_j.params,
+                    &mut subs,
+                )
+                .is_some()
+                    && subs.is_disjoint(&desc_i.params, &desc_j.params) != Some(true)
+                {
+                    dsu.union(i, j);
+                }
+            }
+        }
+
+        let impl_groups = dsu
+            .groups()
             .iter()
-            .enumerate()
-            .filter_map(|(i, superset_count)| (*superset_count == 0).then_some(i))
-            .collect::<Vec<_>>()
-            .into_iter()
-            .flat_map(|impl_group_idx| {
-                find_impl_groups(impl_group_idx, &mut supersets, &subsets, &impls)
-            })
+            .flat_map(|subset| partition_impl_groups(subset, &impls))
             .collect::<Vec<_>>();
 
         let args = impl_groups
@@ -1292,7 +1311,7 @@ impl Parse for ImplGroups {
             .map(|(impl_group_builder, impl_group)| {
                 let impls = impl_group.iter().map(|&i| &impls[i]).collect::<Vec<_>>();
 
-                if impl_group_builder.id.trait_.is_none() && impl_group.len() > 1 {
+                if impl_group_builder.id.is_inherent() && impl_group.len() > 1 {
                     let nrows = impl_group_builder.trait_bounds.0[0].0.len();
 
                     let payloads = impl_group_builder
@@ -1302,26 +1321,40 @@ impl Parse for ImplGroups {
                         .flat_map(|(_, bindings)| bindings.values())
                         .collect::<Vec<_>>();
 
-                    (0..nrows)
-                        .map(|i| {
-                            let mut subs = subsets[impl_group[0]][&impl_group[i]].clone();
+                    let mut args = vec![];
+                    for i in 0..nrows {
+                        let mut subs = Default::default();
+                        let (impl_desc, _) = &impls[i];
 
-                            payloads.iter().for_each(|(generalized_payload, payloads)| {
-                                if let Some(payload) = &payloads[i] {
-                                    let _ = generalized_payload
-                                        .generalize(
-                                            payload,
-                                            &impl_group_builder.params,
-                                            &impls[i].0.params,
-                                            &mut subs,
-                                        )
-                                        .unwrap();
-                                }
-                            });
+                        if Generalize::generalize(
+                            &impl_group_builder.id,
+                            &impl_desc.id,
+                            &impl_group_builder.params,
+                            &impl_desc.params,
+                            &mut subs,
+                        )
+                        .is_none()
+                        {
+                            continue;
+                        }
 
-                            subs.generic_args().map(|(_, arg)| arg).collect::<Vec<_>>()
-                        })
-                        .collect()
+                        payloads.iter().for_each(|(generalized_payload, payloads)| {
+                            if let Some(payload) = &payloads[i] {
+                                let _ = generalized_payload
+                                    .generalize(
+                                        payload,
+                                        &impl_group_builder.params,
+                                        &impls[i].0.params,
+                                        &mut subs,
+                                    )
+                                    .unwrap();
+                            }
+                        });
+
+                        args.push(subs.generic_args().map(|(_, arg)| arg).collect::<Vec<_>>());
+                    }
+
+                    args
                 } else {
                     Vec::new()
                 }
@@ -1343,7 +1376,7 @@ impl Parse for ImplGroups {
                     .collect::<Vec<_>>();
 
                 let impl_group_id = impl_group_builder.id;
-                let impls = if impl_group_id.trait_.is_none() && impl_group.len() > 1 {
+                let impls = if impl_group_id.is_inherent() && impl_group.len() > 1 {
                     args.into_iter().zip_eq(impls).collect()
                 } else {
                     impls.into_iter().map(|impl_| (vec![], impl_)).collect()
@@ -1376,39 +1409,34 @@ impl Parse for ImplGroups {
     }
 }
 
-fn find_impl_groups<'a, 'b>(
-    curr_item_idx: usize,
-
-    supersets: &mut Supersets,
-    subsets: &Subsets<'a>,
-
-    item_impls: &'b [(ItemImplDesc, ItemImpl)],
+/// Further partitions the given subset into smaller, non-overlapping groups of impls.
+///
+/// The input `subset` comes from an initial partition where any two impls in **different** subsets
+/// are guaranteed by the Rust compiler to be non-overlapping. However, impls within the **same**
+/// subset may still potentially overlap. This function refines those subsets by detecting and
+/// separating impls that are found not to overlap.
+fn partition_impl_groups(
+    subset: &[usize],
+    item_impls: &[(ItemImplDesc, ItemImpl)],
 ) -> Vec<(ImplGroupBuilder, Vec<usize>)> {
-    find_impl_groups_rec(
-        curr_item_idx,
-        supersets,
-        subsets,
-        item_impls,
-        &mut Vec::new(),
-    )
-    .expect("At least one solution must always exist")
+    partition_impl_groups_rec(subset, item_impls, &mut Vec::new())
+        // FIXME: I don't think it does
+        .expect("At least one solution must always exist")
 }
 
-fn find_impl_groups_rec<'a, 'b>(
-    curr_item: usize,
-
-    supersets: &mut Supersets,
-    subsets: &Subsets<'a>,
-
-    item_impls: &'b [(ItemImplDesc, ItemImpl)],
+fn partition_impl_groups_rec(
+    subset: &[usize],
+    item_impls: &[(ItemImplDesc, ItemImpl)],
     impl_groups: &mut Vec<(ImplGroupBuilder, Vec<usize>)>,
 ) -> Option<Vec<(ImplGroupBuilder, Vec<usize>)>> {
-    let curr_impl = &item_impls[curr_item];
+    if subset.is_empty() {
+        return Some(impl_groups.to_vec());
+    }
 
+    let curr_impl_idx = subset[0];
     let mut min = None::<Vec<_>>;
-    let mut new_supersets = core::iter::repeat_n(0, supersets.len()).collect();
 
-    let identity_subs = &subsets[curr_item][&curr_item];
+    let curr_impl = &item_impls[curr_impl_idx];
     'OUT: for impl_group_idx in 0..impl_groups.len() {
         let impl_group = &impl_groups[impl_group_idx];
 
@@ -1418,35 +1446,21 @@ fn find_impl_groups_rec<'a, 'b>(
             .map(|&i| (i, &item_impls[i].0))
             .collect();
 
-        let intersections =
-            impl_group
-                .0
-                .intersection(curr_item, &curr_impl.0, subsets, group_impls);
+        let intersections = impl_group
+            .0
+            .intersection(curr_impl_idx, &curr_impl.0, group_impls);
 
         for intersection in intersections {
             let impl_group = &mut impl_groups[impl_group_idx];
 
             let prev_assoc_bindings = core::mem::replace(&mut impl_group.0, intersection);
-            impl_group.1.push(curr_item);
+            impl_group.1.push(curr_impl_idx);
 
-            let mut supersets = supersets.clone();
-            let res = unlock_subset_impl_groups(
-                curr_item,
-                &mut supersets,
-                subsets,
-                item_impls,
-                impl_groups,
-            );
+            let res = partition_impl_groups_rec(&subset[1..], item_impls, impl_groups);
 
             match (res, &mut min) {
-                (Some(res), Some(min)) if res.len() < min.len() => {
-                    new_supersets = supersets;
-                    *min = res;
-                }
-                (Some(res), None) => {
-                    new_supersets = supersets;
-                    min = Some(res);
-                }
+                (Some(res), Some(min)) if res.len() < min.len() => *min = res,
+                (Some(res), None) => min = Some(res),
                 _ => {}
             }
 
@@ -1464,26 +1478,14 @@ fn find_impl_groups_rec<'a, 'b>(
 
     // NOTE: Try create a new group if shorter solution is possible
     if min.as_ref().is_none_or(|m| m.len() > 1 + impl_groups.len())
-        && (impl_groups.iter().all(|g| g.0.id != curr_impl.0.id) || curr_impl.0.id.trait_.is_none())
+        && (curr_impl.0.id.is_inherent() || impl_groups.iter().all(|g| g.0.id != curr_impl.0.id))
     {
-        impl_groups.push((
-            ImplGroupBuilder::new(&curr_impl.0, identity_subs),
-            vec![curr_item],
-        ));
-
-        let mut supersets = supersets.clone();
-        let res =
-            unlock_subset_impl_groups(curr_item, &mut supersets, subsets, item_impls, impl_groups);
+        impl_groups.push((ImplGroupBuilder::new(&curr_impl.0), vec![curr_impl_idx]));
+        let res = partition_impl_groups_rec(&subset[1..], item_impls, impl_groups);
 
         match (res, &mut min) {
-            (Some(res), Some(min)) if res.len() < min.len() => {
-                new_supersets = supersets;
-                *min = res;
-            }
-            (Some(res), None) => {
-                new_supersets = supersets;
-                min = Some(res);
-            }
+            (Some(res), Some(min)) if res.len() < min.len() => *min = res,
+            (Some(res), None) => min = Some(res),
             _ => {}
         }
 
@@ -1491,58 +1493,5 @@ fn find_impl_groups_rec<'a, 'b>(
         impl_groups.pop();
     }
 
-    if min.is_some() {
-        *supersets = new_supersets;
-    }
-
     min
-}
-
-fn unlock_subset_impl_groups<'a, 'b>(
-    curr_item: usize,
-
-    supersets: &mut Supersets,
-    subsets: &Subsets<'a>,
-
-    item_impls: &'b [(ItemImplDesc, ItemImpl)],
-    impl_groups: &mut [(ImplGroupBuilder, Vec<usize>)],
-) -> Option<Vec<(ImplGroupBuilder, Vec<usize>)>> {
-    let mut acc = impl_groups.to_vec();
-
-    for &subset_idx in subsets[curr_item].keys().filter(|&i| *i != curr_item) {
-        let superset_count = supersets.get_mut(subset_idx).unwrap();
-
-        *superset_count -= 1;
-        if *superset_count == 0 {
-            acc = find_impl_groups_rec(subset_idx, supersets, subsets, item_impls, &mut acc)?;
-        }
-    }
-
-    Some(acc)
-}
-
-fn make_sets(impl_groups: &[(ItemImplDesc, ItemImpl)]) -> (Supersets, Subsets<'_>) {
-    let n = impl_groups.len();
-
-    let mut supersets: Supersets = core::iter::repeat_n(0, n).collect();
-    let mut subsets: Subsets = core::iter::repeat_n(Default::default(), n).collect();
-
-    let iter = impl_groups.iter().enumerate();
-    for ((i1, (g1, _)), (i2, (g2, _))) in iter.clone().cartesian_product(iter) {
-        // FIXME: Too much cloning
-        let params1 = g1.params.clone();
-        let params2 = g2.params.clone();
-
-        if !subsets[i2].contains_key(&i1)
-            && let Some(subs) = is_superset(&g1.id, &g2.id, &params1, &params2)
-        {
-            subsets[i1].insert(i2, subs);
-
-            if i1 != i2 {
-                *supersets.get_mut(i2).unwrap() += 1;
-            }
-        }
-    }
-
-    (supersets, subsets)
 }

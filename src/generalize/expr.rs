@@ -1201,7 +1201,7 @@ mod tests {
         assert!(subs1.type_generalizations.is_empty());
         assert_eq!(
             subs1.expr_generalizations,
-            indexmap! { (Expr::Expr(&e1), Expr::Expr(&e1)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given) }
+            indexmap! { (Expr::Expr(&e1), Expr::Expr(&e1)) => (parse_quote!(usize), ExprTypeKind::Given) }
         );
 
         // ---
@@ -1217,7 +1217,7 @@ mod tests {
         assert!(subs2.type_generalizations.is_empty());
         assert_eq!(
             subs2.expr_generalizations,
-            indexmap! { (Expr::Expr(&e1), Expr::Expr(&e1)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given) }
+            indexmap! { (Expr::Expr(&e1), Expr::Expr(&e1)) => (parse_quote!(usize), ExprTypeKind::Given) }
         );
 
         // ---
@@ -1233,7 +1233,7 @@ mod tests {
         assert!(subs3.type_generalizations.is_empty());
         assert_eq!(
             subs3.expr_generalizations,
-            indexmap! { (Expr::Expr(&e1), Expr::Expr(&e1)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given) }
+            indexmap! { (Expr::Expr(&e1), Expr::Expr(&e1)) => (parse_quote!(usize), ExprTypeKind::Given) }
         );
     }
 
@@ -1329,18 +1329,18 @@ mod tests {
         assert_eq!(
             subs1.expr_generalizations,
             indexmap! {
-                (Expr::Expr(&r1), Expr::Expr(&r5)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
-                (Expr::Expr(&r2), Expr::Expr(&r4)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
-                (Expr::Expr(&r3), Expr::Expr(&r6)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given)
+                (Expr::Expr(&r1), Expr::Expr(&r5)) => (parse_quote!(usize), ExprTypeKind::Given),
+                (Expr::Expr(&r2), Expr::Expr(&r4)) => (parse_quote!(usize), ExprTypeKind::Given),
+                (Expr::Expr(&r3), Expr::Expr(&r6)) => (parse_quote!(usize), ExprTypeKind::Given)
             }
         );
 
         assert_eq!(
             subs2.expr_generalizations,
             indexmap! {
-                (Expr::Expr(&r5), Expr::Ident(p.get_index(0).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
-                (Expr::Expr(&r4), Expr::Ident(p.get_index(1).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given),
-                (Expr::Expr(&r6), Expr::Ident(p.get_index(2).unwrap().0)) => (GeneralizationKind::Common, parse_quote!(usize), ExprTypeKind::Given)
+                (Expr::Expr(&r5), Expr::Ident(p.get_index(0).unwrap().0)) => (parse_quote!(usize), ExprTypeKind::Given),
+                (Expr::Expr(&r4), Expr::Ident(p.get_index(1).unwrap().0)) => (parse_quote!(usize), ExprTypeKind::Given),
+                (Expr::Expr(&r6), Expr::Ident(p.get_index(2).unwrap().0)) => (parse_quote!(usize), ExprTypeKind::Given)
             }
         );
     }
