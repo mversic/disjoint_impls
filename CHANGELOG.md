@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2025-11-04
+### Fixed
+- generalize impl signatures, don't look for supersets
+
 ## [1.2.1] - 2025-10-17
 ### Added
-- feat: support GATs
+- support GATs
 
 ## [1.2.0] - 2025-10-13
 ### Fixed
