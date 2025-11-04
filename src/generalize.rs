@@ -1,6 +1,7 @@
 use proc_macro2::Span;
 use quote::ToTokens;
 use syn::punctuated::Punctuated;
+use syn::visit::{self, Visit};
 
 use super::*;
 
@@ -62,13 +63,6 @@ pub struct Generalizations<'a> {
 
     /// Helper that keeps track of the lifetime to be attached to type parameters
     curr_ref_lifetime: Vec<(&'a syn::Lifetime, &'a syn::Lifetime)>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Disjointness {
-    Disjoint,
-    SoftOverlap,
-    ParamOverlap,
 }
 
 /// Tracks whether [`syn::Type`] is sized or unsized
@@ -690,16 +684,43 @@ impl<'a> Generalizations<'a> {
         (lifetimes, type_params.chain(const_params).collect())
     }
 
-    pub fn is_disjoint(&self, params1: &Params, params2: &Params) -> Option<bool> {
-        fn is_param_type(ty: &syn::Type, params: &Params) -> bool {
-            if let syn::Type::Path(syn::TypePath { path, qself: None }) = ty
+    pub fn is_disjoint(&self, params1: &Params, params2: &Params) -> bool {
+        fn is_param_type(ty: &syn::Type, params: &Params) -> Option<bool> {
+            if let syn::Type::Path(syn::TypePath { path, .. }) = ty
                 && let Some(ident) = path.get_ident()
                 && params.contains_key(ident)
             {
-                return true;
+                return Some(true);
             }
 
-            false
+            struct ParamTypeVisitor<'a> {
+                contains_param: bool,
+                params: &'a Params,
+            }
+
+            impl<'a, 'ast> Visit<'ast> for ParamTypeVisitor<'a> {
+                fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
+                    if let Some(ident) = type_path.path.get_ident()
+                        && self.params.contains_key(ident)
+                    {
+                        self.contains_param = true;
+                    } else {
+                        visit::visit_type_path(self, type_path);
+                    }
+                }
+            }
+
+            let mut visitor = ParamTypeVisitor {
+                contains_param: false,
+                params,
+            };
+
+            visitor.visit_type(ty);
+            if visitor.contains_param {
+                return None;
+            }
+
+            Some(false)
         }
 
         fn is_param_expr(expr: Expr<'_>, params: &Params) -> bool {
@@ -708,9 +729,7 @@ impl<'a> Generalizations<'a> {
                     .get(ident)
                     .is_some_and(|param| matches!(param, GenericParam::Const(_))),
                 Expr::Expr(e) => {
-                    if let syn::Expr::Path(syn::ExprPath {
-                        path, qself: None, ..
-                    }) = e
+                    if let syn::Expr::Path(syn::ExprPath { path, .. }) = e
                         && let Some(ident) = path.get_ident()
                     {
                         return params
@@ -723,72 +742,45 @@ impl<'a> Generalizations<'a> {
             }
         }
 
-        let mut soft_overlap = false;
-        let mut type_by_src: IndexMap<_, IndexSet<_>> = IndexMap::new();
-        let mut type_by_dst: IndexMap<_, IndexSet<_>> = IndexMap::new();
+        let mut type_by_src: IndexMap<_, Vec<_>> = IndexMap::new();
+        let mut type_by_dst: IndexMap<_, Vec<_>> = IndexMap::new();
         for &(src, dst) in self.type_generalizations.keys() {
             let src_is_param = is_param_type(src, params1);
             let dst_is_param = is_param_type(dst, params2);
 
-            if src != dst && !src_is_param && !dst_is_param {
-                return Some(true);
+            if src != dst
+                && ((src_is_param == Some(false) || dst_is_param == Some(false))
+                    || src_is_param.is_none() && dst_is_param.is_none())
+            {
+                return true;
             }
 
-            if src_is_param ^ dst_is_param {
-                soft_overlap = true;
-            }
-
-            type_by_src.entry(src).or_default().insert(dst_is_param);
-            type_by_dst.entry(dst).or_default().insert(src_is_param);
+            type_by_src.entry(src).or_default().push(dst_is_param);
+            type_by_dst.entry(dst).or_default().push(src_is_param);
         }
 
         for dsts in type_by_src.values() {
-            if dsts.iter().filter(|&is_param| !is_param).count() >= 2 {
-                return Some(true);
+            if dsts.iter().filter(|&&state| state != Some(true)).count() >= 2 {
+                return true;
             }
         }
 
         for srcs in type_by_dst.values() {
-            if srcs.iter().filter(|&is_param| !is_param).count() >= 2 {
-                return Some(true);
+            if srcs.iter().filter(|&&state| state != Some(true)).count() >= 2 {
+                return true;
             }
         }
 
-        let mut expr_by_src: IndexMap<_, IndexSet<_>> = IndexMap::new();
-        let mut expr_by_dst: IndexMap<_, IndexSet<_>> = IndexMap::new();
         for &(src, dst) in self.expr_generalizations.keys() {
             let src_is_param = is_param_expr(src, params1);
             let dst_is_param = is_param_expr(dst, params2);
 
             if src != dst && !src_is_param && !dst_is_param {
-                return Some(true);
-            }
-
-            if src_is_param ^ dst_is_param {
-                soft_overlap = true;
-            }
-
-            expr_by_src.entry(src).or_default().insert(dst_is_param);
-            expr_by_dst.entry(dst).or_default().insert(src_is_param);
-        }
-
-        for dsts in expr_by_src.values() {
-            if dsts.iter().filter(|&is_param| !is_param).count() >= 2 {
-                return Some(true);
+                return true;
             }
         }
 
-        for srcs in expr_by_dst.values() {
-            if srcs.iter().filter(|&is_param| !is_param).count() >= 2 {
-                return Some(true);
-            }
-        }
-
-        if soft_overlap {
-            return None;
-        }
-
-        Some(false)
+        false
     }
 }
 

@@ -807,16 +807,14 @@ impl ImplGroupBuilder {
                         if impl_id1
                             .generalize(impl_id2, params1, params2, &mut subs)
                             .is_none()
-                            || subs
-                                .is_disjoint(params1, params2)
-                                .is_none_or(core::convert::identity)
+                            || subs.is_disjoint(params1, params2)
                         {
                             continue;
                         }
 
                         if p1.iter().zip_eq(p2).all(|(&p1, &p2)| {
                             p1.generalize(p2, params1, params2, &mut subs).is_none()
-                                || subs.is_disjoint(params1, params2) == Some(false)
+                                || !subs.is_disjoint(params1, params2)
                         }) {
                             return None;
                         }
@@ -1293,7 +1291,7 @@ impl Parse for ImplGroups {
                     &mut subs,
                 )
                 .is_some()
-                    && subs.is_disjoint(&desc_i.params, &desc_j.params) != Some(true)
+                    && !subs.is_disjoint(&desc_i.params, &desc_j.params)
                 {
                     dsu.union(i, j);
                 }
