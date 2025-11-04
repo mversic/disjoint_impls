@@ -561,41 +561,14 @@ impl ImplGroupBuilder {
         &'a self,
         other: &'a ItemImplDesc,
         id_substitutions: &Generalizations<'a>,
-        implicit_params_container: &'a mut Vec<Vec<syn::Type>>,
-    ) -> Vec<(TraitBoundsBuilder, Generalizations<'a>)> {
-        let group_bounds: Vec<_> = (0..self.trait_bounds.0.len()).collect();
-        let other_bounds: Vec<_> = (0..other.trait_bounds.len()).collect();
+        implicit_params_container: &'a mut Vec<syn::Type>,
+    ) -> (TraitBoundsBuilder, Generalizations<'a>) {
+        let mut generalized_bounds = Vec::new();
 
-        let mut results = Vec::new();
-        let mut stack = Vec::new();
-
-        // TODO: Use stack or queue? eliminate redundant results
-        stack.push((group_bounds, other_bounds, Vec::new()));
-        while let Some((mut rem_group_bounds, rem_other_bounds, acc)) = stack.pop() {
-            let Some(group_bound_idx) = rem_group_bounds.pop() else {
-                if acc
-                    .iter()
-                    .map(|(_, _, bindings, _, _)| bindings)
-                    .any(|bindings: &IndexMap<_, _>| !bindings.is_empty())
-                {
-                    results.push(acc);
-                }
-
-                continue;
-            };
-
-            let (group_bound_id, (rows, group_bound)) =
-                self.trait_bounds.0.get_index(group_bound_idx).unwrap();
-
+        for (group_bound_id, (rows, group_bound)) in &self.trait_bounds.0 {
             let nrows = rows.len();
-            let mut substack = Vec::new();
-            for j in 0..rem_other_bounds.len() {
-                let mut rem_other_bounds = rem_other_bounds.clone();
-                let other_bound_idx = rem_other_bounds.swap_remove(j);
 
-                let (other_bound_id, other_bound) =
-                    other.trait_bounds.get_index(other_bound_idx).unwrap();
-
+            for (other_bound_id, other_bound) in &other.trait_bounds {
                 let mut bound_subs = id_substitutions.clone();
                 let mut all_payload_subs = id_substitutions.clone();
 
@@ -616,7 +589,6 @@ impl ImplGroupBuilder {
                     let payloads = core::iter::repeat_n(None, nrows);
                     new_group_bound.insert(ident.clone(), (payload.clone(), payloads.collect()));
                 }
-
                 let new_group_bound = new_group_bound
                     .into_iter()
                     .filter_map(|(ident, (_, payloads))| {
@@ -649,112 +621,89 @@ impl ImplGroupBuilder {
                     })
                     .collect::<IndexMap<_, _>>();
 
-                let mut acc = acc.clone();
                 let bound_subs_diff = bound_subs.difference(id_substitutions);
                 let payload_subs_diff = all_payload_subs.difference(id_substitutions);
 
-                acc.push((
+                generalized_bounds.push((
                     group_bound_id,
                     other_bound_id,
                     new_group_bound,
                     bound_subs_diff,
                     payload_subs_diff,
                 ));
-
-                substack.push((rem_group_bounds.clone(), rem_other_bounds, acc));
             }
-
-            stack.push((rem_group_bounds, rem_other_bounds, acc));
-            stack.extend(substack);
         }
 
         // NOTE: Only pick out trait bounds that, when generalized, don't introduce a new type
         // unbounded parameter that is not found in any of the associated binding payloads
-        let results = results
-            .into_iter()
-            .filter_map(|mut remaining| {
-                let mut subs = id_substitutions.clone();
-                let mut result = Vec::new();
+        let mut subs = id_substitutions.clone();
+        let mut result = Vec::new();
 
-                loop {
-                    let ready: Vec<_> = remaining
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, (_, _, _, bound_subs, _))| {
-                            bound_subs.difference(&subs).is_empty().then_some(i)
-                        })
-                        .collect();
+        loop {
+            let ready: Vec<_> = generalized_bounds
+                .iter()
+                .enumerate()
+                .filter_map(|(i, (_, _, _, bound_subs, _))| {
+                    bound_subs.difference(&subs).is_empty().then_some(i)
+                })
+                .collect();
 
-                    if ready.is_empty() {
-                        break;
-                    }
+            if ready.is_empty() {
+                break;
+            }
 
-                    for idx in ready.into_iter().rev() {
-                        let (group_bound_id, other_bound_id, bound, _, payload_subs) =
-                            remaining.swap_remove(idx);
+            for idx in ready.into_iter().rev() {
+                let (group_bound_id, other_bound_id, bound, _, payload_subs) =
+                    generalized_bounds.swap_remove(idx);
 
-                        result.push((group_bound_id, other_bound_id, bound));
-                        subs = subs.unify(payload_subs);
-                    }
-                }
+                result.push((group_bound_id, other_bound_id, bound));
+                subs = subs.unify(payload_subs);
+            }
+        }
 
-                (!result.is_empty()).then_some((result, subs))
+        *implicit_params_container = result
+            .iter()
+            .flat_map(|(_, _, bound)| {
+                bound
+                    .values()
+                    .filter(|(_, other_payload, _)| other_payload.is_none())
+            })
+            .enumerate()
+            .map(|(i, _)| {
+                let ident = format_ident!("_MŠČ{}", i);
+                parse_quote!(#ident)
             })
             .collect::<Vec<_>>();
 
-        for (result, _) in &results {
-            implicit_params_container.push(
-                result
-                    .iter()
-                    .flat_map(|(_, _, bound)| {
-                        bound
-                            .values()
-                            .filter(|(_, other_payload, _)| other_payload.is_none())
-                    })
-                    .enumerate()
-                    .map(|(i, _)| {
-                        let ident = format_ident!("_MŠČ{}", i);
-                        parse_quote!(#ident)
-                    })
-                    .collect::<Vec<_>>(),
-            );
+        // NOTE: After finding out which substitutions are valid,
+        // the generalization is done once again with results kept
+        let mut subs = id_substitutions.clone().unify(subs);
+
+        let mut implicit_params = implicit_params_container.iter();
+        let mut trait_bounds = IndexMap::new();
+        for (group_bound_id, other_bound_id, bound) in result {
+            let generalized_bound_id = group_bound_id
+                .generalize(other_bound_id, &self.params, &other.params, &mut subs)
+                .unwrap();
+
+            let mut generalized_bound = IndexMap::new();
+            for (ident, (generalized_payload, other_payload, payloads)) in bound {
+                let other_payload =
+                    other_payload.unwrap_or_else(|| implicit_params.next().unwrap());
+
+                let generalized_payload = generalized_payload
+                    .generalize(other_payload, &self.params, &other.params, &mut subs)
+                    .unwrap();
+
+                generalized_bound.insert(ident, (generalized_payload, payloads));
+            }
+
+            let mut bounds = self.trait_bounds.0[group_bound_id].0.clone();
+            bounds.push(other_bound_id.clone());
+            trait_bounds.insert(generalized_bound_id, (bounds, generalized_bound));
         }
 
-        results
-            .into_iter()
-            .enumerate()
-            .map(|(i, (result, subs))| {
-                // NOTE: After finding out which substitutions are valid,
-                // the generalization is done once again with results kept
-                let mut subs = id_substitutions.clone().unify(subs);
-
-                let mut implicit_params = implicit_params_container[i].iter();
-                let mut trait_bounds = IndexMap::new();
-                for (group_bound_id, other_bound_id, bound) in result {
-                    let generalized_bound_id = group_bound_id
-                        .generalize(other_bound_id, &self.params, &other.params, &mut subs)
-                        .unwrap();
-
-                    let mut generalized_bound = IndexMap::new();
-                    for (ident, (generalized_payload, other_payload, payloads)) in bound {
-                        let other_payload =
-                            other_payload.unwrap_or_else(|| implicit_params.next().unwrap());
-
-                        let generalized_payload = generalized_payload
-                            .generalize(other_payload, &self.params, &other.params, &mut subs)
-                            .unwrap();
-
-                        generalized_bound.insert(ident, (generalized_payload, payloads));
-                    }
-
-                    let mut bounds = self.trait_bounds.0[group_bound_id].0.clone();
-                    bounds.push(other_bound_id.clone());
-                    trait_bounds.insert(generalized_bound_id, (bounds, generalized_bound));
-                }
-
-                (TraitBoundsBuilder(trait_bounds), subs)
-            })
-            .collect()
+        (TraitBoundsBuilder(trait_bounds), subs)
     }
 
     fn intersection<'a>(
@@ -762,88 +711,86 @@ impl ImplGroupBuilder {
         other_idx: usize,
         other: &'a ItemImplDesc,
         mut impls: IndexMap<usize, &'a ItemImplDesc>,
-    ) -> Vec<Self> {
+    ) -> Option<Self> {
         let mut implicit_params_container = vec![];
         let mut id_subs = Default::default();
 
-        let Some(generalized_id) = Generalize::generalize(
+        let generalized_id = Generalize::generalize(
             &self.id,
             &other.id,
             &self.params,
             &other.params,
             &mut id_subs,
-        ) else {
-            return vec![];
-        };
+        )?;
 
-        self.find_valid_trait_bound_groups(other, &id_subs, &mut implicit_params_container)
-            .into_iter()
-            .filter_map(|(group, subs)| {
-                let nrows = group.0[0].0.len();
+        let (group, subs) =
+            self.find_valid_trait_bound_groups(other, &id_subs, &mut implicit_params_container);
+        if group.0.is_empty() {
+            return None;
+        }
+        let nrows = group.0[0].0.len();
 
-                let mut payload_rows = core::iter::repeat_n(Vec::new(), nrows).collect::<Vec<_>>();
-                group.0.iter().for_each(|(_, (_, bindings))| {
-                    for (_, payload_cols) in bindings.values() {
-                        for (i, col) in payload_cols.iter().enumerate() {
-                            payload_rows[i].push(col);
-                        }
-                    }
-                });
+        let mut payload_rows = core::iter::repeat_n(Vec::new(), nrows).collect::<Vec<_>>();
+        group.0.iter().for_each(|(_, (_, bindings))| {
+            for (_, payload_cols) in bindings.values() {
+                for (i, col) in payload_cols.iter().enumerate() {
+                    payload_rows[i].push(col);
+                }
+            }
+        });
 
-                impls.insert(other_idx, other);
-                for (i, p1) in payload_rows.iter().enumerate() {
-                    for (j, p2) in payload_rows.iter().enumerate().skip(i + 1) {
-                        let mut subs = Default::default();
-                        if i == j {
-                            continue;
-                        }
-
-                        let impl_id1 = &impls[i].id;
-                        let impl_id2 = &impls[j].id;
-
-                        let params1 = &impls[i].params;
-                        let params2 = &impls[j].params;
-
-                        if impl_id1
-                            .generalize(impl_id2, params1, params2, &mut subs)
-                            .is_none()
-                            || subs.is_disjoint(params1, params2)
-                        {
-                            continue;
-                        }
-
-                        if p1.iter().zip_eq(p2).all(|(&p1, &p2)| {
-                            p1.generalize(p2, params1, params2, &mut subs).is_none()
-                                || !subs.is_disjoint(params1, params2)
-                        }) {
-                            return None;
-                        }
-                    }
+        impls.insert(other_idx, other);
+        for (i, p1) in payload_rows.iter().enumerate() {
+            for (j, p2) in payload_rows.iter().enumerate().skip(i + 1) {
+                let mut subs = Default::default();
+                if i == j {
+                    continue;
                 }
 
-                impls.pop();
-                let impl_items = if self.id.is_inherent() {
-                    Some(self.items.as_ref().unwrap().generalize(
-                        &other.items,
-                        &self.params,
-                        &other.params,
-                        &subs,
-                    )?)
-                } else {
-                    None
-                };
+                let impl_id1 = &impls[i].id;
+                let impl_id2 = &impls[j].id;
 
-                let (lifetimes, params) = subs.build_params();
+                let params1 = &impls[i].params;
+                let params2 = &impls[j].params;
 
-                Some(Self {
-                    id: generalized_id.clone(),
-                    lifetimes,
-                    params,
-                    trait_bounds: group,
-                    items: impl_items,
-                })
-            })
-            .collect()
+                if impl_id1
+                    .generalize(impl_id2, params1, params2, &mut subs)
+                    .is_none()
+                    || subs.is_disjoint(params1, params2)
+                {
+                    continue;
+                }
+
+                if p1.iter().zip_eq(p2).all(|(&p1, &p2)| {
+                    p1.generalize(p2, params1, params2, &mut subs).is_none()
+                        || !subs.is_disjoint(params1, params2)
+                }) {
+                    return None;
+                }
+            }
+        }
+
+        impls.pop();
+        let impl_items = if self.id.is_inherent() {
+            Some(self.items.as_ref().unwrap().generalize(
+                &other.items,
+                &self.params,
+                &other.params,
+                &subs,
+            )?)
+        } else {
+            None
+        };
+
+        let (lifetimes, params) = subs.build_params();
+
+        Some(Self {
+            id: generalized_id.clone(),
+            lifetimes,
+            params,
+            trait_bounds: group,
+            items: impl_items,
+        })
     }
 }
 
@@ -1435,7 +1382,7 @@ fn partition_impl_groups_rec(
     let mut min = None::<Vec<_>>;
 
     let curr_impl = &item_impls[curr_impl_idx];
-    'OUT: for impl_group_idx in 0..impl_groups.len() {
+    for impl_group_idx in 0..impl_groups.len() {
         let impl_group = &impl_groups[impl_group_idx];
 
         let group_impls = impl_group
@@ -1448,7 +1395,7 @@ fn partition_impl_groups_rec(
             .0
             .intersection(curr_impl_idx, &curr_impl.0, group_impls);
 
-        for intersection in intersections {
+        if let Some(intersection) = intersections {
             let impl_group = &mut impl_groups[impl_group_idx];
 
             let prev_assoc_bindings = core::mem::replace(&mut impl_group.0, intersection);
@@ -1469,7 +1416,7 @@ fn partition_impl_groups_rec(
 
             if min.as_ref().is_some_and(|m| m.len() == impl_groups.len()) {
                 // NOTE: One of the shortest solutions has been found
-                break 'OUT;
+                break;
             }
         }
     }
