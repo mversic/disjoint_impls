@@ -69,18 +69,13 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    pub trait Wrapper0<'a, _TŠČ4: ?Sized, T, U, _TŠČ2> {
+    pub trait Wrapper0<'_lšč0, _TŠČ4: ?Sized, _TŠČ0, _TŠČ1, _TŠČ2> {
         const NAME: &'static str;
-        fn kita(_a: T, _b: U) -> &'static str
+        fn kita(_a: _TŠČ0, _b: _TŠČ1) -> &'static str
         where
-            T: 'a,
-            U: 'a;
+            _TŠČ0: '_lšč0,
+            _TŠČ1: '_lšč0;
     }
-
-    pub trait Wrapper1<'c, _TŠČ3: ?Sized, T, _TŠČ1> {
-        const NAME: &'static str;
-    }
-
     impl<'a, T: A, U> Wrapper0<'a, GroupA, T, U, GroupA> for Wrapper<'a, (T, U), 12>
     where
         T: Dispatch<Group = GroupA> + Dispatch<Group = GroupA>,
@@ -94,7 +89,6 @@ const _: () = {
             Self::NAME
         }
     }
-
     impl<'b, T, U> Wrapper0<'b, GroupB, T, U, GroupB> for Wrapper<'b, (T, U), 12>
     where
         T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB> + B,
@@ -109,13 +103,15 @@ const _: () = {
         }
     }
 
+    pub trait Wrapper1<'_lšč0, _TŠČ3: ?Sized, _TŠČ0, _TŠČ1> {
+        const NAME: &'static str;
+    }
     impl<
         'c,
         T: Dispatch<Group = GroupA> + Dispatch<Group = GroupA>,
     > Wrapper1<'c, GroupA, T, GroupA> for Wrapper<'c, T, 14> {
         const NAME: &'static str = "2nd Blanket A";
     }
-
     impl<
         'c,
         T: Dispatch<Group = GroupB> + Dispatch<Group = GroupB>,
@@ -123,27 +119,43 @@ const _: () = {
         const NAME: &'static str = "2nd Blanket B";
     }
 
-    impl<'a, T, U, _TŠČ2> Wrapper<'a, (T, U), 12>
+    impl<'_lšč0, _TŠČ0, _TŠČ1, _TŠČ2> Wrapper<'_lšč0, (_TŠČ0, _TŠČ1), 12>
     where
-        Self: Wrapper0<'a, _TŠČ2, T, U, _TŠČ2>,
-        T: Dispatch<Group = _TŠČ2>,
+        _TŠČ0: Dispatch<Group = _TŠČ2>,
+        Self: Wrapper0<'_lšč0, _TŠČ2, _TŠČ0, _TŠČ1, _TŠČ2>,
     {
-        fn kita(_a: T, _b: U) -> &'static str
+        fn kita(_a: _TŠČ0, _b: _TŠČ1) -> &'static str
         where
-            T: 'a,
-            U: 'a,
+            _TŠČ0: '_lšč0,
+            _TŠČ1: '_lšč0,
         {
-            <Self as Wrapper0<'a, _TŠČ2, T, U, _TŠČ2>>::kita(_a, _b)
+            <Self as Wrapper0<
+                '_lšč0,
+                _TŠČ2,
+                _TŠČ0,
+                _TŠČ1,
+                _TŠČ2,
+            >>::kita(_a, _b)
         }
-        const NAME: &'static str = <Self as Wrapper0<'a, _TŠČ2, T, U, _TŠČ2>>::NAME;
+        const NAME: &'static str = <Self as Wrapper0<
+            '_lšč0,
+            _TŠČ2,
+            _TŠČ0,
+            _TŠČ1,
+            _TŠČ2,
+        >>::NAME;
     }
-
-    impl<'c, T, _TŠČ1> Wrapper<'c, T, 14>
+    impl<'_lšč0, _TŠČ0, _TŠČ1> Wrapper<'_lšč0, _TŠČ0, 14>
     where
-        Self: Wrapper1<'c, _TŠČ1, T, _TŠČ1>,
-        T: Dispatch<Group = _TŠČ1>,
+        _TŠČ0: Dispatch<Group = _TŠČ1>,
+        Self: Wrapper1<'_lšč0, _TŠČ1, _TŠČ0, _TŠČ1>,
     {
-        const NAME: &'static str = <Self as Wrapper1<'c, _TŠČ1, T, _TŠČ1>>::NAME;
+        const NAME: &'static str = <Self as Wrapper1<
+            '_lšč0,
+            _TŠČ1,
+            _TŠČ0,
+            _TŠČ1,
+        >>::NAME;
     }
 };
 */

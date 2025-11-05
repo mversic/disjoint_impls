@@ -11,7 +11,7 @@ pub fn generate(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
     impl_group: &ImplGroup,
-) -> Option<syn::ItemTrait> {
+) -> syn::ItemTrait {
     let assoc_binding_count = &impl_group.trait_bounds.generalized_idents().count();
 
     let mut helper_trait = if let Some(helper_trait) = main_trait {
@@ -27,7 +27,7 @@ pub fn generate(
         let impl_generics = &impl_group.params;
 
         parse_quote! {
-            trait #self_ty <#(#impl_generics),*> {
+            trait #self_ty <#impl_generics> {
                 #(#impl_items)*
             }
         }
@@ -39,7 +39,7 @@ pub fn generate(
         .collect();
 
     helper_trait.vis = syn::Visibility::Public(parse_quote!(pub));
-    helper_trait.ident = gen_ident(&helper_trait.ident, impl_group_idx);
+    helper_trait.ident = gen_ident(&impl_group.id, impl_group_idx);
 
     let start_idx = helper_trait.generics.params.len();
     helper_trait.generics.params = combine_generic_args(
@@ -49,7 +49,7 @@ pub fn generate(
     .map(|arg| -> syn::GenericParam { parse_quote!(#arg) })
     .collect();
 
-    Some(helper_trait)
+    helper_trait
 }
 
 fn combine_generic_args(
@@ -73,7 +73,7 @@ fn combine_generic_args(
     lifetimes.into_iter().chain(generic_args)
 }
 
-fn gen_inherent_trait_items(impl_items: &ImplItems) -> impl Iterator<Item = syn::TraitItem> {
+fn gen_inherent_trait_items(impl_items: &ImplItemsDesc) -> impl Iterator<Item = syn::TraitItem> {
     let assoc_consts = impl_items
         .assoc_consts
         .iter()
@@ -91,6 +91,15 @@ fn gen_inherent_trait_items(impl_items: &ImplItems) -> impl Iterator<Item = syn:
 }
 
 /// Generate ident of the helper trait
-pub fn gen_ident(ident: &syn::Ident, idx: usize) -> syn::Ident {
-    format_ident!("{}{}", ident, idx)
+pub fn gen_ident(group_id: &ImplGroupId, idx: usize) -> syn::Ident {
+    let base = if let Some(trait_path) = &group_id.trait_ {
+        trait_path.segments.last().map(|segment| &segment.ident)
+    } else if let syn::Type::Path(ty) = &group_id.self_ty {
+        ty.path.segments.last().map(|segment| &segment.ident)
+    } else {
+        unreachable!()
+    }
+    .unwrap();
+
+    format_ident!("{}{}", base, idx)
 }

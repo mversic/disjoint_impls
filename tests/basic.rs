@@ -44,6 +44,7 @@ disjoint_impls! {
 /*
 pub trait Kita {
     const NAME: &'static str;
+
     fn name() -> &'static str {
         "Default blanket"
     }
@@ -52,30 +53,31 @@ pub trait Kita {
 const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
+
         fn name() -> &'static str {
             "Default blanket"
         }
     }
-
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
         const NAME: &'static str = "Blanket A";
     }
-
     impl<U: Dispatch<Group = GroupB>> Kita0<GroupB> for U {
         const NAME: &'static str = "Blanket B";
+
         fn name() -> &'static str {
             "Blanket B"
         }
     }
 
-    impl<T> Kita for T
+    impl<_TŠČ0> Kita for _TŠČ0
     where
-        Self: Kita0<<T as Dispatch>::Group>,
-        T: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
+        _TŠČ0: Dispatch,
     {
-        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME;
+
         fn name() -> &'static str {
-            <Self as Kita0<<T as Dispatch>::Group>>::name()
+            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::name()
         }
     }
 };

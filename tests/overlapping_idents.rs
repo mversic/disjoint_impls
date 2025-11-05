@@ -62,7 +62,6 @@ const _: () = {
         type U: From<U>;
         const U: &'static str;
     }
-
     impl<K, T: Dispatch<Group = GroupA>> U0<GroupA, K> for T
     where
         K: From<u8>,
@@ -70,7 +69,6 @@ const _: () = {
         type U = K;
         const U: &'static str = "Blanket A";
     }
-
     impl<K, T: Dispatch<Group = GroupB>> U0<GroupB, K> for T
     where
         K: From<u8>,
@@ -79,15 +77,15 @@ const _: () = {
         const U: &'static str = "Blanket B";
     }
 
-    impl<K, T> U<K> for T
+    impl<_TŠČ0, _TŠČ1> U<_TŠČ0> for _TŠČ1
     where
-        K: From<u8>,
-        Self: U0<<T as Dispatch>::Group, K>,
-        T: Dispatch,
-        K: From<u8>,
+        _TŠČ0: From<u8>,
+        _TŠČ0: From<u8>,
+        _TŠČ1: Dispatch,
+        Self: U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
-        type U = <Self as U0<<T as Dispatch>::Group, K>>::U;
-        const U: &'static str = <Self as U0<<T as Dispatch>::Group, K>>::U;
+        type U = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U;
+        const U: &'static str = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U;
     }
 };
 */

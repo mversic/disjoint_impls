@@ -70,27 +70,25 @@ const _: () = {
             "Default blanket"
         }
     }
-
     unsafe impl<U, T: Dispatch<Group = GroupA>> Kita0<GroupA, U> for T {
         unsafe fn kita() -> &'static str {
             "Blanket A"
         }
     }
-
     unsafe impl<U, T: Dispatch<Group = GroupB>> Kita0<GroupB, U> for T {
         unsafe fn kita() -> &'static str {
             "Blanket B"
         }
     }
 
-    unsafe impl<U, T> Kita<U> for T
+    unsafe impl<_TŠČ0, _TŠČ1> Kita<_TŠČ0> for _TŠČ1
     where
         Self: Dispatch,
-        Self: Kita0<<T as Dispatch>::Group, U>,
-        T: Dispatch,
+        _TŠČ1: Dispatch,
+        Self: Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
         unsafe fn kita() -> &'static str {
-            unsafe { <Self as Kita0<<T as Dispatch>::Group, U>>::kita() }
+            unsafe { <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita() }
         }
     }
 };

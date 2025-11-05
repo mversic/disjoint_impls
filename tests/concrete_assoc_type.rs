@@ -46,6 +46,7 @@ disjoint_impls! {
 /*
 pub trait Kita {
     type Item;
+
     fn kita() -> Self::Item;
 }
 
@@ -55,7 +56,6 @@ const _: () = {
 
         fn kita() -> Self::Item;
     }
-
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
         type Item = u32;
 
@@ -63,7 +63,6 @@ const _: () = {
             1
         }
     }
-
     impl<U: Dispatch<Group = GroupB> + Default> Kita0<GroupB> for U {
         type Item = U;
 
@@ -72,15 +71,15 @@ const _: () = {
         }
     }
 
-    impl<T> Kita for T
+    impl<_TŠČ0> Kita for _TŠČ0
     where
-        Self: Kita0<<T as Dispatch>::Group>,
-        T: Dispatch,
+        _TŠČ0: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
-        type Item = <Self as Kita0<<T as Dispatch>::Group>>::Item;
+        type Item = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item;
 
         fn kita() -> Self::Item {
-            <Self as Kita0<<T as Dispatch>::Group>>::kita()
+            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::kita()
         }
     }
 };

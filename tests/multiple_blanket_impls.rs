@@ -56,24 +56,20 @@ const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
-
-    pub trait Kita1<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
-        const NAME: &'static str;
-    }
-
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
         const NAME: &'static str = "Blanket A";
     }
-
     impl<U: Dispatch<Group = GroupB>> Kita0<GroupB> for U {
         const NAME: &'static str = "Blanket B";
     }
 
+    pub trait Kita1<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
+        const NAME: &'static str;
+    }
     impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> Kita1<GroupA, GroupA>
     for (T, U) {
         const NAME: &'static str = "Blanket AA";
     }
-
     impl<U, T> Kita1<GroupA, GroupB> for (U, T)
     where
         U: Dispatch<Group = GroupA>,
@@ -81,29 +77,27 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket AB";
     }
-
     impl<T: Dispatch<Group = GroupB>, U: Dispatch> Kita1<GroupB, <U as Dispatch>::Group>
     for (T, U) {
         const NAME: &'static str = "Blanket B*";
     }
 
-    impl<T> Kita for T
+    impl<_TŠČ0> Kita for _TŠČ0
     where
-        Self: Kita0<<T as Dispatch>::Group>,
-        T: Dispatch,
+        _TŠČ0: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME;
     }
-
-    impl<T, U> Kita for (T, U)
+    impl<_TŠČ0, _TŠČ1> Kita for (_TŠČ0, _TŠČ1)
     where
-        Self: Kita1<<T as Dispatch>::Group, <U as Dispatch>::Group>,
-        T: Dispatch,
-        U: Dispatch,
+        _TŠČ0: Dispatch,
+        _TŠČ1: Dispatch,
+        Self: Kita1<<_TŠČ0 as Dispatch>::Group, <_TŠČ1 as Dispatch>::Group>,
     {
         const NAME: &'static str = <Self as Kita1<
-            <T as Dispatch>::Group,
-            <U as Dispatch>::Group,
+            <_TŠČ0 as Dispatch>::Group,
+            <_TŠČ1 as Dispatch>::Group,
         >>::NAME;
     }
 };

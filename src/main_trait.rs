@@ -20,24 +20,12 @@ pub fn is_remote(attr: &syn::Attribute) -> bool {
 }
 
 /// Generate main trait impl
-pub fn generate(
+pub fn generate_impl(
     main_trait: Option<&ItemTrait>,
     impl_group_idx: usize,
     impl_group: &ImplGroup,
 ) -> Option<ItemImpl> {
-    let helper_trait_ident = main_trait.map_or_else(
-        || {
-            let syn::Type::Path(type_path) = &impl_group.id.self_ty else {
-                unreachable!()
-            };
-
-            Some(helper_trait::gen_ident(
-                &type_path.path.segments.last().unwrap().ident,
-                impl_group_idx,
-            ))
-        },
-        |main_trait| Some(helper_trait::gen_ident(&main_trait.ident, impl_group_idx)),
-    )?;
+    let helper_trait_ident = helper_trait::gen_ident(&impl_group.id, impl_group_idx);
 
     let mut main_trait_impl = main_trait
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group.id))
@@ -48,9 +36,6 @@ pub fn generate(
 
     let helper_trait_bound =
         gen_helper_trait_bound(impl_group, &helper_trait_ident, &impl_group.trait_bounds);
-    where_clause
-        .predicates
-        .push(parse_quote! { Self: #helper_trait_bound });
     where_clause
         .predicates
         .extend(impl_group.trait_bounds.0.iter().map(
@@ -74,6 +59,9 @@ pub fn generate(
                 }
             },
         ));
+    where_clause
+        .predicates
+        .push(parse_quote! { Self: #helper_trait_bound });
 
     let mut impl_item_resolver = ImplItemResolver::new(impl_group, &helper_trait_ident);
     main_trait_impl
@@ -90,7 +78,7 @@ fn gen_dummy_impl_from_inherent_impl(impl_group: &ImplGroup) -> syn::ItemImpl {
         id,
 
         items:
-            Some(ImplItems {
+            Some(ImplItemsDesc {
                 fns,
                 assoc_types,
                 assoc_consts,

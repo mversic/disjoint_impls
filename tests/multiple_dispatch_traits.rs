@@ -61,31 +61,28 @@ const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
         const NAME: &'static str;
     }
-
     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA, GroupA>
     for T {
         const NAME: &'static str = "Blanket AA";
     }
-
     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> Kita0<GroupA, GroupB>
     for T {
         const NAME: &'static str = "Blanket AB";
     }
-
     impl<T: Dispatch1<Group = GroupB> + Dispatch2> Kita0<GroupB, <T as Dispatch2>::Group>
     for T {
         const NAME: &'static str = "Blanket B*";
     }
 
-    impl<T> Kita for T
+    impl<_TŠČ0> Kita for _TŠČ0
     where
-        Self: Kita0<<T as Dispatch1>::Group, <T as Dispatch2>::Group>,
-        T: Dispatch1,
-        T: Dispatch2,
+        _TŠČ0: Dispatch1,
+        _TŠČ0: Dispatch2,
+        Self: Kita0<<_TŠČ0 as Dispatch1>::Group, <_TŠČ0 as Dispatch2>::Group>,
     {
         const NAME: &'static str = <Self as Kita0<
-            <T as Dispatch1>::Group,
-            <T as Dispatch2>::Group,
+            <_TŠČ0 as Dispatch1>::Group,
+            <_TŠČ0 as Dispatch2>::Group,
         >>::NAME;
     }
 };

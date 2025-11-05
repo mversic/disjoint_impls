@@ -52,7 +52,6 @@ const _: () = {
     pub trait Kita0<'a, 'b, _TŠČ3: ?Sized, U> {
         fn get_name(&self) -> &str;
     }
-
     impl<
         '_lšč0,
         '_lšč1,
@@ -68,7 +67,6 @@ const _: () = {
             "Blanket A"
         }
     }
-
     impl<'a, 'b, 'c, '_lšč0, T, U> Kita0<'a, 'b, &'_lšč0 GroupB, U> for &'c T
     where
         &'c T: Dispatch<Group = &'_lšč0 GroupB>,
@@ -78,26 +76,28 @@ const _: () = {
         }
     }
 
+    // TODO: lifetime bounds are empty. Remove them
+
     impl<
         '_lšč0,
         '_lšč1,
         '_lšč2,
         '_lšč3,
-        U,
-        T: '_lšč2,
-    > Kita<'_lšč0, '_lšč1, U> for &'_lšč2 T
+        _TŠČ0,
+        _TŠČ1: '_lšč2,
+    > Kita<'_lšč0, '_lšč1, _TŠČ0> for &'_lšč2 _TŠČ1
     where
         '_lšč0:,
         '_lšč1:,
-        Self: Kita0<'_lšč0, '_lšč1, <&'_lšč2 T as Dispatch>::Group, U>,
-        &'_lšč2 T: Dispatch,
+        &'_lšč2 _TŠČ1: Dispatch,
+        Self: Kita0<'_lšč0, '_lšč1, <&'_lšč2 _TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
         fn get_name(&self) -> &str {
             <Self as Kita0<
                 '_lšč0,
                 '_lšč1,
-                <&'_lšč2 T as Dispatch>::Group,
-                U,
+                <&'_lšč2 _TŠČ1 as Dispatch>::Group,
+                _TŠČ0,
             >>::get_name(self)
         }
     }

@@ -53,41 +53,42 @@ const _: () = {
     pub trait Kita0<_TŠČ1: ?Sized, T> {
         const NAME: &'static str;
     }
-
-    pub trait Kita1<_TŠČ1: ?Sized, T> {
-        const NAME: &'static str;
-    }
-
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA, T> for dyn Kara + Sync {
         const NAME: &'static str = "Blanket A";
     }
-
     impl<T: Dispatch<Group = GroupB>> Kita0<GroupB, T> for dyn Kara + Sync {
         const NAME: &'static str = "Blanket B";
     }
 
+    pub trait Kita1<_TŠČ1: ?Sized, T> {
+        const NAME: &'static str;
+    }
     impl<T: Dispatch<Group = GroupA>> Kita1<GroupA, T> for dyn Kara {
         const NAME: &'static str = "Blanket C";
     }
-
     impl<T: Dispatch<Group = GroupB>> Kita1<GroupB, T> for dyn Kara {
         const NAME: &'static str = "Blanket D";
     }
 
-    impl<T> Kita<T> for dyn Kara + Sync
+    impl<_TŠČ0> Kita<_TŠČ0> for dyn Kara + Sync
     where
-        Self: Kita0<<T as Dispatch>::Group, T>,
-        T: Dispatch,
+        _TŠČ0: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
     {
-        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group, T>>::NAME;
+        const NAME: &'static str = <Self as Kita0<
+            <_TŠČ0 as Dispatch>::Group,
+            _TŠČ0,
+        >>::NAME;
     }
-
-    impl<T> Kita<T> for dyn Kara
+    impl<_TŠČ0> Kita<_TŠČ0> for dyn Kara
     where
-        Self: Kita1<<T as Dispatch>::Group, T>,
-        T: Dispatch,
+        _TŠČ0: Dispatch,
+        Self: Kita1<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
     {
-        const NAME: &'static str = <Self as Kita1<<T as Dispatch>::Group, T>>::NAME;
+        const NAME: &'static str = <Self as Kita1<
+            <_TŠČ0 as Dispatch>::Group,
+            _TŠČ0,
+        >>::NAME;
     }
 };
 */

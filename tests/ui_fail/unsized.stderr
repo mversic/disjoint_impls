@@ -5,12 +5,18 @@ error[E0277]: the trait bound `str: Kita<str, u32>` is not satisfied
    |                              ^^^ the trait `Sized` is not implemented for `str`
    |
 note: required for `str` to implement `Kita0<GroupB, str, u32>`
-  --> tests/ui_fail/unsized.rs:34:54
+  --> tests/ui_fail/unsized.rs:28:53
    |
-34 |     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita<U, V> for T {
-   |                                                -     ^^^^^^^^^^     ^
-   |                                                |
-   |                                                unsatisfied trait bound introduced here
+28 |       impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
+   |  _____________________________________________________^
+29 | |         fn kita(&self) -> String {
+30 | |             "Blanket A".to_owned()
+...  |
+34 | |     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita<U, V> for T {
+   | |                                                -              ^     ^
+   | |________________________________________________|______________|
+   |                                                  |
+   |                                                  unsatisfied trait bound introduced here
 note: required for `str` to implement `Kita<str, u32>`
   --> tests/ui_fail/unsized.rs:23:1
    |
@@ -74,12 +80,18 @@ error[E0277]: the size for values of type `str` cannot be known at compilation t
    |
    = help: the trait `Sized` is not implemented for `str`
 note: required for `[u8]` to implement `Kita0<GroupB, str, u32>`
-  --> tests/ui_fail/unsized.rs:34:54
+  --> tests/ui_fail/unsized.rs:28:53
    |
-34 |     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita<U, V> for T {
-   |                                                -     ^^^^^^^^^^     ^
-   |                                                |
-   |                                                unsatisfied trait bound introduced here
+28 |       impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
+   |  _____________________________________________________^
+29 | |         fn kita(&self) -> String {
+30 | |             "Blanket A".to_owned()
+...  |
+34 | |     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita<U, V> for T {
+   | |                                                -              ^     ^
+   | |________________________________________________|______________|
+   |                                                  |
+   |                                                  unsatisfied trait bound introduced here
 note: required for `[u8]` to implement `Kita<str, u32>`
   --> tests/ui_fail/unsized.rs:23:1
    |

@@ -50,26 +50,24 @@ const _: () = {
             "Default blanket"
         }
     }
-
     impl<U, T: Dispatch<Group = GroupA>> ForeignKita0<GroupA, U> for LocalType<T> {
         fn kita() -> &'static str {
             "Blanket A"
         }
     }
-
     impl<U, T: Dispatch<Group = GroupB>> ForeignKita0<GroupB, U> for LocalType<T> {
         fn kita() -> &'static str {
             "Blanket B"
         }
     }
 
-    impl<U, T> ForeignKita<U> for LocalType<T>
+    impl<_TŠČ0, _TŠČ1> ForeignKita<_TŠČ0> for LocalType<_TŠČ1>
     where
-        Self: ForeignKita0<<T as Dispatch>::Group, U>,
-        T: Dispatch,
+        _TŠČ1: Dispatch,
+        Self: ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
         fn kita() -> &'static str {
-            <Self as ForeignKita0<<T as Dispatch>::Group, U>>::kita()
+            <Self as ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita()
         }
     }
 };

@@ -9,7 +9,7 @@ Enables writing non-overlapping (*disjoint*) impls distinguished by a set of ass
 
 Works for trait and inherent implementations alike (no special syntax).
 
-# Trait implementations
+### Trait implementations
 
 ```rs
 use disjoint_impls::disjoint_impls;
@@ -26,7 +26,7 @@ disjoint_impls! {
 }
 ```
 
-# Inherent implementations
+### Inherent implementations
 
 ```rs
 use disjoint_impls::disjoint_impls;
@@ -43,7 +43,7 @@ disjoint_impls! {
 }
 ```
 
-# Foreign(remote) traits
+### Foreign(remote) traits
 
 For traits defined outside the current crate (a.k.a. foreign or remote traits), duplicate
 the trait definition inside the macro and annotate it with `#[disjoint_impls(remote)]`.

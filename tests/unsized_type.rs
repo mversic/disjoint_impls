@@ -53,28 +53,28 @@ const _: () = {
     pub trait Kita0<_TŠČ2: ?Sized, T: ?Sized, U: ?Sized> {
         fn kita(&self) -> String;
     }
-
     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita0<GroupA, U, V> for T {
         fn kita(&self) -> String {
             "Blanket A".to_owned()
         }
     }
-
     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita0<GroupB, U, V> for T {
         fn kita(&self) -> String {
             "Blanket B".to_owned()
         }
     }
 
-    impl<U: ?Sized, V, T: ?Sized> Kita<U, V> for T
+    // TODO: There are mpty bounds again here
+
+    impl<_TŠČ0: ?Sized, _TŠČ1, _TŠČ2: ?Sized> Kita<_TŠČ0, _TŠČ1> for _TŠČ2
     where
-        U:,
-        V:,
-        Self: Kita0<<T as Dispatch>::Group, U, V>,
-        T: Dispatch,
+        _TŠČ0:,
+        _TŠČ1:,
+        _TŠČ2: Dispatch,
+        Self: Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>,
     {
         fn kita(&self) -> String {
-            <Self as Kita0<<T as Dispatch>::Group, U, V>>::kita(self)
+            <Self as Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>>::kita(self)
         }
     }
 

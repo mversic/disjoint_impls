@@ -43,17 +43,19 @@ use generalize::Generalizations;
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools as _;
 use proc_macro::TokenStream;
-use proc_macro_error2::{abort, proc_macro_error};
+use proc_macro_error2::{OptionExt, abort, proc_macro_error};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    ItemImpl, ItemTrait,
+    ItemImpl, ItemTrait, Token,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
+    punctuated::Punctuated,
     visit::{Visit, visit_trait_bound},
 };
 
 use crate::{
+    disjoint::traitize_inherent_impl,
     generalize::{Generalize, GenericParam, Params, Sizedness, as_generics},
     main_trait::is_remote,
     validate::validate_impl_syntax,
@@ -120,6 +122,7 @@ struct Bounded(syn::Type);
 struct TraitBound(syn::TraitBound);
 
 /// Unique id of an impl group, i.e. ([`ItemImpl::trait_`], [`ItemImpl::self_ty`]).
+///
 /// All [`ItemImpl`]s that have matching group ids are handled by one main trait impl.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ImplGroupId {
@@ -127,8 +130,9 @@ struct ImplGroupId {
     self_ty: syn::Type,
 }
 
+/// [`syn::ImplItem`]s descriptor
 #[derive(Debug, Clone, Default)]
-struct ImplItems {
+struct ImplItemsDesc {
     /// Fns that are contained in this group
     fns: IndexMap<syn::Ident, syn::Signature>,
     /// Associated types that are contained in this group
@@ -138,63 +142,69 @@ struct ImplItems {
 }
 
 /// [`syn::ItemImpl`] descriptor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ItemImplDesc {
     /// Id of this impl
     id: ImplGroupId,
-    /// List of all type and const parameters of this impl
+    /// Type and const parameters of this impl
     params: Params,
-
-    /// List of all trait bounds of this impl (optionally with associated bindings)
+    /// All trait bounds of this impl (optionally with associated bindings)
     trait_bounds: IndexMap<TraitBoundIdent, IndexMap<syn::Ident, AssocBindingPayload>>,
-
-    /// Items of this impl
-    items: ImplItems,
+    /// [Items](syn::ImplItem) of this impl if the impl is inherent, [`None`] otherwise
+    items: Option<ImplItemsDesc>,
 }
 
 /// Builder for [`ImplGroup`]
 #[derive(Debug, Clone)]
 struct ImplGroupBuilder {
-    /// Id of this impl group
+    /// Id of this group
     id: ImplGroupId,
-
-    /// List of lifetime parameters common to this impl
+    /// Lifetime parameters common to this group
     lifetimes: Vec<syn::LifetimeParam>,
-    /// List of type and const parameters common to this impl
+    /// Type and const parameters common to this group
     params: Params,
-
-    /// List of all trait bounds common to this impl (optionally with associated bindings)
+    /// All trait bounds common to this impl group (optionally with associated bindings)
     trait_bounds: TraitBoundsBuilder,
-
-    /// Generalized items of the impl group if the impls are inherent, `None` otherwise
-    items: Option<ImplItems>,
+    /// Generalized items of the impl group if the impls are inherent, [`None`] otherwise
+    items: Option<ImplItemsDesc>,
+    /// All impls that overlap on associated bindings this group is dispatched on.
+    subgroups: Vec<(Self, Vec<usize>, TraitBoundsBuilder)>,
 }
 
-/// Collection of [`ItemImpl`]s grouped by [`ImplGroupId`] and dispatched on associated bindings
+/// Collection of disjoint [`ItemImpl`]s grouped by [`ImplGroupId`] and dispatched on associated bindings
+#[derive(Debug, Clone)]
 struct ImplGroup {
-    /// Id of this impl group
+    /// Id of this group
     id: ImplGroupId,
-
-    /// Generic parameters used in the impl group id or the bounded type of associated type binding
-    params: Vec<syn::GenericParam>,
-
-    /// List of all trait bounds common to this group (optionally with associated bindings)
-    ///
-    /// Contains associated bindings impls of this group are dispatched on (i.e. differentiated by)
+    /// Type and const parameters common to this group
+    params: Punctuated<syn::GenericParam, Token![,]>,
+    /// All trait bounds common to this impl group (optionally with associated bindings)
     trait_bounds: TraitBounds,
+    /// Generalized items of the impl group if the impls are inherent, [`None`] otherwise
+    items: Option<ImplItemsDesc>,
 
-    /// Generalized items of this group if the impls are inherent, `None` otherwise
-    items: Option<ImplItems>,
+    /// All disjoint [impls](syn::ItemImpl) that are part of this group
+    impls: Vec<(syn::ItemImpl, Vec<syn::GenericArgument>)>,
 
-    /// All [impl blocks](syn::ItemImpl) that are part of this group (in the order of appearance)
-    impls: Vec<(Vec<syn::GenericArgument>, syn::ItemImpl)>,
+    /// All remaining impls that overlap on associated bindings this group is dispatched on.
+    ///
+    /// For instance, the following 3 impls will form a group where the last 2 impls
+    /// overlap on `Group1 = GroupB` but form a subgroup on `Group2` assoc binding:
+    ///
+    /// ```ignore
+    /// impl<T> Kita for T where T: Dispatch<Group1 = GroupA> {}
+    /// impl<T> Kita for T where T: Dispatch<Group1 = GroupB, Group2 = GroupA> {}
+    /// impl<T> Kita for T where T: Dispatch<Group1 = GroupB, Group2 = GroupB> {}
+    /// ```
+    subgroups: Vec<(ImplGroup, Vec<AssocBindingPayload>)>,
 }
 
 /// Body of the [`disjoint_impls`] macro
+#[derive(Debug, Clone)]
 struct ImplGroups {
-    /// Definition of the main trait. [`None`] for inherent impls
-    item_trait_: Option<ItemTrait>,
-    /// Collection of [`ItemImpl`] blocks grouped by [`ImplGroupId`]
+    /// Definition of the trait current group is implementing. [`None`] for inherent impls
+    trait_: Option<ItemTrait>,
+    /// Collection of [`ItemImpl`] blocks grouped by [`ImplGroupId`].
     /// Each impl group is dispatched on a set of associated bounds
     impl_groups: Vec<ImplGroup>,
 }
@@ -298,7 +308,104 @@ impl quote::ToTokens for ImplGroupId {
     }
 }
 
+/// Helper struct for disjoint-set union algorithm
+struct Dsu {
+    parent: Vec<usize>,
+}
+
+impl Dsu {
+    fn new(n: usize) -> Self {
+        Self {
+            parent: (0..n).collect(),
+        }
+    }
+
+    fn find(&mut self, x: usize) -> usize {
+        if self.parent[x] != x {
+            let root = self.find(self.parent[x]);
+            self.parent[x] = root;
+        }
+
+        self.parent[x]
+    }
+
+    fn union(&mut self, a: usize, b: usize) {
+        let ra = self.find(a);
+        let rb = self.find(b);
+
+        if ra != rb {
+            self.parent[rb] = ra;
+        }
+    }
+
+    fn groups(mut self) -> Vec<Vec<usize>> {
+        let mut map: IndexMap<_, Vec<_>> = IndexMap::new();
+
+        for i in 0..self.parent.len() {
+            let root = self.find(i);
+            map.entry(root).or_default().push(i);
+        }
+
+        map.into_values().collect()
+    }
+}
+
 impl TraitBoundsBuilder {
+    /// Removes impls at positions not in `keep`. Returns removed impls.
+    ///
+    /// The remove is stable. This means that relative order of impls of both original
+    /// and removed impls is preserved. Total order of trait bounds is also preserved.
+    fn retain_impl_by_pos(&mut self, keep: &[usize]) -> Self {
+        let keep: IndexSet<_> = keep.iter().copied().collect();
+
+        let mut removed = IndexMap::new();
+        for (trait_ident, (orig, bindings)) in self.0.iter_mut() {
+            let mut removed_bindings = IndexMap::new();
+
+            let (kept_rows, removed_rows) = core::mem::take(orig)
+                .into_iter()
+                .enumerate()
+                .partition::<Vec<_>, _>(|(pos, _)| keep.contains(pos));
+
+            bindings
+                .iter_mut()
+                .for_each(|(ident, (payload, payloads))| {
+                    let (kept_payloads, removed_payloads) = core::mem::take(payloads)
+                        .into_iter()
+                        .enumerate()
+                        .partition::<Vec<_>, _>(|(pos, _)| keep.contains(pos));
+
+                    *payloads = kept_payloads
+                        .into_iter()
+                        .map(|(_, binding)| binding)
+                        .collect();
+
+                    let removed_payloads = removed_payloads
+                        .into_iter()
+                        .map(|(_, binding)| binding)
+                        .collect::<Vec<_>>();
+
+                    if !removed_payloads.is_empty() {
+                        removed_bindings.insert(ident.clone(), (payload.clone(), removed_payloads));
+                    }
+                });
+
+            if !removed_rows.is_empty() {
+                removed.insert(
+                    trait_ident.clone(),
+                    (
+                        removed_rows.into_iter().map(|(_, row)| row).collect(),
+                        removed_bindings,
+                    ),
+                );
+            }
+
+            *orig = kept_rows.into_iter().map(|(_, row)| row).collect();
+        }
+
+        Self(removed)
+    }
+
     /// Try to remove all unconstrained params because Rust's trait solver can overflow
     /// when exploring valid implementations that have too many degrees of freedom.
     ///
@@ -456,15 +563,13 @@ impl TraitBounds {
     }
 
     fn payloads(&self) -> impl Iterator<Item = syn::Type> {
-        self.0
-            .iter()
-            .flat_map(|((bounded, trait_bound), (_, bindings))| {
-                bindings.iter().map(move |(ident, (payload, _))| {
-                    payload.clone().unwrap_or_else(|| {
-                        parse_quote! { <#bounded as #trait_bound>::#ident }
-                    })
-                })
+        self.0.iter().flat_map(|(bounded, (_, bindings))| {
+            bindings.iter().map(move |(ident, (payload, _))| {
+                payload
+                    .clone()
+                    .unwrap_or_else(|| assoc_binding_default(bounded, ident))
             })
+        })
     }
 }
 
@@ -472,14 +577,15 @@ impl ImplGroupBuilder {
     fn new(impl_desc: &ItemImplDesc) -> Self {
         let mut subs = Default::default();
 
-        let generalized_id = Generalize::generalize(
-            &impl_desc.id,
-            &impl_desc.id,
-            &impl_desc.params,
-            &impl_desc.params,
-            &mut subs,
-        )
-        .unwrap();
+        let generalized_id = impl_desc
+            .id
+            .generalize(
+                &impl_desc.id,
+                &impl_desc.params,
+                &impl_desc.params,
+                &mut subs,
+            )
+            .unwrap();
 
         for (assoc_ty1, assoc_ty2) in impl_desc
             .trait_bounds
@@ -537,8 +643,10 @@ impl ImplGroupBuilder {
         let impl_items = impl_desc.id.is_inherent().then(|| {
             impl_desc
                 .items
+                .as_ref()
+                .unwrap()
                 .generalize(
-                    &impl_desc.items,
+                    impl_desc.items.as_ref().unwrap(),
                     &impl_desc.params,
                     &impl_desc.params,
                     &subs,
@@ -554,6 +662,7 @@ impl ImplGroupBuilder {
             params,
             trait_bounds: TraitBoundsBuilder(group_bounds),
             items: impl_items,
+            subgroups: vec![],
         }
     }
 
@@ -562,7 +671,7 @@ impl ImplGroupBuilder {
         other: &'a ItemImplDesc,
         id_substitutions: &Generalizations<'a>,
         implicit_params_container: &'a mut Vec<syn::Type>,
-    ) -> (TraitBoundsBuilder, Generalizations<'a>) {
+    ) -> Option<(TraitBoundsBuilder, Generalizations<'a>)> {
         let mut generalized_bounds = Vec::new();
 
         for (group_bound_id, (rows, group_bound)) in &self.trait_bounds.0 {
@@ -649,6 +758,10 @@ impl ImplGroupBuilder {
                 .collect();
 
             if ready.is_empty() {
+                if result.is_empty() {
+                    return None;
+                }
+
                 break;
             }
 
@@ -703,77 +816,23 @@ impl ImplGroupBuilder {
             trait_bounds.insert(generalized_bound_id, (bounds, generalized_bound));
         }
 
-        (TraitBoundsBuilder(trait_bounds), subs)
+        Some((TraitBoundsBuilder(trait_bounds), subs))
     }
 
-    fn intersection<'a>(
-        &self,
-        other_idx: usize,
-        other: &'a ItemImplDesc,
-        mut impls: IndexMap<usize, &'a ItemImplDesc>,
-    ) -> Option<Self> {
+    fn intersection(&self, other: &ItemImplDesc) -> Option<Self> {
         let mut implicit_params_container = vec![];
         let mut id_subs = Default::default();
 
-        let generalized_id = Generalize::generalize(
-            &self.id,
-            &other.id,
-            &self.params,
-            &other.params,
-            &mut id_subs,
-        )?;
+        let generalized_id =
+            self.id
+                .generalize(&other.id, &self.params, &other.params, &mut id_subs)?;
 
         let (group, subs) =
-            self.find_valid_trait_bound_groups(other, &id_subs, &mut implicit_params_container);
-        if group.0.is_empty() {
-            return None;
-        }
-        let nrows = group.0[0].0.len();
+            self.find_valid_trait_bound_groups(other, &id_subs, &mut implicit_params_container)?;
 
-        let mut payload_rows = core::iter::repeat_n(Vec::new(), nrows).collect::<Vec<_>>();
-        group.0.iter().for_each(|(_, (_, bindings))| {
-            for (_, payload_cols) in bindings.values() {
-                for (i, col) in payload_cols.iter().enumerate() {
-                    payload_rows[i].push(col);
-                }
-            }
-        });
-
-        impls.insert(other_idx, other);
-        for (i, p1) in payload_rows.iter().enumerate() {
-            for (j, p2) in payload_rows.iter().enumerate().skip(i + 1) {
-                let mut subs = Default::default();
-                if i == j {
-                    continue;
-                }
-
-                let impl_id1 = &impls[i].id;
-                let impl_id2 = &impls[j].id;
-
-                let params1 = &impls[i].params;
-                let params2 = &impls[j].params;
-
-                if impl_id1
-                    .generalize(impl_id2, params1, params2, &mut subs)
-                    .is_none()
-                    || subs.is_disjoint(params1, params2)
-                {
-                    continue;
-                }
-
-                if p1.iter().zip_eq(p2).all(|(&p1, &p2)| {
-                    p1.generalize(p2, params1, params2, &mut subs).is_none()
-                        || !subs.is_disjoint(params1, params2)
-                }) {
-                    return None;
-                }
-            }
-        }
-
-        impls.pop();
         let impl_items = if self.id.is_inherent() {
             Some(self.items.as_ref().unwrap().generalize(
-                &other.items,
+                other.items.as_ref().unwrap(),
                 &self.params,
                 &other.params,
                 &subs,
@@ -790,32 +849,328 @@ impl ImplGroupBuilder {
             params,
             trait_bounds: group,
             items: impl_items,
+            subgroups: vec![],
         })
+    }
+
+    /// Indices of ipmls contained in this builder's nested subgroups.
+    fn subgroup_impls(&self) -> Vec<usize> {
+        let mut all = vec![];
+
+        for (sub_builder, sub_indices, _) in &self.subgroups {
+            all.extend(sub_indices);
+            all.extend(sub_builder.subgroup_impls());
+        }
+
+        all
     }
 }
 
 impl ImplGroups {
-    fn new(item_trait_: Option<ItemTrait>, impl_groups: Vec<ImplGroup>) -> Self {
-        if let Some(trait_) = &item_trait_ {
+    fn new(trait_: Option<ItemTrait>, impl_groups: Vec<ImplGroup>) -> Self {
+        if let Some(trait_) = &trait_ {
             for ImplGroup { impls, .. } in &impl_groups {
-                validate::validate_trait_impls(trait_, impls.iter().map(|(_, impl_)| impl_));
+                validate::validate_trait_impls(trait_, impls.iter().map(|(impl_, _)| impl_));
             }
         } else {
             for ImplGroup { impls, .. } in &impl_groups {
-                validate::validate_inherent_impls(impls.iter().map(|(_, impl_)| impl_));
+                validate::validate_inherent_impls(impls.iter().map(|(impl_, _)| impl_));
             }
         }
 
         Self {
-            item_trait_,
+            trait_,
             impl_groups,
         }
+    }
+}
+
+fn compute_inherent_args(
+    builder: &ImplGroupBuilder,
+    impl_indices: &[usize],
+    all_descs: &[ItemImplDesc],
+) -> Vec<Vec<syn::GenericArgument>> {
+    if !builder.id.is_inherent() || impl_indices.len() <= 1 && builder.subgroups.is_empty() {
+        return Vec::new();
+    }
+
+    let Some((&_, (rows, _))) = builder.trait_bounds.0.get_index(0) else {
+        return Vec::new();
+    };
+
+    let group_impls = impl_indices
+        .iter()
+        .map(|&idx| &all_descs[idx])
+        .collect::<Vec<_>>();
+
+    let nrows = rows.len().min(group_impls.len());
+    if nrows == 0 {
+        return Vec::new();
+    }
+
+    let payloads = builder
+        .trait_bounds
+        .0
+        .values()
+        .flat_map(|(_, bindings)| bindings.values())
+        .collect::<Vec<_>>();
+
+    let mut args = Vec::with_capacity(nrows);
+    for row in 0..nrows {
+        let impl_desc = group_impls[row];
+        let mut subs = Generalizations::default();
+
+        if builder
+            .id
+            .generalize(&impl_desc.id, &builder.params, &impl_desc.params, &mut subs)
+            .is_none()
+        {
+            continue;
+        }
+
+        for (generalized_payload, payloads_vec) in &payloads {
+            if let Some(payload) = &payloads_vec[row] {
+                let _ = generalized_payload
+                    .generalize(payload, &builder.params, &impl_desc.params, &mut subs)
+                    .unwrap();
+            }
+        }
+
+        args.push(subs.generic_args().map(|(_, arg)| arg).collect::<Vec<_>>());
+    }
+
+    args
+}
+
+fn instantiate_impl_group(
+    builder: ImplGroupBuilder,
+    impl_indices: Vec<usize>,
+    all_impls: &mut [Option<ItemImpl>],
+    all_descs: &[ItemImplDesc],
+) -> ImplGroup {
+    let args = compute_inherent_args(&builder, &impl_indices, all_descs);
+
+    let ImplGroupBuilder {
+        id,
+        lifetimes,
+        mut params,
+        trait_bounds,
+        items,
+        subgroups,
+    } = builder;
+
+    let subgroups = subgroups
+        .into_iter()
+        .map(|(mut sub_builder, indices, overlapping_bounds)| {
+            let common_types = find_common_types(&overlapping_bounds, &sub_builder.trait_bounds);
+            remove_trait_bounds(&overlapping_bounds, &mut sub_builder);
+
+            (
+                instantiate_impl_group(sub_builder, indices, all_impls, all_descs),
+                common_types,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let trait_bounds = trait_bounds.build(&id, &mut params);
+    let params = lifetimes
+        .into_iter()
+        .map(syn::GenericParam::Lifetime)
+        .chain(as_generics(&params))
+        .collect();
+
+    let impl_items = impl_indices
+        .iter()
+        .map(|&idx| all_impls[idx].take().unwrap())
+        .collect::<Vec<_>>();
+
+    let impls = if id.is_inherent() && (impl_items.len() > 1 || !subgroups.is_empty()) {
+        impl_items.into_iter().zip_eq(args).collect()
+    } else {
+        impl_items
+            .into_iter()
+            .map(|impl_| (impl_, Vec::new()))
+            .collect()
+    };
+
+    ImplGroup {
+        id,
+        params,
+        trait_bounds,
+        items,
+        impls,
+        subgroups,
+    }
+}
+
+fn build_disjoint_impl_group(
+    trait_: Option<&ItemTrait>,
+    mut impl_group: ImplGroup,
+    group_idx: usize,
+) -> (TokenStream2, Vec<ItemImpl>) {
+    let mut helper_traits = Vec::new();
+    let mut trait_impls = Vec::new();
+    let mut item_impls = Vec::new();
+    let mut subgroup_tokens = Vec::new();
+
+    if impl_group.impls.len() > 1 || !impl_group.subgroups.is_empty() {
+        let helper_trait = helper_trait::generate(trait_, group_idx, &impl_group);
+        helper_traits.push(helper_trait.clone());
+
+        if let Some(main_impl) = main_trait::generate_impl(trait_, group_idx, &impl_group) {
+            trait_impls.push(main_impl);
+        }
+
+        let mut dispatch_bindings_cnt: usize = impl_group
+            .trait_bounds
+            .0
+            .iter()
+            .map(|(_, bindings)| bindings.1.len())
+            .sum();
+
+        let mut subgroup_trait = helper_trait;
+        subgroup_trait.generics.params = subgroup_trait
+            .generics
+            .params
+            .into_iter()
+            .filter(|param| {
+                if let syn::GenericParam::Type(_) = param
+                    && dispatch_bindings_cnt > 0
+                {
+                    dispatch_bindings_cnt -= 1;
+                    return false;
+                }
+
+                true
+            })
+            .collect();
+
+        let subgroup_impls = core::mem::take(&mut impl_group.subgroups);
+        for (subgroup_idx, (mut subgroup, common_args)) in subgroup_impls.into_iter().enumerate() {
+            let subgroup_trait_ident = &subgroup_trait.ident;
+
+            let is_trait_inherent = subgroup.id.is_inherent();
+            if let Some(trait_) = &mut subgroup.id.trait_ {
+                trait_.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
+            } else {
+                let helper_trait_args = &subgroup.params;
+
+                subgroup.id.trait_ =
+                    Some(parse_quote! { #subgroup_trait_ident<#helper_trait_args> });
+
+                for (impl_, args) in &mut subgroup.impls {
+                    traitize_inherent_impl(args, impl_, &subgroup.id.self_ty);
+                }
+            }
+
+            let (tokens, mut subgroup_main_impls) =
+                build_disjoint_impl_group(Some(&subgroup_trait), subgroup, subgroup_idx);
+
+            subgroup_tokens.push(tokens);
+            subgroup_main_impls.iter_mut().for_each(|trait_impl| {
+                let trait_path = &mut trait_impl.trait_.as_mut().unwrap().1;
+                let last_seg = trait_path.segments.last_mut().unwrap();
+
+                prepend_args(&mut last_seg.arguments, &common_args);
+
+                if is_trait_inherent {
+                    match &mut last_seg.arguments {
+                        syn::PathArguments::None => {}
+                        syn::PathArguments::AngleBracketed(bracketed) => {
+                            let replace_at = bracketed.args.len() - common_args.len();
+                            let mut args =
+                                core::mem::take(&mut bracketed.args).into_iter().collect::<Vec<_>>();
+
+                            args.splice(
+                                replace_at..,
+                                common_args
+                                    .iter()
+                                    .cloned()
+                                    .map(syn::GenericArgument::Type),
+                            );
+
+                            bracketed.args = args.into_iter().collect();
+                        }
+                        syn::PathArguments::Parenthesized(_) => {
+                            unreachable!("Not a valid trait name")
+                        }
+                    }
+                }
+            });
+
+            subgroup_tokens.extend(
+                subgroup_main_impls
+                    .into_iter()
+                    .map(|trait_impl| quote!(#trait_impl)),
+            );
+        }
+
+        item_impls.extend(disjoint::generate(group_idx, impl_group));
+    } else if let Some((main_impl, _)) = impl_group.impls.pop() {
+        trait_impls.push(main_impl);
+    }
+
+    let tokens = quote! {
+        #( #helper_traits )*
+        #( #item_impls )*
+
+        #( #subgroup_tokens )*
+    };
+
+    (tokens, trait_impls)
+}
+
+fn prepend_args<'a>(
+    arguments: &mut syn::PathArguments,
+    types: impl IntoIterator<Item = &'a syn::Type>,
+) {
+    let types = types.into_iter();
+
+    match arguments {
+        syn::PathArguments::None => {
+            let bracketed = parse_quote! { <#( #types ),*> };
+            *arguments = syn::PathArguments::AngleBracketed(bracketed);
+        }
+        syn::PathArguments::AngleBracketed(bracketed) => {
+            bracketed.args = types
+                .map(|param| parse_quote!(#param))
+                .chain(core::mem::take(&mut bracketed.args))
+                .collect();
+        }
+        syn::PathArguments::Parenthesized(_) => unreachable!("Not a valid trait name"),
     }
 }
 
 impl ItemImplDescVisitor {
     fn find(item_impl: &ItemImpl) -> ItemImplDesc {
         let trait_ = item_impl.trait_.as_ref().map(|(_, trait_, _)| trait_);
+
+        let items = trait_.is_none().then(|| ImplItemsDesc {
+            fns: item_impl
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    syn::ImplItem::Fn(item) => Some((item.sig.ident.clone(), item.sig.clone())),
+                    _ => None,
+                })
+                .collect(),
+            assoc_types: item_impl
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    syn::ImplItem::Type(item) => Some(item.ident.clone()),
+                    _ => None,
+                })
+                .collect(),
+            assoc_consts: item_impl
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    syn::ImplItem::Const(item) => Some((item.ident.clone(), item.ty.clone())),
+                    _ => None,
+                })
+                .collect(),
+        });
 
         let mut visitor =
             Self {
@@ -854,38 +1209,10 @@ impl ItemImplDescVisitor {
                         }))
                         .collect(),
                     trait_bounds: IndexMap::new(),
-                    items: ImplItems {
-                        fns: item_impl
-                            .items
-                            .iter()
-                            .filter_map(|item| match item {
-                                syn::ImplItem::Fn(item) => {
-                                    Some((item.sig.ident.clone(), item.sig.clone()))
-                                }
-                                _ => None,
-                            })
-                            .collect(),
-                        assoc_types: item_impl
-                            .items
-                            .iter()
-                            .filter_map(|item| match item {
-                                syn::ImplItem::Type(item) => Some(item.ident.clone()),
-                                _ => None,
-                            })
-                            .collect(),
-                        assoc_consts: item_impl
-                            .items
-                            .iter()
-                            .filter_map(|item| match item {
-                                syn::ImplItem::Const(item) => {
-                                    Some((item.ident.clone(), item.ty.clone()))
-                                }
-                                _ => None,
-                            })
-                            .collect(),
-                    },
+                    items,
                 },
             };
+
         visitor.visit_generics(&item_impl.generics);
         visitor.impl_desc
     }
@@ -1126,88 +1453,40 @@ impl Visit<'_> for ItemImplDescVisitor {
 #[proc_macro]
 #[proc_macro_error]
 pub fn disjoint_impls(input: TokenStream) -> TokenStream {
-    let impls: ImplGroups = parse_macro_input!(input);
+    let ImplGroups {
+        trait_,
+        impl_groups,
+    } = parse_macro_input!(input);
 
-    let mut helper_traits = Vec::new();
-    let mut main_trait_impls = Vec::new();
-    let mut item_impls = Vec::new();
+    let mut trait_impls_tokens = Vec::new();
+    let groups = impl_groups
+        .into_iter()
+        .enumerate()
+        .map(|(idx, impl_group)| {
+            let (tokens, trait_impls) = build_disjoint_impl_group(trait_.as_ref(), impl_group, idx);
+            trait_impls_tokens.extend(trait_impls);
+            tokens
+        })
+        .collect::<Vec<_>>();
 
-    let main_trait = impls.item_trait_;
-    for (impl_group_idx, mut impl_group) in impls.impl_groups.into_iter().enumerate() {
-        if impl_group.impls.len() > 1 {
-            helper_traits.push(helper_trait::generate(
-                main_trait.as_ref(),
-                impl_group_idx,
-                &impl_group,
-            ));
+    let groups = quote! { #(#groups)* };
+    let trait_ = trait_.filter(|trait_| !trait_.attrs.iter().any(is_remote));
 
-            if let Some(main_trait_impl) =
-                main_trait::generate(main_trait.as_ref(), impl_group_idx, &impl_group)
-            {
-                main_trait_impls.push(main_trait_impl);
-            }
-
-            item_impls.extend(disjoint::generate(impl_group_idx, impl_group));
-        } else if let Some((_, main_trait_impl)) = impl_group.impls.pop() {
-            main_trait_impls.push(main_trait_impl);
-        }
-    }
-
-    let main_trait = main_trait.filter(|main_trait_| !main_trait_.attrs.iter().any(is_remote));
+    let trait_impls = trait_impls_tokens
+        .into_iter()
+        .map(|trait_impl| quote!(#trait_impl))
+        .collect::<Vec<_>>();
 
     quote! {
-        #main_trait
+        #trait_
 
         #[allow(clippy::needless_lifetimes)]
         const _: () = {
-            #( #helper_traits )*
-            #( #item_impls )*
-            #( #main_trait_impls )*
-
+            #groups
+            #( #trait_impls )*
         };
     }
     .into()
-}
-
-struct Dsu {
-    parent: Vec<usize>,
-}
-
-impl Dsu {
-    fn new(n: usize) -> Self {
-        Self {
-            parent: (0..n).collect(),
-        }
-    }
-
-    fn find(&mut self, x: usize) -> usize {
-        if self.parent[x] != x {
-            let root = self.find(self.parent[x]);
-            self.parent[x] = root;
-        }
-
-        self.parent[x]
-    }
-
-    fn union(&mut self, a: usize, b: usize) {
-        let ra = self.find(a);
-        let rb = self.find(b);
-
-        if ra != rb {
-            self.parent[rb] = ra;
-        }
-    }
-
-    fn groups(mut self) -> Vec<Vec<usize>> {
-        let mut map: IndexMap<_, Vec<_>> = IndexMap::new();
-
-        for i in 0..self.parent.len() {
-            let root = self.find(i);
-            map.entry(root).or_default().push(i);
-        }
-
-        map.into_values().collect()
-    }
 }
 
 impl Parse for ImplGroups {
@@ -1215,29 +1494,30 @@ impl Parse for ImplGroups {
         let main_trait = input.parse::<ItemTrait>().ok();
 
         let mut impls = Vec::new();
+        let mut descs = Vec::new();
+
         while let Ok(item) = input.parse::<ItemImpl>() {
             validate_impl_syntax(&item);
 
-            let item = normalize::normalize(item);
-            let param_bounds = ItemImplDescVisitor::find(&item);
-            impls.push((param_bounds, item));
+            let impl_ = normalize::normalize(item);
+            let desc = ItemImplDescVisitor::find(&impl_);
+
+            impls.push(impl_);
+            descs.push(desc);
         }
 
         let mut dsu = Dsu::new(impls.len());
         for i in 0..impls.len() {
             for j in (i + 1)..impls.len() {
-                let (desc_i, _) = &impls[i];
-                let (desc_j, _) = &impls[j];
                 let mut subs = Default::default();
 
-                if Generalize::generalize(
-                    &desc_i.id,
-                    &desc_j.id,
-                    &desc_i.params,
-                    &desc_j.params,
-                    &mut subs,
-                )
-                .is_some()
+                let desc_i = &descs[i];
+                let desc_j = &descs[j];
+
+                if desc_i
+                    .id
+                    .generalize(&desc_j.id, &desc_i.params, &desc_j.params, &mut subs)
+                    .is_some()
                     && !subs.is_disjoint(&desc_i.params, &desc_j.params)
                 {
                     dsu.union(i, j);
@@ -1245,108 +1525,21 @@ impl Parse for ImplGroups {
             }
         }
 
-        let impl_groups = dsu
+        let impl_group_builders = dsu
             .groups()
             .iter()
-            .flat_map(|subset| partition_impl_groups(subset, &impls))
-            .collect::<Vec<_>>();
-
-        let args = impl_groups
-            .iter()
-            .map(|(impl_group_builder, impl_group)| {
-                let impls = impl_group.iter().map(|&i| &impls[i]).collect::<Vec<_>>();
-
-                if impl_group_builder.id.is_inherent() && impl_group.len() > 1 {
-                    let nrows = impl_group_builder.trait_bounds.0[0].0.len();
-
-                    let payloads = impl_group_builder
-                        .trait_bounds
-                        .0
-                        .values()
-                        .flat_map(|(_, bindings)| bindings.values())
-                        .collect::<Vec<_>>();
-
-                    let mut args = vec![];
-                    for i in 0..nrows {
-                        let mut subs = Default::default();
-                        let (impl_desc, _) = &impls[i];
-
-                        if Generalize::generalize(
-                            &impl_group_builder.id,
-                            &impl_desc.id,
-                            &impl_group_builder.params,
-                            &impl_desc.params,
-                            &mut subs,
-                        )
-                        .is_none()
-                        {
-                            continue;
-                        }
-
-                        payloads.iter().for_each(|(generalized_payload, payloads)| {
-                            if let Some(payload) = &payloads[i] {
-                                let _ = generalized_payload
-                                    .generalize(
-                                        payload,
-                                        &impl_group_builder.params,
-                                        &impls[i].0.params,
-                                        &mut subs,
-                                    )
-                                    .unwrap();
-                            }
-                        });
-
-                        args.push(subs.generic_args().map(|(_, arg)| arg).collect::<Vec<_>>());
-                    }
-
-                    args
-                } else {
-                    Vec::new()
-                }
+            .flat_map(|subset| {
+                // TODO: Write better error message
+                partition_impl_groups(subset, &descs).expect_or_abort("Impls overlap")
             })
             .collect::<Vec<_>>();
 
-        let mut impls = impls
+        let mut impls = impls.into_iter().map(Some).collect::<Vec<_>>();
+
+        let impl_groups = impl_group_builders
             .into_iter()
-            .map(|(_, impl_)| Some(impl_))
-            .collect::<Vec<_>>();
-
-        let impl_groups = impl_groups
-            .into_iter()
-            .zip_eq(args)
-            .map(|((mut impl_group_builder, impl_group), args)| {
-                let impls = impl_group
-                    .iter()
-                    .map(|&i| impls[i].take().unwrap())
-                    .collect::<Vec<_>>();
-
-                let impl_group_id = impl_group_builder.id;
-                let impls = if impl_group_id.is_inherent() && impl_group.len() > 1 {
-                    args.into_iter().zip_eq(impls).collect()
-                } else {
-                    impls.into_iter().map(|impl_| (vec![], impl_)).collect()
-                };
-
-                let assoc_bindings = impl_group_builder
-                    .trait_bounds
-                    .build(&impl_group_id, &mut impl_group_builder.params);
-
-                let params = impl_group_builder
-                    .lifetimes
-                    .into_iter()
-                    .map(syn::GenericParam::Lifetime)
-                    .chain(as_generics(&impl_group_builder.params))
-                    .collect();
-
-                ImplGroup {
-                    id: impl_group_id,
-                    params,
-
-                    trait_bounds: assoc_bindings,
-                    items: impl_group_builder.items,
-
-                    impls,
-                }
+            .map(|(builder, impl_group)| {
+                instantiate_impl_group(builder, impl_group, &mut impls, &descs)
             })
             .collect();
 
@@ -1362,56 +1555,43 @@ impl Parse for ImplGroups {
 /// separating impls that are found not to overlap.
 fn partition_impl_groups(
     subset: &[usize],
-    item_impls: &[(ItemImplDesc, ItemImpl)],
-) -> Vec<(ImplGroupBuilder, Vec<usize>)> {
-    partition_impl_groups_rec(subset, item_impls, &mut Vec::new())
-        // FIXME: I don't think it does
-        .expect("At least one solution must always exist")
+    impls: &[ItemImplDesc],
+) -> Option<Vec<(ImplGroupBuilder, Vec<usize>)>> {
+    partition_impl_groups_rec(subset, impls, &mut Vec::new())
 }
 
 fn partition_impl_groups_rec(
     subset: &[usize],
-    item_impls: &[(ItemImplDesc, ItemImpl)],
+    impls: &[ItemImplDesc],
     impl_groups: &mut Vec<(ImplGroupBuilder, Vec<usize>)>,
 ) -> Option<Vec<(ImplGroupBuilder, Vec<usize>)>> {
-    if subset.is_empty() {
-        return Some(impl_groups.to_vec());
-    }
+    let Some((&curr_impl_idx, rest)) = subset.split_first() else {
+        return build_impl_groups(impls, impl_groups).collect();
+    };
 
-    let curr_impl_idx = subset[0];
     let mut min = None::<Vec<_>>;
+    let curr_impl = &impls[curr_impl_idx];
 
-    let curr_impl = &item_impls[curr_impl_idx];
     for impl_group_idx in 0..impl_groups.len() {
         let impl_group = &impl_groups[impl_group_idx];
 
-        let group_impls = impl_group
-            .1
-            .iter()
-            .map(|&i| (i, &item_impls[i].0))
-            .collect();
+        if let Some(intersection) = impl_group.0.intersection(curr_impl) {
+            let (builder, impl_group) = &mut impl_groups[impl_group_idx];
+            let prev_builder = core::mem::replace(builder, intersection);
+            impl_group.push(curr_impl_idx);
 
-        let intersections = impl_group
-            .0
-            .intersection(curr_impl_idx, &curr_impl.0, group_impls);
-
-        if let Some(intersection) = intersections {
-            let impl_group = &mut impl_groups[impl_group_idx];
-
-            let prev_assoc_bindings = core::mem::replace(&mut impl_group.0, intersection);
-            impl_group.1.push(curr_impl_idx);
-
-            let res = partition_impl_groups_rec(&subset[1..], item_impls, impl_groups);
-
-            match (res, &mut min) {
+            match (
+                partition_impl_groups_rec(rest, impls, impl_groups),
+                &mut min,
+            ) {
                 (Some(res), Some(min)) if res.len() < min.len() => *min = res,
                 (Some(res), None) => min = Some(res),
                 _ => {}
             }
 
-            // NOTE: Restore changes to the impl group set for the next iteration
-            let impl_group_to_restore = impl_groups.get_mut(impl_group_idx).unwrap();
-            impl_group_to_restore.0 = prev_assoc_bindings;
+            // NOTE: Restore impl group changes before the next iteration
+            let impl_group_to_restore = &mut impl_groups[impl_group_idx];
+            impl_group_to_restore.0 = prev_builder;
             impl_group_to_restore.1.pop();
 
             if min.as_ref().is_some_and(|m| m.len() == impl_groups.len()) {
@@ -1423,12 +1603,14 @@ fn partition_impl_groups_rec(
 
     // NOTE: Try create a new group if shorter solution is possible
     if min.as_ref().is_none_or(|m| m.len() > 1 + impl_groups.len())
-        && (curr_impl.0.id.is_inherent() || impl_groups.iter().all(|g| g.0.id != curr_impl.0.id))
+        && (curr_impl.id.is_inherent() || impl_groups.iter().all(|g| g.0.id != curr_impl.id))
     {
-        impl_groups.push((ImplGroupBuilder::new(&curr_impl.0), vec![curr_impl_idx]));
-        let res = partition_impl_groups_rec(&subset[1..], item_impls, impl_groups);
+        impl_groups.push((ImplGroupBuilder::new(curr_impl), vec![curr_impl_idx]));
 
-        match (res, &mut min) {
+        match (
+            partition_impl_groups_rec(rest, impls, impl_groups),
+            &mut min,
+        ) {
             (Some(res), Some(min)) if res.len() < min.len() => *min = res,
             (Some(res), None) => min = Some(res),
             _ => {}
@@ -1439,4 +1621,180 @@ fn partition_impl_groups_rec(
     }
 
     min
+}
+
+/// Separates the given impls into two groups: those that don't overlap and those that do.
+/// Overlapping impls are then recursively partitioned into smaller, non-overlapping groups.
+fn build_impl_groups(
+    impls: &[ItemImplDesc],
+    impl_groups: &[(ImplGroupBuilder, Vec<usize>)],
+) -> impl Iterator<Item = Option<(ImplGroupBuilder, Vec<usize>)>> {
+    impl_groups.iter().map(|(builder, impl_group)| {
+        let (non_overlapping, overlapping) = split_overlapping_impls(impls, builder, impl_group);
+        let non_overlapping_set = non_overlapping.iter().copied().collect::<IndexSet<_>>();
+
+        if non_overlapping_set.is_empty() {
+            return None;
+        }
+
+        let subgroups = partition_impl_groups(&overlapping, impls)?;
+        let mut non_overlapping_pos: Vec<_> = impl_group
+            .iter()
+            .enumerate()
+            .filter(|&(_, idx)| non_overlapping_set.contains(idx))
+            .map(|(pos, _)| pos)
+            .collect();
+        non_overlapping_pos.sort_unstable();
+
+        let mut builder = builder.clone();
+        let mut overlapping_trait_bounds = builder
+            .trait_bounds
+            .retain_impl_by_pos(&non_overlapping_pos);
+
+        builder.subgroups = subgroups
+            .into_iter()
+            .map(|(sub_builder, idxs)| {
+                let mut all_idxs = sub_builder.subgroup_impls();
+                all_idxs.extend(idxs.iter().copied());
+
+                let mut other_impl_pos: Vec<_> = overlapping
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, idx)| !all_idxs.contains(idx))
+                    .map(|(pos, _)| pos)
+                    .collect();
+                other_impl_pos.sort_unstable();
+
+                (
+                    sub_builder,
+                    idxs,
+                    overlapping_trait_bounds.retain_impl_by_pos(&other_impl_pos),
+                )
+            })
+            .collect();
+
+        Some((builder, non_overlapping))
+    })
+}
+
+fn split_overlapping_impls(
+    impls: &[ItemImplDesc],
+    builder: &ImplGroupBuilder,
+    group: &[usize],
+) -> (Vec<usize>, Vec<usize>) {
+    let mut dsu = Dsu::new(group.len());
+
+    for i in 0..group.len() {
+        for j in (i + 1)..group.len() {
+            let mut subs = Generalizations::default();
+
+            let desc_i = &impls[group[i]];
+            let desc_j = &impls[group[j]];
+
+            if desc_i
+                .id
+                .generalize(&desc_j.id, &desc_i.params, &desc_j.params, &mut subs)
+                .is_none()
+            {
+                continue;
+            }
+
+            if !subs.is_disjoint(&desc_i.params, &desc_j.params) {
+                let assoc_bindings = builder
+                    .trait_bounds
+                    .0
+                    .values()
+                    .map(|(_, bindings)| bindings);
+
+                let is_overlapping = assoc_bindings
+                    .flat_map(|assoc_bindings| assoc_bindings.values())
+                    .all(|(_, payloads)| {
+                        let (binding_i, binding_j) = (&payloads[i], &payloads[j]);
+
+                        if binding_i
+                            .generalize(binding_j, &desc_i.params, &desc_j.params, &mut subs)
+                            .is_none()
+                        {
+                            return false;
+                        }
+
+                        !subs.is_disjoint(&desc_i.params, &desc_j.params)
+                    });
+
+                if is_overlapping {
+                    dsu.union(i, j);
+                }
+            }
+        }
+    }
+
+    let mut non_overlapping = Vec::new();
+    let mut overlapping = Vec::new();
+
+    for component in dsu.groups() {
+        if component.len() > 1 {
+            overlapping.extend(component.into_iter().map(|pos| group[pos]));
+        } else {
+            non_overlapping.push(group[component[0]]);
+        }
+    }
+
+    (non_overlapping, overlapping)
+}
+
+fn remove_trait_bounds(trait_bounds: &TraitBoundsBuilder, impl_group: &mut ImplGroupBuilder) {
+    for (parent_orig, _) in trait_bounds.0.values() {
+        impl_group
+            .subgroups
+            .iter_mut()
+            .for_each(|(subgroup, _, common_bounds)| {
+                remove_trait_bounds(trait_bounds, subgroup);
+
+                common_bounds.0.retain(|_, target_orig| {
+                    target_orig
+                        .0
+                        .iter()
+                        .any(|target_bound| !parent_orig.contains(target_bound))
+                });
+            });
+
+        impl_group.trait_bounds.0.retain(|_, target_orig| {
+            target_orig
+                .0
+                .iter()
+                .any(|target_bound| !parent_orig.contains(target_bound))
+        });
+    }
+}
+
+fn find_common_types(
+    parent_trait_bounds: &TraitBoundsBuilder,
+    subgroup_trait_bounds: &TraitBoundsBuilder,
+) -> Vec<AssocBindingPayload> {
+    let mut result = Vec::new();
+
+    for (parent_bound_id, (parent_orig, parent_bindings)) in &parent_trait_bounds.0 {
+        if let Some((_, (_, sub_bindings))) =
+            subgroup_trait_bounds.0.iter().find(|(_, (sub_orig, _))| {
+                sub_orig
+                    .iter()
+                    .all(|sub_bound| parent_orig.contains(sub_bound))
+            })
+        {
+            result.extend(parent_bindings.iter().map(|(ident, _)| {
+                sub_bindings
+                    .get(ident)
+                    .map(|(payload, _)| payload.clone())
+                    .unwrap_or_else(|| assoc_binding_default(parent_bound_id, ident))
+            }));
+        }
+    }
+
+    result
+}
+
+fn assoc_binding_default(trait_ident: &TraitBoundIdent, ident: &syn::Ident) -> syn::Type {
+    let Bounded(bounded_ty) = &trait_ident.0;
+    let TraitBound(trait_bound) = &trait_ident.1;
+    parse_quote!(<#bounded_ty as #trait_bound>::#ident)
 }

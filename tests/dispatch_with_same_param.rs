@@ -60,17 +60,14 @@ const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
-
     impl<'a, '_lšč0, T: Dispatch<'a, (), Group = GroupC>> Kita0<GroupC>
     for &'_lšč0 T {
         const NAME: &'static str = "Blanket C";
     }
-
     impl<'a, '_lšč0, T: Dispatch<'a, (), Group = GroupB>> Kita0<GroupB>
     for &'_lšč0 T {
         const NAME: &'static str = "Blanket B";
     }
-
     impl<'b, 'k, '_lšč0, T: Dispatch<'b, (), Group = GroupA>> Kita0<GroupA>
     for &'_lšč0 T
     where
@@ -79,13 +76,13 @@ const _: () = {
         const NAME: &'static str = "Blanket A";
     }
 
-    impl<'_lšč0, '_lšč1, T: '_lšč0> Kita for &'_lšč0 T
+    impl<'_lšč0, '_lšč1, _TŠČ0: '_lšč0> Kita for &'_lšč0 _TŠČ0
     where
-        Self: Kita0<<T as Dispatch<'_lšč1, ()>>::Group>,
-        T: Dispatch<'_lšč1, ()>,
+        _TŠČ0: Dispatch<'_lšč1, ()>,
+        Self: Kita0<<_TŠČ0 as Dispatch<'_lšč1, ()>>::Group>,
     {
         const NAME: &'static str = <Self as Kita0<
-            <T as Dispatch<'_lšč1, ()>>::Group,
+            <_TŠČ0 as Dispatch<'_lšč1, ()>>::Group,
         >>::NAME;
     }
 };

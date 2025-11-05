@@ -45,6 +45,7 @@ const _: () = {
             "Blanket A"
         }
     }
+
     impl<T> Wrapper<T>
     where
         T: Dispatch<Group = GroupB>,

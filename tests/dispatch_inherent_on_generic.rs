@@ -64,28 +64,15 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    pub trait Wrapper0<_TŠČ4: ?Sized, T, U, V, _TŠČ3> {
-        fn kita(_a: (U,), _b: V) -> String;
+    pub trait Wrapper0<_TŠČ4: ?Sized, _TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3> {
+        fn kita(_a: (_TŠČ1,), _b: _TŠČ2) -> String;
     }
-
-    pub trait Wrapper1<
-        _TŠČ4: ?Sized,
-        _TŠČ5: ?Sized,
-        T,
-        U,
-        _TŠČ2,
-        const _CŠČ0: usize,
-    > {
-        fn kara(_a: (U,), b: _TŠČ2) -> String;
-    }
-
     impl<T: Dispatch<Group = (U, V)>, U, V> Wrapper0<(U, V), T, U, V, (U, V)>
     for Wrapper<T, (U,), V> {
         fn kita(_a: (U,), _b: V) -> String {
             "Generic Blanket A".to_owned()
         }
     }
-
     impl<
         T: Dispatch<Group = [(U, V); 1]>,
         U: ToString,
@@ -96,55 +83,63 @@ const _: () = {
         }
     }
 
+    pub trait Wrapper1<
+        _TŠČ4: ?Sized,
+        _TŠČ5: ?Sized,
+        _TŠČ0,
+        _TŠČ1,
+        _TŠČ2,
+        const _CŠČ0: usize,
+    > {
+        fn kara(_a: (_TŠČ1,), b: _TŠČ2) -> String;
+    }
     impl<
         T: Dispatch<Group = (U,)>,
         U: A<A = [Z; 1]>,
         Z: ToString,
-    > Wrapper1<(U,), [Z; 1], T, U, Z, 1> for Wrapper<T, u32, U> {
+    > Wrapper1<[Z; 1], (U,), T, U, Z, 1> for Wrapper<T, u32, U> {
         fn kara(_a: (U,), b: Z) -> String {
             b.to_string()
         }
     }
-
     impl<
         T: Dispatch<Group = (U,)>,
         U: A<A = [Z; 2]>,
         Z,
-    > Wrapper1<(U,), [Z; 2], T, U, Z, 2> for Wrapper<T, u32, U> {
+    > Wrapper1<[Z; 2], (U,), T, U, Z, 2> for Wrapper<T, u32, U> {
         fn kara(_a: (U,), _b: Z) -> String {
             "Generic Blanket B".to_owned()
         }
     }
 
-    impl<T, U, V, _TŠČ3> Wrapper<T, (U,), V>
+    impl<_TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3> Wrapper<_TŠČ0, (_TŠČ1,), _TŠČ2>
     where
-        Self: Wrapper0<_TŠČ3, T, U, V, _TŠČ3>,
-        T: Dispatch<Group = _TŠČ3>,
+        _TŠČ0: Dispatch<Group = _TŠČ3>,
+        Self: Wrapper0<_TŠČ3, _TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3>,
     {
-        fn kita(_a: (U,), _b: V) -> String {
-            <Self as Wrapper0<_TŠČ3, T, U, V, _TŠČ3>>::kita(_a, _b)
+        fn kita(_a: (_TŠČ1,), _b: _TŠČ2) -> String {
+            <Self as Wrapper0<_TŠČ3, _TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3>>::kita(_a, _b)
         }
     }
-
-    impl<T, U, _TŠČ2, const _CŠČ0: usize> Wrapper<T, u32, U>
+    impl<_TŠČ0, _TŠČ1, _TŠČ2, const _CŠČ0: usize> Wrapper<_TŠČ0, u32, _TŠČ1>
     where
+        _TŠČ1: A<A = [_TŠČ2; _CŠČ0]>,
+        _TŠČ0: Dispatch,
         Self: Wrapper1<
-            <T as Dispatch>::Group,
             [_TŠČ2; _CŠČ0],
-            T,
-            U,
+            <_TŠČ0 as Dispatch>::Group,
+            _TŠČ0,
+            _TŠČ1,
             _TŠČ2,
             _CŠČ0,
         >,
-        T: Dispatch,
-        U: A<A = [_TŠČ2; _CŠČ0]>,
     {
-        fn kara(_a: (U,), b: _TŠČ2) -> String {
+        fn kara(_a: (_TŠČ1,), b: _TŠČ2) -> String {
             <Self as Wrapper1<
-                <T as Dispatch>::Group,
                 [_TŠČ2; _CŠČ0],
-                T,
-                U,
+                <_TŠČ0 as Dispatch>::Group,
+                _TŠČ0,
+                _TŠČ1,
                 _TŠČ2,
                 _CŠČ0,
             >>::kara(_a, b)

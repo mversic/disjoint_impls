@@ -69,16 +69,22 @@ const _: () = {
     {
         const NAME: &'static str = "Blanket B";
     }
-    impl<U, T> Kita<U> for T
+
+    // TODO: Some of the bounds are repeated. Remove duplication
+
+    impl<_TŠČ0, _TŠČ1> Kita<_TŠČ0> for _TŠČ1
     where
-        U: From<u8> + From<bool>,
+        _TŠČ0: From<u8> + From<bool>,
         Self: Dispatch,
-        Self: Kita0<<T as Dispatch>::Group, U>,
-        T: Dispatch,
-        U: From<u8>,
-        U: From<bool>,
+        _TŠČ0: From<bool>,
+        _TŠČ0: From<u8>,
+        _TŠČ1: Dispatch,
+        Self: Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
-        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group, U>>::NAME;
+        const NAME: &'static str = <Self as Kita0<
+            <_TŠČ1 as Dispatch>::Group,
+            _TŠČ0,
+        >>::NAME;
     }
 };
 */

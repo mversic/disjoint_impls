@@ -14,7 +14,7 @@ mod stmt;
 mod token;
 mod ty;
 
-/// Collection of type or constant generic parameters
+/// Collection of type or const generic parameters
 pub type Params = IndexMap<syn::Ident, GenericParam>;
 
 type TypeGeneralization<'a> = (Sizedness, IndexSet<(&'a syn::Lifetime, &'a syn::Lifetime)>);
@@ -122,7 +122,7 @@ pub fn as_generics(params: &Params) -> impl Iterator<Item = syn::GenericParam> {
     type_params.chain(const_params)
 }
 
-impl ImplItems {
+impl ImplItemsDesc {
     pub fn generalize(
         &self,
         other: &Self,
@@ -168,7 +168,7 @@ impl ImplItems {
             return None;
         }
 
-        Some(ImplItems {
+        Some(ImplItemsDesc {
             fns: generalized_fns,
             assoc_types: generalized_assoc_types,
             assoc_consts: generalized_assoc_consts,

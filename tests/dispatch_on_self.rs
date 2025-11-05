@@ -4,11 +4,6 @@ pub trait Dispatch {
     type Group;
 }
 
-pub trait Dispatch2 {
-    type Group;
-    type Group2;
-}
-
 pub enum GroupA {}
 impl Dispatch for String {
     type Group = GroupA;
@@ -41,24 +36,22 @@ const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized> {
         const NAME: &'static str;
     }
-
     impl<T> Kita0<GroupA> for T
     where
         T: Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket A";
     }
-
     impl<T: Dispatch<Group = GroupB>> Kita0<GroupB> for T {
         const NAME: &'static str = "Blanket B";
     }
 
-    impl<T> Kita for T
+    impl<_TŠČ0> Kita for _TŠČ0
     where
-        Self: Kita0<<T as Dispatch>::Group>,
-        T: Dispatch,
+        _TŠČ0: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<<T as Dispatch>::Group>>::NAME;
+        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME;
     }
 };
 */
