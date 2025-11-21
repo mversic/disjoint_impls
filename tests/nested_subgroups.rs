@@ -137,7 +137,7 @@ const _: () = {
 */
 
 #[test]
-fn overlapping_nested_subgroups() {
+fn nested_subgroups() {
     assert_eq!("Blanket AAA", String::NAME);
     assert_eq!("Blanket AAB", Vec::<u32>::NAME);
     assert_eq!("Blanket AB*", Vec::<i32>::NAME);

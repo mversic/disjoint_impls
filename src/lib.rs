@@ -52,6 +52,7 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     visit::{Visit, visit_trait_bound},
+    visit_mut::VisitMut,
 };
 
 use crate::{
@@ -413,10 +414,10 @@ impl TraitBoundsBuilder {
     /// instead of: `impl<T, U> Kita for T where Self: Kita0<<U>, T: Dispatch<Group = U> {}`
     fn build(self, impl_group_id: &ImplGroupId, params: &mut Params) -> TraitBounds {
         struct ParamsPartitioner<'a>(IndexSet<&'a syn::Ident>, IndexSet<&'a syn::Ident>);
-        struct UnboundedParamFinder<'a>(IndexSet<&'a syn::Ident>, IndexSet<&'a syn::Ident>);
+        struct UnconstrainedParamFinder<'a>(IndexSet<&'a syn::Ident>, IndexSet<&'a syn::Ident>);
 
         struct RequiredPayloadDetector<'a> {
-            unbounded_params: &'a mut IndexSet<syn::Ident>,
+            unconstrained_params: &'a mut IndexSet<syn::Ident>,
             required_params: IndexSet<&'a syn::Ident>,
             all_params: &'a IndexSet<syn::Ident>,
 
@@ -435,7 +436,7 @@ impl TraitBoundsBuilder {
             }
         }
 
-        impl<'a> Visit<'a> for UnboundedParamFinder<'a> {
+        impl<'a> Visit<'a> for UnconstrainedParamFinder<'a> {
             fn visit_path(&mut self, node: &'a syn::Path) {
                 let first_seg = node.segments.first().unwrap();
 
@@ -452,7 +453,7 @@ impl TraitBoundsBuilder {
                 let first_seg = node.segments.first().unwrap();
 
                 let ident = &first_seg.ident;
-                if self.unbounded_params.swap_remove(ident) {
+                if self.unconstrained_params.swap_remove(ident) {
                     self.is_required = true;
                 } else if self.all_params.contains(ident) {
                     self.required_params.insert(ident);
@@ -472,37 +473,38 @@ impl TraitBoundsBuilder {
             params_partitioner.visit_path(trait_);
         }
 
-        let (maybe_redundant_params, mut unbounded_params) = if impl_group_id.is_inherent() {
-            let unbounded_params = params_partitioner.0.into_iter().cloned().collect();
+        let (maybe_redundant_params, mut unconstrained_params) = if impl_group_id.is_inherent() {
+            let unconstrained_params = params_partitioner.0.into_iter().cloned().collect();
 
-            (IndexSet::new(), unbounded_params)
+            (IndexSet::new(), unconstrained_params)
         } else {
-            let mut unbounded_param_finder =
-                UnboundedParamFinder(params_partitioner.0, IndexSet::new());
+            let mut unconstrained_param_finder =
+                UnconstrainedParamFinder(params_partitioner.0, IndexSet::new());
+
             for (bounded, trait_bound) in self.0.keys() {
-                unbounded_param_finder.visit_type(&bounded.0);
-                unbounded_param_finder.visit_trait_bound(&trait_bound.0);
+                unconstrained_param_finder.visit_type(&bounded.0);
+                unconstrained_param_finder.visit_trait_bound(&trait_bound.0);
             }
 
-            let maybe_redundant_params = unbounded_param_finder
+            let maybe_redundant_params = unconstrained_param_finder
                 .0
                 .into_iter()
                 .cloned()
                 .collect::<IndexSet<_>>();
-            let unbounded_params = unbounded_param_finder
+            let unconstrained_params = unconstrained_param_finder
                 .1
                 .into_iter()
                 .cloned()
                 .collect::<IndexSet<_>>();
 
-            (maybe_redundant_params, unbounded_params)
+            (maybe_redundant_params, unconstrained_params)
         };
 
         let mut required_params = params_partitioner
             .1
             .into_iter()
             .cloned()
-            .chain(unbounded_params.clone())
+            .chain(unconstrained_params.clone())
             .collect::<IndexSet<_>>();
 
         let trait_bounds = self
@@ -513,7 +515,7 @@ impl TraitBoundsBuilder {
                     .into_iter()
                     .map(|(ident, (payload, payloads))| {
                         let mut required_payload_detector = RequiredPayloadDetector {
-                            unbounded_params: &mut unbounded_params,
+                            unconstrained_params: &mut unconstrained_params,
                             all_params: &maybe_redundant_params,
                             required_params: IndexSet::new(),
 
@@ -1078,15 +1080,13 @@ fn build_disjoint_impl_group(
                         syn::PathArguments::None => {}
                         syn::PathArguments::AngleBracketed(bracketed) => {
                             let replace_at = bracketed.args.len() - common_args.len();
-                            let mut args =
-                                core::mem::take(&mut bracketed.args).into_iter().collect::<Vec<_>>();
+                            let mut args = core::mem::take(&mut bracketed.args)
+                                .into_iter()
+                                .collect::<Vec<_>>();
 
                             args.splice(
                                 replace_at..,
-                                common_args
-                                    .iter()
-                                    .cloned()
-                                    .map(syn::GenericArgument::Type),
+                                common_args.iter().cloned().map(syn::GenericArgument::Type),
                             );
 
                             bracketed.args = args.into_iter().collect();
@@ -1214,7 +1214,88 @@ impl ItemImplDescVisitor {
             };
 
         visitor.visit_generics(&item_impl.generics);
+        visitor.resolve_qself_types();
         visitor.impl_desc
+    }
+
+    fn resolve_qself_types(&mut self) {
+        let mut qself_resolver = QSelfResolver {
+            params: core::mem::take(&mut self.impl_desc.params),
+            trait_bounds: &mut self.impl_desc.trait_bounds,
+        };
+
+        for i in 0..qself_resolver.trait_bounds.len() {
+            let entry = qself_resolver.trait_bounds.shift_remove_index(i).unwrap();
+            let ((mut bounded, mut bounds), mut bindings) = entry;
+
+            qself_resolver.visit_type_mut(&mut bounded.0);
+            qself_resolver.visit_trait_bound_mut(&mut bounds.0);
+
+            bindings
+                .values_mut()
+                .for_each(|binding| qself_resolver.visit_type_mut(binding));
+
+            qself_resolver
+                .trait_bounds
+                .insert_before(i, (bounded, bounds), bindings);
+        }
+
+        self.impl_desc.params = qself_resolver.params;
+    }
+}
+
+struct QSelfResolver<'a> {
+    trait_bounds: &'a mut IndexMap<TraitBoundIdent, IndexMap<syn::Ident, AssocBindingPayload>>,
+    params: IndexMap<syn::Ident, GenericParam>,
+}
+
+impl VisitMut for QSelfResolver<'_> {
+    fn visit_type_path_mut(&mut self, node: &mut syn::TypePath) {
+        syn::visit_mut::visit_type_path_mut(self, node);
+
+        if let Some(syn::QSelf { ty, position, .. }) = &node.qself {
+            let trait_segments = node
+                .path
+                .segments
+                .iter()
+                .take(*position)
+                .cloned()
+                .collect::<Punctuated<_, Token![::]>>();
+
+            if trait_segments.is_empty() {
+                return;
+            }
+
+            let trait_bound = syn::TraitBound {
+                paren_token: None,
+                modifier: syn::TraitBoundModifier::None,
+                lifetimes: None,
+                path: syn::Path {
+                    leading_colon: node.path.leading_colon,
+                    segments: trait_segments,
+                },
+            };
+
+            let trait_bound_ident = ((**ty).clone().into(), trait_bound.into());
+            let assoc_ident = node.path.segments.last().unwrap().ident.clone();
+
+            let Some(bindings) = self.trait_bounds.get_mut(&trait_bound_ident) else {
+                return;
+            };
+
+            *node = if let Some(existing) = bindings.get(&assoc_ident) {
+                parse_quote!(#existing)
+            } else {
+                let param = GenericParam::Type(Sizedness::Unsized, IndexSet::new());
+                let param_ident = format_ident!("_TŠČ{}", self.params.len());
+
+                let param_ty: syn::Type = parse_quote!(#param_ident);
+                self.params.entry(param_ident).or_insert(param);
+                bindings.insert(assoc_ident, param_ty.clone());
+
+                parse_quote!(#param_ty)
+            };
+        }
     }
 }
 
@@ -1222,7 +1303,6 @@ impl Visit<'_> for ItemImplDescVisitor {
     fn visit_item_impl(&mut self, node: &ItemImpl) {
         self.visit_generics(&node.generics);
     }
-
     fn visit_constraint(&mut self, node: &syn::Constraint) {
         let curr_bounded_ty = self.curr_bounded_ty.take().unwrap();
         let curr_trait_bound = self.curr_trait_bound.take().unwrap();
@@ -1273,7 +1353,6 @@ impl Visit<'_> for ItemImplDescVisitor {
 
     fn visit_assoc_type(&mut self, node: &syn::AssocType) {
         let trait_bound_ident = (
-            // FIXME: clone seems unnecessary?
             self.curr_bounded_ty.clone().unwrap(),
             self.curr_trait_bound.clone().unwrap(),
         );

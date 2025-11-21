@@ -133,7 +133,7 @@ const _: () = {
 */
 
 #[test]
-fn overlapping_nested_subgroups() {
+fn inherent_nested_subgroups() {
     assert_eq!("Blanket AAA", Wrapper::<String>::NAME);
     assert_eq!("Blanket AAB", Wrapper::<Vec::<u32>>::NAME);
     assert_eq!("Blanket AB*", Wrapper::<Vec::<i32>>::NAME);

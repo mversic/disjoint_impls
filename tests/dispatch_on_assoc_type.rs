@@ -74,42 +74,44 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized> {
+    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
         const NAME: &'static str;
     }
-    impl<T> Kita0<GroupA> for T
+    impl<T> Kita0<<T as Dispatch>::Group, GroupA> for T
     where
         T: Dispatch,
         <T as Dispatch>::Group: Dispatch<Group = GroupA>,
     {
         const NAME: &'static str = "Blanket A";
     }
-    impl<T: Dispatch> Kita0<GroupB> for T
+    impl<T: Dispatch> Kita0<<T as Dispatch>::Group, GroupB> for T
     where
         <T as Dispatch>::Group: Dispatch<Group = GroupB>,
     {
         const NAME: &'static str = "Blanket B";
     }
-    impl<T: Dispatch> Kita0<GroupC> for T
+    impl<T: Dispatch> Kita0<<T as Dispatch>::Group, GroupC> for T
     where
         <T as Dispatch>::Group: Dispatch<Group = GroupC>,
     {
         const NAME: &'static str = "Blanket C";
     }
-    impl<T: Dispatch<Group: Dispatch<Group = GroupD>>> Kita0<GroupD> for T {
+    impl<
+        T: Dispatch<Group = _TŠČ0>,
+        _TŠČ0: Dispatch<Group = GroupD> + ?Sized,
+    > Kita0<_TŠČ0, GroupD> for T {
         const NAME: &'static str = "Blanket D";
     }
 
-    // TODO: The order of predicates is not optimal. Reorder them
-
-    impl<_TŠČ0> Kita for _TŠČ0
+    impl<_TŠČ0, _TŠČ1: ?Sized> Kita for _TŠČ0
     where
-        <_TŠČ0 as Dispatch>::Group: Dispatch,
-        _TŠČ0: Dispatch,
-        Self: Kita0<<<_TŠČ0 as Dispatch>::Group as Dispatch>::Group>,
+        _TŠČ0: Dispatch<Group = _TŠČ1>,
+        _TŠČ1: Dispatch,
+        Self: Kita0<_TŠČ1, <_TŠČ1 as Dispatch>::Group>,
     {
         const NAME: &'static str = <Self as Kita0<
-            <<_TŠČ0 as Dispatch>::Group as Dispatch>::Group,
+            _TŠČ1,
+            <_TŠČ1 as Dispatch>::Group,
         >>::NAME;
     }
 };

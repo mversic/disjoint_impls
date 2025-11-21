@@ -10,16 +10,38 @@ pub fn generate(
         }
     }
 
+    let ty_params = impl_group
+        .impls
+        .iter()
+        .map(|(impl_, _)| {
+            impl_
+                .generics
+                .type_params()
+                .map(|param| param.ident.clone())
+                .collect::<IndexSet<_>>()
+        })
+        .collect::<Vec<_>>();
+
     let mut impl_assoc_bindings = impl_group
         .trait_bounds
         .0
         .values()
         .flat_map(|(orig_trait_bound, assoc_bindings)| {
-            assoc_bindings.iter().map(move |(ident, (_, payloads))| {
-                payloads.iter().enumerate().map(move |(i, orig_payload)| {
-                    orig_payload.as_ref().map_or_else(
-                        || assoc_binding_default(&orig_trait_bound[i], ident),
-                        |p| p.clone(),
+            assoc_bindings.iter().map(|(assoc_ident, (_, payloads))| {
+                payloads.iter().enumerate().map(|(i, payload)| {
+                    payload.as_ref().map_or_else(
+                        || assoc_binding_default(&orig_trait_bound[i], assoc_ident),
+                        |payload| {
+                            if let syn::Type::Path(syn::TypePath { path, .. }) = payload
+                                && let Some(ident) = path.get_ident()
+                                && ident.to_string().starts_with("_TŠČ")
+                                && !ty_params[i].contains(ident)
+                            {
+                                return assoc_binding_default(&orig_trait_bound[i], assoc_ident);
+                            }
+
+                            payload.clone()
+                        },
                     )
                 })
             })
