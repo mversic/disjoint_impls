@@ -250,21 +250,27 @@ impl Generalize for syn::TypeReference {
         if self.mutability != other.mutability {
             return None;
         }
-        let self_lifetime = self.lifetime.as_ref().unwrap();
-        let other_lifetime = other.lifetime.as_ref().unwrap();
+        let lifetime =
+            self.lifetime
+                .generalize(&other.lifetime, params1, params2, substitutions)?;
 
-        let lifetime = self_lifetime.generalize(other_lifetime, params1, params2, substitutions)?;
+        if lifetime.is_some() {
+            substitutions.curr_ref_lifetime.push((
+                self.lifetime.as_ref().unwrap(),
+                other.lifetime.as_ref().unwrap(),
+            ));
+        }
 
-        substitutions
-            .curr_ref_lifetime
-            .push((self_lifetime, other_lifetime));
         let elem = self
             .elem
             .generalize(&other.elem, params1, params2, substitutions)?;
-        substitutions.curr_ref_lifetime.pop();
+
+        if lifetime.is_some() {
+            substitutions.curr_ref_lifetime.pop();
+        }
 
         Some(Self {
-            lifetime: Some(lifetime),
+            lifetime,
             elem,
             ..self.clone()
         })
