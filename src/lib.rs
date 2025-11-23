@@ -1597,15 +1597,17 @@ impl Parse for ImplGroups {
                     .id
                     .generalize(&desc_j.id, &desc_i.params, &desc_j.params, &mut subs)
                     .is_some()
-                    && !subs.is_disjoint(&desc_i.params, &desc_j.params)
+                    && subs
+                        .is_disjoint(&desc_i.params, &desc_j.params)
+                        .is_none_or(|disjoint| !disjoint)
                 {
                     dsu.union(i, j);
                 }
             }
         }
 
-        let impl_group_builders = dsu
-            .groups()
+        let groups = dsu.groups();
+        let impl_group_builders = groups
             .iter()
             .flat_map(|subset| {
                 // TODO: Write better error message
@@ -1712,45 +1714,53 @@ fn build_impl_groups(
         let (non_overlapping, overlapping) = split_overlapping_impls(impls, builder, impl_group);
         let non_overlapping_set = non_overlapping.iter().copied().collect::<IndexSet<_>>();
 
+        let mut builder = builder.clone();
         if non_overlapping_set.is_empty() {
             return None;
         }
 
-        let subgroups = partition_impl_groups(&overlapping, impls)?;
-        let mut non_overlapping_pos: Vec<_> = impl_group
-            .iter()
-            .enumerate()
-            .filter(|&(_, idx)| non_overlapping_set.contains(idx))
-            .map(|(pos, _)| pos)
-            .collect();
-        non_overlapping_pos.sort_unstable();
+        if !overlapping.is_empty() {
+            let subgroups = partition_impl_groups(&overlapping, impls)?;
 
-        let mut builder = builder.clone();
-        let mut overlapping_trait_bounds = builder
-            .trait_bounds
-            .retain_impl_by_pos(&non_overlapping_pos);
+            // TODO: Restore this after fixing bug
+            //subgroups.iter().for_each(|(sub_builder, _)| {
+            //    assert!(sub_builder.trait_bounds.0.len() > builder.trait_bounds.0.len())
+            //});
 
-        builder.subgroups = subgroups
-            .into_iter()
-            .map(|(sub_builder, idxs)| {
-                let mut all_idxs = sub_builder.subgroup_impls();
-                all_idxs.extend(idxs.iter().copied());
+            let mut non_overlapping_pos: Vec<_> = impl_group
+                .iter()
+                .enumerate()
+                .filter(|&(_, idx)| non_overlapping_set.contains(idx))
+                .map(|(pos, _)| pos)
+                .collect();
+            non_overlapping_pos.sort_unstable();
 
-                let mut other_impl_pos: Vec<_> = overlapping
-                    .iter()
-                    .enumerate()
-                    .filter(|&(_, idx)| !all_idxs.contains(idx))
-                    .map(|(pos, _)| pos)
-                    .collect();
-                other_impl_pos.sort_unstable();
+            let mut overlapping_trait_bounds = builder
+                .trait_bounds
+                .retain_impl_by_pos(&non_overlapping_pos);
 
-                (
-                    sub_builder,
-                    idxs,
-                    overlapping_trait_bounds.retain_impl_by_pos(&other_impl_pos),
-                )
-            })
-            .collect();
+            builder.subgroups = subgroups
+                .into_iter()
+                .map(|(sub_builder, idxs)| {
+                    let mut all_idxs = sub_builder.subgroup_impls();
+                    all_idxs.extend(idxs.iter().copied());
+
+                    let mut other_impl_pos: Vec<_> = overlapping
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, idx)| !all_idxs.contains(idx))
+                        .map(|(pos, _)| pos)
+                        .collect();
+                    other_impl_pos.sort_unstable();
+
+                    (
+                        sub_builder,
+                        idxs,
+                        overlapping_trait_bounds.retain_impl_by_pos(&other_impl_pos),
+                    )
+                })
+                .collect();
+        }
 
         Some((builder, non_overlapping))
     })
@@ -1778,7 +1788,10 @@ fn split_overlapping_impls(
                 continue;
             }
 
-            if !subs.is_disjoint(&desc_i.params, &desc_j.params) {
+            if subs
+                .is_disjoint(&desc_i.params, &desc_j.params)
+                .is_none_or(|disjoint| !disjoint)
+            {
                 let assoc_bindings = builder
                     .trait_bounds
                     .0
@@ -1797,7 +1810,7 @@ fn split_overlapping_impls(
                             return false;
                         }
 
-                        !subs.is_disjoint(&desc_i.params, &desc_j.params)
+                        subs.is_disjoint(&desc_i.params, &desc_j.params) == Some(false)
                     });
 
                 if is_overlapping {

@@ -1,7 +1,7 @@
 use proc_macro2::Span;
 use quote::ToTokens;
 use syn::punctuated::Punctuated;
-use syn::visit::{self, Visit};
+use syn::visit::Visit;
 
 use super::*;
 
@@ -684,40 +684,56 @@ impl<'a> Generalizations<'a> {
         (lifetimes, type_params.chain(const_params).collect())
     }
 
-    pub fn is_disjoint(&self, params1: &Params, params2: &Params) -> bool {
-        fn is_param_type(ty: &syn::Type, params: &Params) -> Option<bool> {
+    /// Returns `Some(true)` if types are disjoint, `Some(false)` if they are not,
+    /// and `None` if one type is a parameter (i.e. overlap cannot be determined)
+    pub fn is_disjoint(&self, params1: &Params, params2: &Params) -> Option<bool> {
+        fn is_fundamental_type(ty: &syn::Type, params: &Params) -> Option<bool> {
             if let syn::Type::Path(syn::TypePath { path, .. }) = ty
                 && let Some(ident) = path.get_ident()
                 && params.contains_key(ident)
             {
-                return Some(true);
+                return None;
             }
 
             struct ParamTypeVisitor<'a> {
-                contains_param: bool,
+                is_fundamental: bool,
                 params: &'a Params,
             }
 
-            impl<'a, 'ast> Visit<'ast> for ParamTypeVisitor<'a> {
-                fn visit_type_path(&mut self, type_path: &'ast syn::TypePath) {
-                    if let Some(ident) = type_path.path.get_ident()
+            impl Visit<'_> for ParamTypeVisitor<'_> {
+                fn visit_type(&mut self, node: &syn::Type) {
+                    match node {
+                        syn::Type::Reference(syn::TypeReference { elem, .. }) => {
+                            self.visit_type(elem);
+                        }
+                        syn::Type::Path(ty) => {
+                            self.visit_type_path(ty);
+                        }
+                        _ => {}
+                    }
+                }
+
+                fn visit_type_path(&mut self, node: &syn::TypePath) {
+                    let last_seg = node.path.segments.last().unwrap();
+
+                    if let Some(ident) = node.path.get_ident()
                         && self.params.contains_key(ident)
                     {
-                        self.contains_param = true;
-                    } else {
-                        visit::visit_type_path(self, type_path);
+                        self.is_fundamental = true;
+                    } else if node.qself.is_none() && last_seg.ident == "Box" {
+                        syn::visit::visit_type_path(self, node);
                     }
                 }
             }
 
             let mut visitor = ParamTypeVisitor {
-                contains_param: false,
+                is_fundamental: false,
                 params,
             };
 
             visitor.visit_type(ty);
-            if visitor.contains_param {
-                return None;
+            if visitor.is_fundamental {
+                return Some(true);
             }
 
             Some(false)
@@ -742,45 +758,59 @@ impl<'a> Generalizations<'a> {
             }
         }
 
-        let mut type_by_src: IndexMap<_, Vec<_>> = IndexMap::new();
-        let mut type_by_dst: IndexMap<_, Vec<_>> = IndexMap::new();
-        for &(src, dst) in self.type_generalizations.keys() {
-            let src_is_param = is_param_type(src, params1);
-            let dst_is_param = is_param_type(dst, params2);
-
-            if src != dst
-                && ((src_is_param == Some(false) || dst_is_param == Some(false))
-                    || src_is_param.is_none() && dst_is_param.is_none())
-            {
-                return true;
-            }
-
-            type_by_src.entry(src).or_default().push(dst_is_param);
-            type_by_dst.entry(dst).or_default().push(src_is_param);
-        }
-
-        for dsts in type_by_src.values() {
-            if dsts.iter().filter(|&&state| state != Some(true)).count() >= 2 {
-                return true;
-            }
-        }
-
-        for srcs in type_by_dst.values() {
-            if srcs.iter().filter(|&&state| state != Some(true)).count() >= 2 {
-                return true;
-            }
-        }
-
         for &(src, dst) in self.expr_generalizations.keys() {
             let src_is_param = is_param_expr(src, params1);
             let dst_is_param = is_param_expr(dst, params2);
 
             if src != dst && !src_is_param && !dst_is_param {
-                return true;
+                return Some(true);
             }
         }
 
-        false
+        let mut type_by_src: IndexMap<_, Vec<_>> = IndexMap::new();
+        let mut type_by_dst: IndexMap<_, Vec<_>> = IndexMap::new();
+        for &(src, dst) in self.type_generalizations.keys() {
+            let src_is_fundamental = is_fundamental_type(src, params1);
+            let dst_is_fundamental = is_fundamental_type(dst, params2);
+
+            if src != dst && src_is_fundamental.is_some() && dst_is_fundamental.is_some() {
+                return Some(true);
+            }
+
+            if src_is_fundamental.is_none() {
+                type_by_src.entry(src).or_default().push(dst_is_fundamental);
+            }
+            if dst_is_fundamental.is_none() {
+                type_by_dst.entry(dst).or_default().push(src_is_fundamental);
+            }
+        }
+
+        let mut was_soft_overlap = false;
+        for srcs in type_by_dst.values() {
+            let non_param_overlap = srcs.iter().filter(|&&state| state.is_some()).count();
+
+            if non_param_overlap >= 2 {
+                return Some(true);
+            }
+
+            was_soft_overlap |= non_param_overlap > 0;
+        }
+
+        for dsts in type_by_src.values() {
+            let non_param_overlap = dsts.iter().filter(|&&state| state.is_some()).count();
+
+            if non_param_overlap >= 2 {
+                return Some(true);
+            }
+
+            was_soft_overlap |= non_param_overlap > 0;
+        }
+
+        if was_soft_overlap {
+            return None;
+        }
+
+        Some(false)
     }
 }
 
