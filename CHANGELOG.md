@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-11-24
+### Added
+- support constraints in generic arguments
+- dispatch overlapping nested subgroups
+
+### Fixed
+- use fundametal types to determine type disjointness
+- generalize elided lifetimes on function arguments
+
 ## [1.2.3] - 2025-11-05
 ### Fixed
 - dispatch on all possible trait combinations

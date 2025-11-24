@@ -36,4 +36,3 @@ fn inherent_with_receiver() {
     assert_eq!("Blanket A", Wrapper("foo").kita());
     assert_eq!("Blanket B", Wrapper(42).kita());
 }
-

@@ -167,9 +167,8 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
             .bounds
             .into_values()
             .enumerate()
-            .map::<syn::GenericParam, _>(|(idx, mut bounds)| {
+            .map::<syn::GenericParam, _>(|(idx, bounds)| {
                 let ty = format_ident!("_TŠČ{}", idx);
-                bounds.push(parse_quote!(?Sized));
                 parse_quote! { #ty: #bounds }
             }),
     );
@@ -211,8 +210,8 @@ mod tests {
         let expected: syn::ItemImpl = parse_quote! {
             impl<
                 T: Dispatch<Group = _TŠČ0>,
-                _TŠČ0: Dispatch<Group = _TŠČ1> + ?Sized,
-                _TŠČ1: Dispatch<Group = GroupD> + ?Sized
+                _TŠČ0: Dispatch<Group = _TŠČ1>,
+                _TŠČ1: Dispatch<Group = GroupD>
             > Kita for T {}
         };
 
