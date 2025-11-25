@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2025-11-25
+### Fixed
+- forbid non-qualified associated types
+
 ## [1.3.0] - 2025-11-24
 ### Added
 - support constraints in generic arguments
