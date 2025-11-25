@@ -20,8 +20,9 @@ disjoint_impls! {
         const NAME: &'static str;
     }
 
-    impl<T: Dispatch> Kita2 for T
+    impl<T> Kita2 for T
     where
+        T: Dispatch,
         <T>::Group: Dispatch,
     {
         const NAME: &'static str = "Blanket A";

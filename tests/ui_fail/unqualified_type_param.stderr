@@ -5,7 +5,7 @@ error: Ambiguous associated type. Qualify with a trait to disambiguate (e.g. < T
    |         ^^^^^^^^
 
 error: Ambiguous associated type. Qualify with a trait to disambiguate (e.g. < T as Trait > :: Group)
-  --> tests/ui_fail/unqualified_type_param.rs:25:9
+  --> tests/ui_fail/unqualified_type_param.rs:26:9
    |
-25 |         <T>::Group: Dispatch,
+26 |         <T>::Group: Dispatch,
    |         ^^^^^^^^^^
