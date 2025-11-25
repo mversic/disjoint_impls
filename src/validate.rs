@@ -10,21 +10,31 @@ impl<'a> Validator<'a> {
 
 impl Visit<'_> for Validator<'_> {
     fn visit_type_path(&mut self, node: &syn::TypePath) {
-        if let syn::TypePath { qself: None, path } = node {
-            let mut segments = path.segments.iter();
-
-            let ident = &segments.next().unwrap().ident;
-            if self.0.contains(&ident) && path.segments.len() > 1 {
-                let abort_msg = format!(
-                    "Ambiguous associated type. Qualify with a trait to disambiguate (e.g. {})",
-                    quote::quote!(<#ident as Trait>#(::#segments)*)
-                );
-
-                abort!(node.path, abort_msg);
-            }
-        }
-
+        let mut segments = node.path.segments.iter();
         syn::visit::visit_type_path(self, node);
+
+        let first = match &node.qself {
+            None if node.path.segments.len() > 1 => {
+                let first = &segments.next().unwrap().ident;
+
+                if !self.0.contains(&first) {
+                    return;
+                }
+
+                parse_quote!(#first)
+            }
+            Some(syn::QSelf { ty, position, .. }) if *position == 0 => (*ty).clone(),
+            _ => {
+                return;
+            }
+        };
+
+        let abort_msg = format!(
+            "Ambiguous associated type. Qualify with a trait to disambiguate (e.g. {})",
+            quote::quote!(<#first as Trait>#(::#segments)*)
+        );
+
+        abort!(node, abort_msg);
     }
 
     fn visit_type_impl_trait(&mut self, node: &syn::TypeImplTrait) {

@@ -1,5 +1,11 @@
 error: Ambiguous associated type. Qualify with a trait to disambiguate (e.g. < T as Trait > :: Group)
-  --> tests/ui_fail/unqualified_type_param.rs:30:9
+  --> tests/ui_fail/unqualified_type_param.rs:12:9
    |
-30 |         T::Group: Dispatch<Group = GroupA>,
+12 |         T::Group: Dispatch,
    |         ^^^^^^^^
+
+error: Ambiguous associated type. Qualify with a trait to disambiguate (e.g. < T as Trait > :: Group)
+  --> tests/ui_fail/unqualified_type_param.rs:25:9
+   |
+25 |         <T>::Group: Dispatch,
+   |         ^^^^^^^^^^

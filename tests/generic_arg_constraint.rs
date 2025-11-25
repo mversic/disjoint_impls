@@ -19,6 +19,8 @@ disjoint_impls! {
         const NAME: &str;
     }
 
+    // FIXME: ?Sized should be inferred. Rust doesn't allow it
+    // here, but the disjoint_impls! macro rewrites the impl
     impl<R: Dispatch<Group: Bound + ?Sized>> Kita for Box<R> {
         const NAME: &str = "Blanket A";
     }
