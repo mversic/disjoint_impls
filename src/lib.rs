@@ -854,18 +854,6 @@ impl ImplGroupBuilder {
             subgroups: vec![],
         })
     }
-
-    /// Indices of ipmls contained in this builder's nested subgroups.
-    fn subgroup_impls(&self) -> Vec<usize> {
-        let mut all = vec![];
-
-        for (sub_builder, sub_indices, _) in &self.subgroups {
-            all.extend(sub_indices);
-            all.extend(sub_builder.subgroup_impls());
-        }
-
-        all
-    }
 }
 
 impl ImplGroups {
@@ -1054,6 +1042,10 @@ fn build_disjoint_impl_group(
             let is_trait_inherent = subgroup.id.is_inherent();
             if let Some(trait_) = &mut subgroup.id.trait_ {
                 trait_.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
+
+                subgroup.impls.iter_mut().for_each(|(impl_, _)| {
+                    impl_.trait_ = Some((None, trait_.clone(), Default::default()));
+                })
             } else {
                 let helper_trait_args = &subgroup.params;
 
@@ -1720,12 +1712,17 @@ fn build_impl_groups(
         }
 
         if !overlapping.is_empty() {
-            let subgroups = partition_impl_groups(&overlapping, impls)?;
+            let mut subgroups = vec![];
 
-            // TODO: Restore this after fixing bug
-            //subgroups.iter().for_each(|(sub_builder, _)| {
-            //    assert!(sub_builder.trait_bounds.0.len() > builder.trait_bounds.0.len())
-            //});
+            for overlapping in &overlapping {
+                subgroups.extend(partition_impl_groups(overlapping, impls)?);
+            }
+
+            if subgroups.iter().any(|(sub_builder, _)| {
+                sub_builder.trait_bounds.0.len() <= builder.trait_bounds.0.len()
+            }) {
+                return None;
+            }
 
             let mut non_overlapping_pos: Vec<_> = impl_group
                 .iter()
@@ -1735,29 +1732,16 @@ fn build_impl_groups(
                 .collect();
             non_overlapping_pos.sort_unstable();
 
-            let mut overlapping_trait_bounds = builder
+            let overlapping_trait_bounds = builder
                 .trait_bounds
                 .retain_impl_by_pos(&non_overlapping_pos);
 
             builder.subgroups = subgroups
                 .into_iter()
                 .map(|(sub_builder, idxs)| {
-                    let mut all_idxs = sub_builder.subgroup_impls();
-                    all_idxs.extend(idxs.iter().copied());
-
-                    let mut other_impl_pos: Vec<_> = overlapping
-                        .iter()
-                        .enumerate()
-                        .filter(|&(_, idx)| !all_idxs.contains(idx))
-                        .map(|(pos, _)| pos)
-                        .collect();
-                    other_impl_pos.sort_unstable();
-
-                    (
-                        sub_builder,
-                        idxs,
-                        overlapping_trait_bounds.retain_impl_by_pos(&other_impl_pos),
-                    )
+                    // FIXME: It's not necessary to clone trait bounds. Trait bounds should be
+                    // partitioned to extract impls rows pertaining to a particular subgroup
+                    (sub_builder, idxs, overlapping_trait_bounds.clone())
                 })
                 .collect();
         }
@@ -1770,7 +1754,7 @@ fn split_overlapping_impls(
     impls: &[ItemImplDesc],
     builder: &ImplGroupBuilder,
     group: &[usize],
-) -> (Vec<usize>, Vec<usize>) {
+) -> (Vec<usize>, Vec<Vec<usize>>) {
     let mut dsu = Dsu::new(group.len());
 
     for i in 0..group.len() {
@@ -1825,7 +1809,7 @@ fn split_overlapping_impls(
 
     for component in dsu.groups() {
         if component.len() > 1 {
-            overlapping.extend(component.into_iter().map(|pos| group[pos]));
+            overlapping.push(component.into_iter().map(|pos| group[pos]).collect());
         } else {
             non_overlapping.push(group[component[0]]);
         }

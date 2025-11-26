@@ -8,16 +8,6 @@ pub enum GroupA {}
 pub enum GroupB {}
 pub enum GroupC {}
 
-impl Dispatch for String {
-    type Group = GroupA;
-}
-impl Dispatch for i32 {
-    type Group = GroupB;
-}
-impl Dispatch for u32 {
-    type Group = GroupC;
-}
-
 disjoint_impls! {
     pub trait Kita {
         const NAME: &'static str;
