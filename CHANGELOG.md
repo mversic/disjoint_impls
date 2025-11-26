@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2025-11-26
+### Fixed
+- separate disjoint subgroups eagerly
+
 ## [1.3.1] - 2025-11-25
 ### Fixed
 - forbid non-qualified associated types
