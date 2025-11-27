@@ -1,0 +1,13 @@
+error[E0601]: `main` function not found in crate `$CRATE`
+  --> tests/ui_fail/const_expr_overlap.rs:17:2
+   |
+17 | }
+   |  ^ consider adding a `main` function to `$DIR/tests/ui_fail/const_expr_overlap.rs`
+
+error[E0119]: conflicting implementations of trait `Kita0<[u8; 4]>`
+  --> tests/ui_fail/const_expr_overlap.rs:16:5
+   |
+15 |     impl<T: Dispatch<Group = [u8; 2 + 2]>> Kita for T {}
+   |     ------------------------------------------------- first implementation here
+16 |     impl<T: Dispatch<Group = [u8; 4]>> Kita for T {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation
