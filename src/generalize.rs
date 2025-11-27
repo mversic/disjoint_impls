@@ -684,19 +684,12 @@ impl<'a> Generalizations<'a> {
         (lifetimes, type_params.chain(const_params).collect())
     }
 
-    /// Returns `Some(true)` if types are disjoint, `Some(false)` if they are not,
-    /// and `None` if one type is a parameter (i.e. overlap cannot be determined)
+    /// Returns `Some(true)` if type is fundamental (i.e. '&T', `&mut T` or `Box<T>`),
+    /// `None` if type is a generic parameter (e.g. `T`) and `Some(false)` otherwise
     pub fn is_disjoint(&self, params1: &Params, params2: &Params) -> Option<bool> {
         fn is_fundamental_type(ty: &syn::Type, params: &Params) -> Option<bool> {
-            if let syn::Type::Path(syn::TypePath { path, .. }) = ty
-                && let Some(ident) = path.get_ident()
-                && params.contains_key(ident)
-            {
-                return None;
-            }
-
             struct ParamTypeVisitor<'a> {
-                is_fundamental: bool,
+                is_fundamental: Option<bool>,
                 params: &'a Params,
             }
 
@@ -704,39 +697,43 @@ impl<'a> Generalizations<'a> {
                 fn visit_type(&mut self, node: &syn::Type) {
                     match node {
                         syn::Type::Reference(syn::TypeReference { elem, .. }) => {
+                            self.is_fundamental = Some(false);
                             self.visit_type(elem);
                         }
                         syn::Type::Path(ty) => {
                             self.visit_type_path(ty);
                         }
-                        _ => {}
+                        _ => {
+                            self.is_fundamental = Some(false);
+                        }
                     }
                 }
 
                 fn visit_type_path(&mut self, node: &syn::TypePath) {
                     let last_seg = node.path.segments.last().unwrap();
 
-                    if let Some(ident) = node.path.get_ident()
-                        && self.params.contains_key(ident)
-                    {
-                        self.is_fundamental = true;
-                    } else if node.qself.is_none() && last_seg.ident == "Box" {
+                    if let Some(syn::QSelf { ty, .. }) = &node.qself {
+                        syn::visit::visit_type(self, ty);
+                    } else if last_seg.ident == "Box" {
+                        self.is_fundamental = Some(false);
                         syn::visit::visit_type_path(self, node);
+                    } else if let Some(ident) = node.path.get_ident() {
+                        if !self.params.contains_key(ident) {
+                            self.is_fundamental = Some(false);
+                        } else if self.is_fundamental == Some(false) {
+                            self.is_fundamental = Some(true);
+                        }
                     }
                 }
             }
 
             let mut visitor = ParamTypeVisitor {
-                is_fundamental: false,
+                is_fundamental: None,
                 params,
             };
 
             visitor.visit_type(ty);
-            if visitor.is_fundamental {
-                return Some(true);
-            }
-
-            Some(false)
+            visitor.is_fundamental
         }
 
         fn is_param_expr(expr: Expr<'_>, params: &Params) -> bool {
