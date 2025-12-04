@@ -103,7 +103,7 @@ const _: () = {
 */
 
 #[test]
-fn blanket_for_derivative_type() {
+fn derivative_self_ty() {
     assert_eq!("Blanket AA", Option::<String>::NAME);
     assert_eq!("Blanket BA", Option::<Vec::<u32>>::NAME);
     assert_eq!("Blanket *B", Option::<u32>::NAME);

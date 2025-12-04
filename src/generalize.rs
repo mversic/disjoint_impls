@@ -723,6 +723,8 @@ impl<'a> Generalizations<'a> {
                         } else if self.is_fundamental == Some(false) {
                             self.is_fundamental = Some(true);
                         }
+                    } else {
+                        self.is_fundamental = Some(false);
                     }
                 }
             }
