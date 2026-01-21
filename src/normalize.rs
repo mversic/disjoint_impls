@@ -123,10 +123,7 @@ impl VisitMut for ConstraintReplacer {
                 let ty: syn::Type = parse_quote! { #ty };
                 self.curr_bounded_ty = Some(ty.clone());
 
-                let attrs = self.curr_attrs.clone();
-                self.bounds
-                    .entry(key.clone())
-                    .or_insert_with(|| (attrs.clone(), Default::default()));
+                self.bounds.entry(key.clone()).or_default();
                 for constraint_bound in &mut constraint.bounds {
                     syn::visit_mut::visit_type_param_bound_mut(self, constraint_bound);
                 }
@@ -142,7 +139,7 @@ impl VisitMut for ConstraintReplacer {
                 self.curr_bounded_ty = Some(current_bounded_ty);
                 self.curr_trait_bound = Some(current_trait_bound);
 
-                self.bounds.insert(key, (attrs, bounds));
+                self.bounds.insert(key, (self.curr_attrs.clone(), bounds));
             }
             _ => syn::visit_mut::visit_generic_argument_mut(self, arg),
         });
