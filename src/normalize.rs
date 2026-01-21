@@ -1,16 +1,16 @@
 //! Contains logic for normalizing impls
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use proc_macro2::Span;
 
 use quote::format_ident;
 use syn::{
-    Token, parse_quote,
-    punctuated::Punctuated,
+    parse_quote,
     visit_mut::{VisitMut, visit_trait_bound_mut},
 };
 
 type AssocBindingIdent = (syn::Type, syn::TraitBound, syn::Ident);
+type AssocBindingDesc = Vec<(Vec<syn::Attribute>, IndexSet<syn::TypeParamBound>)>;
 
 struct ElidedLifetimeNamer {
     curr_elided_lifetime_idx: usize,
@@ -24,13 +24,9 @@ struct ConstraintReplacer {
     curr_bounded_ty: Option<syn::Type>,
     curr_trait_bound: Option<syn::TraitBound>,
     curr_attrs: Vec<syn::Attribute>,
-    bounds: IndexMap<
-        AssocBindingIdent,
-        (
-            Vec<syn::Attribute>,
-            Punctuated<syn::TypeParamBound, Token![+]>,
-        ),
-    >,
+    curr_type_param_pos: Option<usize>,
+    next_type_param_pos: usize,
+    bounds: IndexMap<AssocBindingIdent, AssocBindingDesc>,
 }
 
 impl ConstraintReplacer {
@@ -39,6 +35,8 @@ impl ConstraintReplacer {
             curr_bounded_ty: None,
             curr_trait_bound: None,
             curr_attrs: Vec::new(),
+            curr_type_param_pos: None,
+            next_type_param_pos: 0,
             bounds: IndexMap::new(),
         }
     }
@@ -79,16 +77,21 @@ impl VisitMut for ConstraintReplacer {
     fn visit_type_param_mut(&mut self, node: &mut syn::TypeParam) {
         let ident = &node.ident;
 
+        self.curr_type_param_pos = Some(self.next_type_param_pos);
         self.curr_bounded_ty = Some(parse_quote!(#ident));
         self.curr_attrs = node.attrs.clone();
+        self.next_type_param_pos += 1;
+
         syn::visit_mut::visit_type_param_mut(self, node);
 
         self.curr_bounded_ty = None;
         self.curr_attrs = Vec::new();
+        self.curr_type_param_pos = None;
     }
 
     fn visit_predicate_type_mut(&mut self, node: &mut syn::PredicateType) {
         self.curr_bounded_ty = Some(node.bounded_ty.clone());
+        self.curr_type_param_pos = None;
         syn::visit_mut::visit_predicate_type_mut(self, node);
 
         self.curr_bounded_ty = None;
@@ -105,10 +108,8 @@ impl VisitMut for ConstraintReplacer {
     ) {
         node.args.iter_mut().for_each(|arg| match arg {
             syn::GenericArgument::Constraint(constraint) => {
-                let ty_idx = self.bounds.len();
-
-                let ident = constraint.ident.clone();
-                let generics = constraint.generics.clone();
+                let ident = &constraint.ident;
+                let generics = core::mem::take(&mut constraint.generics);
 
                 let current_bounded_ty = self.curr_bounded_ty.take().unwrap();
                 let current_trait_bound = self.curr_trait_bound.take().unwrap();
@@ -119,18 +120,21 @@ impl VisitMut for ConstraintReplacer {
                     ident.clone(),
                 );
 
+                let entry = self.bounds.entry(key.clone());
+                let ty_idx = entry.index();
+                entry.or_default();
+
                 let ty = format_ident!("_TŠČ{}", ty_idx);
                 let ty: syn::Type = parse_quote! { #ty };
                 self.curr_bounded_ty = Some(ty.clone());
 
-                self.bounds.entry(key.clone()).or_default();
-                for constraint_bound in &mut constraint.bounds {
+                let mut bounds = core::mem::take(&mut constraint.bounds);
+                for constraint_bound in &mut bounds {
                     syn::visit_mut::visit_type_param_bound_mut(self, constraint_bound);
                 }
 
-                let bounds = constraint.bounds.clone();
                 *arg = syn::GenericArgument::AssocType(syn::AssocType {
-                    ident,
+                    ident: ident.clone(),
                     generics,
                     eq_token: parse_quote!(=),
                     ty,
@@ -139,7 +143,18 @@ impl VisitMut for ConstraintReplacer {
                 self.curr_bounded_ty = Some(current_bounded_ty);
                 self.curr_trait_bound = Some(current_trait_bound);
 
-                self.bounds.insert(key, (self.curr_attrs.clone(), bounds));
+                let entry = self.bounds.get_mut(&key).unwrap();
+                if self.curr_type_param_pos.is_none() {
+                    if entry.is_empty() {
+                        entry.push(Default::default());
+                    }
+
+                    for (_, existing_bounds) in entry.iter_mut() {
+                        existing_bounds.extend(bounds.clone());
+                    }
+                } else {
+                    entry.push((self.curr_attrs.clone(), bounds.into_iter().collect()));
+                }
             }
             _ => syn::visit_mut::visit_generic_argument_mut(self, arg),
         });
@@ -176,9 +191,15 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
             .bounds
             .into_values()
             .enumerate()
-            .map::<syn::GenericParam, _>(|(idx, (attrs, bounds))| {
+            .flat_map(|(idx, entries)| {
                 let ty = format_ident!("_TŠČ{}", idx);
-                parse_quote!(#(#attrs)* #ty: #bounds)
+
+                entries
+                    .into_iter()
+                    .map::<syn::GenericParam, _>(move |(attrs, bounds)| {
+                        let bounds = bounds.into_iter();
+                        parse_quote!(#(#attrs)* #ty: #(#bounds)+*)
+                    })
             }),
     );
 

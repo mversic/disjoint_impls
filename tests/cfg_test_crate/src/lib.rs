@@ -1,16 +1,24 @@
 use disjoint_impls::disjoint_impls;
 
-pub trait Dispatch {
+pub trait Dispatch1 {
+    type Group;
+}
+
+pub trait Dispatch2 {
     type Group;
 }
 
 pub enum GroupA {}
 pub enum GroupB {}
 
-impl Dispatch for String {
+impl Dispatch1 for String {
     type Group = GroupA;
 }
-impl Dispatch for i32 {
+
+impl Dispatch2 for String {
+    type Group = GroupA;
+}
+impl Dispatch2 for i32 {
     type Group = GroupB;
 }
 
@@ -23,9 +31,14 @@ disjoint_impls! {
     }
 
     impl<
-        #[cfg(not(feature = "feat_a"))] T: Dispatch<Group: WithoutFeatA>,
-        #[cfg(feature = "feat_a")] T: Dispatch<Group = GroupA>,
-    > Kita for T {
+        #[cfg(all(not(feature = "feat_a"), feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group: WithoutFeatA>,
+        #[cfg(all(not(feature = "feat_a"), not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group: WithoutFeatA>,
+        #[cfg(all(feature = "feat_a", not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group = GroupA>,
+        #[cfg(all(feature = "feat_a", feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group = GroupA>,
+    > Kita for T
+    where
+        T: Dispatch1<Group: WithoutFeatA>,
+    {
         #[cfg(not(feature = "feat_a"))]
         const NAME: &'static str = "Blanket A without feat_a";
 
@@ -33,7 +46,7 @@ disjoint_impls! {
         const NAME: &'static str = "Blanket A with feat_a";
     }
 
-    impl<T: Dispatch<Group = GroupB>> Kita for T {
+    impl<T: Dispatch2<Group = GroupB>> Kita for T {
         const NAME: &'static str = "Blanket B";
     }
 }
