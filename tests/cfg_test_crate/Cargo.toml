@@ -1,0 +1,12 @@
+[package]
+name = "cfg_test_crate"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+disjoint_impls = { path = "../.." }
+
+[features]
+default = []
+
+feat_a = []

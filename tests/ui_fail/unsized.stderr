@@ -16,7 +16,7 @@ note: required for `str` to implement `Kita0<GroupB, str, u32>`
    | |                                                -              ^     ^
    | |________________________________________________|______________|
    |                                                  |
-   |                                                  unsatisfied trait bound introduced here
+   |                                                  unsatisfied trait bound implicitly introduced here
 note: required for `str` to implement `Kita<str, u32>`
   --> tests/ui_fail/unsized.rs:23:1
    |
@@ -91,7 +91,7 @@ note: required for `[u8]` to implement `Kita0<GroupB, str, u32>`
    | |                                                -              ^     ^
    | |________________________________________________|______________|
    |                                                  |
-   |                                                  unsatisfied trait bound introduced here
+   |                                                  unsatisfied trait bound implicitly introduced here
 note: required for `[u8]` to implement `Kita<str, u32>`
   --> tests/ui_fail/unsized.rs:23:1
    |
