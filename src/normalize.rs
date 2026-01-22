@@ -114,9 +114,18 @@ impl VisitMut for ConstraintReplacer {
                 let current_bounded_ty = self.curr_bounded_ty.take().unwrap();
                 let current_trait_bound = self.curr_trait_bound.take().unwrap();
 
+                let mut key_trait_bound = current_trait_bound.clone();
+                for seg in &mut key_trait_bound.path.segments {
+                    if let syn::PathArguments::AngleBracketed(args) = &mut seg.arguments {
+                        args.args = args.args.iter()
+                            .filter(|arg| !matches!(arg, syn::GenericArgument::Constraint(_)))
+                            .cloned()
+                            .collect();
+                    }
+                }
                 let key = (
                     current_bounded_ty.clone(),
-                    current_trait_bound.clone(),
+                    key_trait_bound,
                     ident.clone(),
                 );
 

@@ -1,4 +1,42 @@
+use syn::visit::Visit;
+
 use super::*;
+
+struct SyntheticParamFinder<'a> {
+    ty_params: &'a IndexSet<syn::Ident>,
+    found_undeclared: bool,
+}
+
+impl<'a> SyntheticParamFinder<'a> {
+    fn new(ty_params: &'a IndexSet<syn::Ident>) -> Self {
+        Self {
+            ty_params,
+            found_undeclared: false,
+        }
+    }
+}
+
+impl Visit<'_> for SyntheticParamFinder<'_> {
+    fn visit_path(&mut self, node: &syn::Path) {
+        if let Some(first_seg) = node.segments.first() {
+            let ident = &first_seg.ident;
+
+            if ident.to_string().starts_with("_TŠČ") && !self.ty_params.contains(ident) {
+                self.found_undeclared = true;
+                return;
+            }
+        }
+
+        syn::visit::visit_path(self, node);
+    }
+}
+
+fn contains_undeclared_synthetic_param(ty: &syn::Type, ty_params: &IndexSet<syn::Ident>) -> bool {
+    let mut finder = SyntheticParamFinder::new(ty_params);
+
+    finder.visit_type(ty);
+    finder.found_undeclared
+}
 
 pub fn generate(
     impl_group_idx: usize,
@@ -32,11 +70,7 @@ pub fn generate(
                     payload.as_ref().map_or_else(
                         || assoc_binding_default(&orig_trait_bound[i], assoc_ident),
                         |payload| {
-                            if let syn::Type::Path(syn::TypePath { path, .. }) = payload
-                                && let Some(ident) = path.get_ident()
-                                && ident.to_string().starts_with("_TŠČ")
-                                && !ty_params[i].contains(ident)
-                            {
+                            if contains_undeclared_synthetic_param(payload, &ty_params[i]) {
                                 return assoc_binding_default(&orig_trait_bound[i], assoc_ident);
                             }
 

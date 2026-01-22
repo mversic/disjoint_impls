@@ -22,8 +22,12 @@ impl Dispatch2 for i32 {
     type Group = GroupB;
 }
 
-pub trait WithoutFeatA {}
-impl WithoutFeatA for GroupA {}
+pub trait WithoutFeatA {
+    type Group;
+}
+impl WithoutFeatA for GroupA {
+    type Group = GroupA;
+}
 
 disjoint_impls! {
     pub trait Kita {
@@ -31,8 +35,8 @@ disjoint_impls! {
     }
 
     impl<
-        #[cfg(all(not(feature = "feat_a"), feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group: WithoutFeatA>,
-        #[cfg(all(not(feature = "feat_a"), not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group: WithoutFeatA>,
+        #[cfg(all(not(feature = "feat_a"), feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA<Group: WithoutFeatA>> + Dispatch2<Group: WithoutFeatA>,
+        #[cfg(all(not(feature = "feat_a"), not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA<Group: WithoutFeatA>> + Dispatch2<Group: WithoutFeatA>,
         #[cfg(all(feature = "feat_a", not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group = GroupA>,
         #[cfg(all(feature = "feat_a", feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group = GroupA>,
     > Kita for T
