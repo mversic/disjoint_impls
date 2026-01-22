@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-01-22
+### Fixed
+- replace bindings containing unknown params with fully qualified assoc bindings
+- support duplicate type params activated by different attributes
+
 ## [1.3.5] - 2026-01-21
 ### Added
 - support attributes on type params
