@@ -26,7 +26,8 @@ disjoint_impls! {
     }
 
     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita<U, V> for T {
-        fn kita(&self) -> String {
+        #[allow(clippy::needless_arbitrary_self_type)]
+        fn kita(self: &Self) -> String {
             "Blanket A".to_owned()
         }
     }

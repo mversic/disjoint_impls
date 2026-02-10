@@ -39,7 +39,7 @@ fn contains_undeclared_synthetic_param(ty: &syn::Type, ty_params: &IndexSet<syn:
 }
 
 pub fn generate(
-    impl_group_idx: usize,
+    ctx: &DisjointImplCtx<'_>,
     mut impl_group: ImplGroup,
 ) -> impl Iterator<Item = ItemImpl> {
     if impl_group.id.is_inherent() {
@@ -89,7 +89,8 @@ pub fn generate(
         let path = trait_.segments.last_mut().unwrap();
 
         prepend_args(&mut path.arguments, &assoc_bindings.collect::<Vec<_>>());
-        path.ident = helper_trait::gen_ident(&impl_group.id, impl_group_idx);
+        path.ident = ctx.gen_ident(&impl_group.id);
+        rename_impl_item_idents(impl_);
     });
 
     impl_group.impls.into_iter().map(|(impl_, _)| impl_)
@@ -120,4 +121,19 @@ pub fn traitize_inherent_impl(
     });
 
     impl_.trait_ = Some((None, trait_, Default::default()));
+}
+
+fn rename_impl_item_idents(item_impl: &mut syn::ItemImpl) {
+    for item in &mut item_impl.items {
+        let ident = match item {
+            syn::ImplItem::Const(item) => &mut item.ident,
+            syn::ImplItem::Type(item) => &mut item.ident,
+            syn::ImplItem::Fn(item) => &mut item.sig.ident,
+            _ => continue,
+        };
+
+        if !ident.to_string().ends_with("_šč") {
+            *ident = format_ident!("{ident}_šč");
+        }
+    }
 }

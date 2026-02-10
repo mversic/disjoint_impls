@@ -2,20 +2,28 @@ use crate::main_trait::is_remote;
 
 use super::*;
 
+struct GenericParamRenamer(IndexMap<syn::Ident, syn::Ident>);
+
 /// Generate helper trait
 ///
 /// Helper trait contains all items of the main trait but is parametrized with
 /// type parameters corresponding to a minimal set of associated bindings
 /// that uniquely identify all of the disjoint impls within an impl group
-pub fn generate(
-    main_trait: Option<&ItemTrait>,
-    impl_group_idx: usize,
-    impl_group: &ImplGroup,
-) -> syn::ItemTrait {
-    let assoc_binding_count = &impl_group.trait_bounds.generalized_idents().count();
+pub fn generate(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> syn::ItemTrait {
+    let assoc_binding_count = impl_group.trait_bounds.generalized_idents().count();
 
-    let mut helper_trait = if let Some(helper_trait) = main_trait {
-        helper_trait.clone()
+    let mut helper_trait = if let Some(main_trait) = ctx.root_trait {
+        let mut helper_trait = main_trait.clone();
+
+        rename_trait_generic_params(&mut helper_trait);
+        helper_trait.supertraits = [gen_original_trait_bound(
+            &helper_trait.generics,
+            &helper_trait.ident,
+        )]
+        .into_iter()
+        .collect();
+
+        helper_trait
     } else {
         let impl_items = gen_inherent_trait_items(impl_group.items.as_ref().unwrap());
 
@@ -33,13 +41,14 @@ pub fn generate(
         }
     };
 
+    rename_trait_item_idents(&mut helper_trait);
     helper_trait.attrs = core::mem::take(&mut helper_trait.attrs)
         .into_iter()
         .filter(|attr| !is_remote(attr))
         .collect();
 
     helper_trait.vis = syn::Visibility::Public(parse_quote!(pub));
-    helper_trait.ident = gen_ident(&impl_group.id, impl_group_idx);
+    helper_trait.ident = ctx.gen_ident(&impl_group.id);
 
     let start_idx = helper_trait.generics.params.len();
     helper_trait.generics.params = combine_generic_args(
@@ -50,6 +59,52 @@ pub fn generate(
     .collect();
 
     helper_trait
+}
+
+fn rename_trait_generic_params(trait_: &mut syn::ItemTrait) {
+    let mut param_idx = 0;
+
+    let mut replacements = IndexMap::new();
+    for param in &mut trait_.generics.params {
+        let (ident, prefix) = match param {
+            syn::GenericParam::Lifetime(_) => continue,
+            syn::GenericParam::Type(syn::TypeParam { ident, .. }) => (ident, "_TŠČ"),
+            syn::GenericParam::Const(syn::ConstParam { ident, .. }) => (ident, "_CŠČ"),
+        };
+
+        let new_ident = format_ident!("{prefix}{param_idx}");
+        let old_ident = core::mem::replace(ident, new_ident.clone());
+        replacements.insert(old_ident, new_ident);
+        param_idx += 1;
+    }
+
+    if !replacements.is_empty() {
+        let mut renamer = GenericParamRenamer(replacements);
+        renamer.visit_item_trait_mut(trait_);
+    }
+}
+
+fn gen_original_trait_bound(
+    generics: &syn::Generics,
+    trait_ident: &syn::Ident,
+) -> syn::TypeParamBound {
+    if generics.params.is_empty() {
+        return parse_quote!(#trait_ident);
+    }
+
+    let args = generics.params.iter().map(|param| match param {
+        syn::GenericParam::Lifetime(param) => {
+            syn::GenericArgument::Lifetime(param.lifetime.clone())
+        }
+        syn::GenericParam::Type(syn::TypeParam { ident, .. }) => {
+            syn::GenericArgument::Type(parse_quote!(#ident))
+        }
+        syn::GenericParam::Const(syn::ConstParam { ident, .. }) => {
+            syn::GenericArgument::Const(parse_quote!(#ident))
+        }
+    });
+
+    parse_quote!(#trait_ident<#(#args),*>)
 }
 
 fn combine_generic_args(
@@ -90,16 +145,27 @@ fn gen_inherent_trait_items(impl_items: &ImplItemsDesc) -> impl Iterator<Item = 
     assoc_consts.chain(assoc_types).chain(fns)
 }
 
-/// Generate ident of the helper trait
-pub fn gen_ident(group_id: &ImplGroupId, idx: usize) -> syn::Ident {
-    let base = if let Some(trait_path) = &group_id.trait_ {
-        trait_path.segments.last().map(|segment| &segment.ident)
-    } else if let syn::Type::Path(ty) = &group_id.self_ty {
-        ty.path.segments.last().map(|segment| &segment.ident)
-    } else {
-        unreachable!()
-    }
-    .unwrap();
+fn rename_trait_item_idents(trait_: &mut syn::ItemTrait) {
+    for item in &mut trait_.items {
+        let ident = match item {
+            syn::TraitItem::Const(item) => &mut item.ident,
+            syn::TraitItem::Type(item) => &mut item.ident,
+            syn::TraitItem::Fn(item) => &mut item.sig.ident,
+            _ => continue,
+        };
 
-    format_ident!("{}{}", base, idx)
+        *ident = format_ident!("{ident}_šč");
+    }
+}
+
+impl syn::visit_mut::VisitMut for GenericParamRenamer {
+    fn visit_path_mut(&mut self, node: &mut syn::Path) {
+        syn::visit_mut::visit_path_mut(self, node);
+
+        if let Some(ident) = node.get_ident()
+            && let Some(replacement) = self.0.get(ident)
+        {
+            node.segments[0].ident = replacement.clone();
+        }
+    }
 }

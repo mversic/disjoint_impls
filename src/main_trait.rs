@@ -5,6 +5,7 @@ use syn::{parse_quote, visit_mut::VisitMut};
 use super::*;
 
 struct ImplItemResolver {
+    rename_item_idents: bool,
     self_as_helper_trait: TokenStream2,
 }
 
@@ -20,14 +21,11 @@ pub fn is_remote(attr: &syn::Attribute) -> bool {
 }
 
 /// Generate main trait impl
-pub fn generate_impl(
-    main_trait: Option<&ItemTrait>,
-    impl_group_idx: usize,
-    impl_group: &ImplGroup,
-) -> Option<ItemImpl> {
-    let helper_trait_ident = helper_trait::gen_ident(&impl_group.id, impl_group_idx);
+pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Option<ItemImpl> {
+    let helper_trait_ident = ctx.gen_ident(&impl_group.id);
 
-    let mut main_trait_impl = main_trait
+    let mut main_trait_impl = ctx
+        .root_trait
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group.id))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(impl_group));
 
@@ -63,7 +61,9 @@ pub fn generate_impl(
         .predicates
         .push(parse_quote! { Self: #helper_trait_bound });
 
-    let mut impl_item_resolver = ImplItemResolver::new(impl_group, &helper_trait_ident);
+    let mut impl_item_resolver =
+        ImplItemResolver::new(impl_group, !ctx.is_root(), &helper_trait_ident);
+
     main_trait_impl
         .items
         .iter_mut()
@@ -253,11 +253,16 @@ fn gen_inherent_self_ty_args<'a>(
 }
 
 impl ImplItemResolver {
-    fn new(impl_group: &ImplGroup, helper_trait_ident: &syn::Ident) -> Self {
+    fn new(
+        impl_group: &ImplGroup,
+        rename_item_idents: bool,
+        helper_trait_ident: &syn::Ident,
+    ) -> Self {
         let helper_trait_bound =
             gen_helper_trait_bound(impl_group, helper_trait_ident, &impl_group.trait_bounds);
 
         Self {
+            rename_item_idents,
             self_as_helper_trait: quote! {
                 <Self as #helper_trait_bound>
             },
@@ -269,34 +274,47 @@ impl VisitMut for ImplItemResolver {
     fn visit_impl_item_const_mut(&mut self, node: &mut syn::ImplItemConst) {
         let (_, ty_generics, _) = &node.generics.split_for_impl();
         let self_as_helper_trait = &self.self_as_helper_trait;
+        let ident = renamed_helper_item_ident(&node.ident);
 
-        let ident = &node.ident;
-        node.expr = parse_quote!(
-            #self_as_helper_trait::#ident #ty_generics
-        );
+        let ident = if self.rename_item_idents {
+            node.ident = ident;
+            &node.ident
+        } else {
+            &ident
+        };
+
+        node.expr = parse_quote!(#self_as_helper_trait::#ident #ty_generics);
     }
 
     fn visit_impl_item_type_mut(&mut self, node: &mut syn::ImplItemType) {
         let (_, ty_generics, _) = &node.generics.split_for_impl();
         let self_as_helper_trait = &self.self_as_helper_trait;
+        let ident = renamed_helper_item_ident(&node.ident);
 
-        let ident = &node.ident;
-        node.ty = parse_quote!(
-            #self_as_helper_trait::#ident #ty_generics
-        );
+        let ident = if self.rename_item_idents {
+            node.ident = ident;
+            &node.ident
+        } else {
+            &ident
+        };
+
+        node.ty = parse_quote!(#self_as_helper_trait::#ident #ty_generics);
     }
 
     fn visit_impl_item_fn_mut(&mut self, node: &mut syn::ImplItemFn) {
         let self_as_helper_trait = &self.self_as_helper_trait;
+        let unsafety = node.sig.unsafety;
+        let generics = node.sig.generics.clone();
+        let inputs = node.sig.inputs.clone();
+        let variadic = node.sig.variadic.clone();
+        let ident = renamed_helper_item_ident(&node.sig.ident);
 
-        let syn::Signature {
-            unsafety,
-            ident,
-            generics,
-            inputs,
-            variadic,
-            ..
-        } = &node.sig;
+        let ident = if self.rename_item_idents {
+            node.sig.ident = ident;
+            &node.sig.ident
+        } else {
+            &ident
+        };
 
         let ty_generics = generics.params.iter().filter_map(|param| match param {
             syn::GenericParam::Type(param) => Some(&param.ident),
@@ -322,6 +340,14 @@ impl VisitMut for ImplItemResolver {
                 #block
             }})
         };
+    }
+}
+
+fn renamed_helper_item_ident(ident: &syn::Ident) -> syn::Ident {
+    if ident.to_string().ends_with("_šč") {
+        ident.clone()
+    } else {
+        format_ident!("{ident}_šč")
     }
 }
 

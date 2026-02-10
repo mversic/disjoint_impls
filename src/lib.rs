@@ -210,6 +210,39 @@ struct ImplGroups {
     impl_groups: Vec<ImplGroup>,
 }
 
+struct DisjointImplCtx<'a> {
+    root_trait: Option<&'a ItemTrait>,
+    path: Vec<usize>,
+}
+
+impl<'a> DisjointImplCtx<'a> {
+    fn new(root_trait: Option<&'a ItemTrait>, idx: usize) -> Self {
+        Self {
+            root_trait,
+            path: vec![idx],
+        }
+    }
+
+    fn gen_ident(&self, group_id: &ImplGroupId) -> syn::Ident {
+        let suffix = self.path.iter().map(ToString::to_string).join("");
+
+        let base = if let Some(root_trait) = self.root_trait {
+            Some(&root_trait.ident)
+        } else if let syn::Type::Path(ty) = &group_id.self_ty {
+            ty.path.segments.last().map(|segment| &segment.ident)
+        } else {
+            unreachable!()
+        }
+        .unwrap();
+
+        format_ident!("{base}{}", suffix)
+    }
+
+    fn is_root(&self) -> bool {
+        self.path.len() == 1
+    }
+}
+
 struct ItemImplDescVisitor {
     /// Bounded type currently being visited
     curr_bounded_ty: Option<Bounded>,
@@ -994,9 +1027,8 @@ fn instantiate_impl_group(
 }
 
 fn build_disjoint_impl_group(
-    trait_: Option<&ItemTrait>,
     mut impl_group: ImplGroup,
-    group_idx: usize,
+    ctx: &mut DisjointImplCtx<'_>,
 ) -> (TokenStream2, Vec<ItemImpl>) {
     let mut helper_traits = Vec::new();
     let mut trait_impls = Vec::new();
@@ -1004,10 +1036,10 @@ fn build_disjoint_impl_group(
     let mut subgroup_tokens = Vec::new();
 
     if impl_group.impls.len() > 1 || !impl_group.subgroups.is_empty() {
-        let helper_trait = helper_trait::generate(trait_, group_idx, &impl_group);
+        let helper_trait = helper_trait::generate(ctx, &impl_group);
         helper_traits.push(helper_trait.clone());
 
-        if let Some(main_impl) = main_trait::generate_impl(trait_, group_idx, &impl_group) {
+        if let Some(main_impl) = main_trait::generate_impl(ctx, &impl_group) {
             trait_impls.push(main_impl);
         }
 
@@ -1057,8 +1089,9 @@ fn build_disjoint_impl_group(
                 }
             }
 
-            let (tokens, mut subgroup_main_impls) =
-                build_disjoint_impl_group(Some(&subgroup_trait), subgroup, subgroup_idx);
+            ctx.path.push(subgroup_idx);
+            let (tokens, mut subgroup_main_impls) = build_disjoint_impl_group(subgroup, ctx);
+            ctx.path.pop();
 
             subgroup_tokens.push(tokens);
             subgroup_main_impls.iter_mut().for_each(|trait_impl| {
@@ -1097,7 +1130,7 @@ fn build_disjoint_impl_group(
             );
         }
 
-        item_impls.extend(disjoint::generate(group_idx, impl_group));
+        item_impls.extend(disjoint::generate(ctx, impl_group));
     } else if let Some((main_impl, _)) = impl_group.impls.pop() {
         trait_impls.push(main_impl);
     }
@@ -1530,11 +1563,13 @@ pub fn disjoint_impls(input: TokenStream) -> TokenStream {
     } = parse_macro_input!(input);
 
     let mut trait_impls_tokens = Vec::new();
+
     let groups = impl_groups
         .into_iter()
         .enumerate()
         .map(|(idx, impl_group)| {
-            let (tokens, trait_impls) = build_disjoint_impl_group(trait_.as_ref(), impl_group, idx);
+            let mut ctx = DisjointImplCtx::new(trait_.as_ref(), idx);
+            let (tokens, trait_impls) = build_disjoint_impl_group(impl_group, &mut ctx);
             trait_impls_tokens.extend(trait_impls);
             tokens
         })
