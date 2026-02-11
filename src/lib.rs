@@ -1071,7 +1071,8 @@ fn build_disjoint_impl_group(
             trait_.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
 
             subgroup.impls.iter_mut().for_each(|(impl_, _)| {
-                impl_.trait_ = Some((None, trait_.clone(), Default::default()));
+                let impl_trait = &mut impl_.trait_.as_mut().unwrap().1;
+                impl_trait.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
             })
         } else {
             let helper_trait_args = &subgroup.params;

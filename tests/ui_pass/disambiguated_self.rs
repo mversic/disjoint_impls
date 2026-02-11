@@ -50,6 +50,48 @@ impl Kita for i8 {
     }
 }
 
+/*
+trait Kita {
+    type Target: Kita;
+    fn kita(
+        a: <<Self as Kita>::Target as Kita>::Target,
+    ) -> <<Self as Kita>::Target as Kita>::Target {
+        let b: <<Self as Kita>::Target as Kita>::Target = a;
+        b
+    }
+}
+#[allow(clippy::needless_lifetimes)]
+const _: () = {
+    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+        type Target_šč: Kita;
+        fn kita_šč(
+            a: <<Self as Kita>::Target as Kita>::Target,
+        ) -> <<Self as Kita>::Target as Kita>::Target {
+            let b: <<Self as Kita>::Target as Kita>::Target = a;
+            b
+        }
+    }
+    impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
+        type Target_šč = u8;
+    }
+    impl<T: Dispatch<Group = GroupB>> Kita0<GroupB> for T {
+        type Target_šč = i8;
+    }
+    impl<_TŠČ0> Kita for _TŠČ0
+    where
+        _TŠČ0: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
+    {
+        type Target = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Target_šč;
+        fn kita(
+            a: <<Self as Kita>::Target as Kita>::Target,
+        ) -> <<Self as Kita>::Target as Kita>::Target {
+            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::kita_šč(a)
+        }
+    }
+};
+*/
+
 fn main() {
     assert_eq!(12u8, <String as Kita>::kita(12));
     assert_eq!(-7i8, <i32 as Kita>::kita(-7));
