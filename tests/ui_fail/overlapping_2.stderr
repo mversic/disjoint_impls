@@ -1,8 +1,14 @@
 error[E0119]: conflicting implementations of trait `Kita0<GroupA, u32>`
-  --> tests/ui_fail/overlapping_2.rs:21:5
+  --> tests/ui_fail/overlapping_2.rs:13:1
    |
-18 |     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita<u32> for T {
-   |     ------------------------------------------------------------------------------ first implementation here
-...
-21 |     impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita<u32> for T {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation
+13 | / disjoint_impls! {
+14 | |     pub trait Kita<A> {
+15 | |         const NAME: &'static str;
+...  |
+27 | | }
+   | | ^
+   | | |
+   | |_first implementation here
+   |   conflicting implementation
+   |
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)

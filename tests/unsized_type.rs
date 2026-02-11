@@ -51,23 +51,26 @@ pub trait Kita<T: ?Sized, U: ?Sized> {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ2: ?Sized, T: ?Sized, U: ?Sized> {
-        fn kita(&self) -> String;
+    pub trait Kita0<_TŠČ2: ?Sized, _TŠČ0: ?Sized, _TŠČ1: ?Sized>: Kita<_TŠČ0, _TŠČ1> {
+        fn kita_šč(&self) -> String;
     }
     impl<T: Dispatch<Group = GroupA>, U: ?Sized, V> Kita0<GroupA, U, V> for T {
-        fn kita(&self) -> String {
+        #[allow(clippy::needless_arbitrary_self_type)]
+        fn kita_šč(self: &Self) -> String {
             "Blanket A".to_owned()
         }
     }
     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita0<GroupB, U, V> for T {
-        fn kita(&self) -> String {
+        fn kita_šč(&self) -> String {
             "Blanket B".to_owned()
         }
     }
-
-    // TODO: There are mpty bounds again here
-
-    impl<_TŠČ0: ?Sized, _TŠČ1, _TŠČ2: ?Sized> Kita<_TŠČ0, _TŠČ1> for _TŠČ2
+    impl<T: Dispatch<Group = GroupB> + ?Sized, U> Kita0<GroupB, U, str> for T {
+        fn kita_šč(&self) -> String {
+            "Blanket for str".to_owned()
+        }
+    }
+    impl<_TŠČ0: ?Sized, _TŠČ1: ?Sized, _TŠČ2: ?Sized> Kita<_TŠČ0, _TŠČ1> for _TŠČ2
     where
         _TŠČ0:,
         _TŠČ1:,
@@ -75,13 +78,7 @@ const _: () = {
         Self: Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>,
     {
         fn kita(&self) -> String {
-            <Self as Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>>::kita(self)
-        }
-    }
-
-    impl<T: Dispatch<Group = GroupB> + ?Sized, U> Kita<U, str> for T {
-        fn kita(&self) -> String {
-            "Blanket for str".to_owned()
+            <Self as Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>>::kita_šč(self)
         }
     }
 };

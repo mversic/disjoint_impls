@@ -274,8 +274,8 @@ impl VisitMut for ImplItemResolver {
     fn visit_impl_item_const_mut(&mut self, node: &mut syn::ImplItemConst) {
         let (_, ty_generics, _) = &node.generics.split_for_impl();
         let self_as_helper_trait = &self.self_as_helper_trait;
-        let ident = renamed_helper_item_ident(&node.ident);
 
+        let ident = renamed_helper_item_ident(&node.ident);
         let ident = if self.rename_item_idents {
             node.ident = ident;
             &node.ident
@@ -289,8 +289,8 @@ impl VisitMut for ImplItemResolver {
     fn visit_impl_item_type_mut(&mut self, node: &mut syn::ImplItemType) {
         let (_, ty_generics, _) = &node.generics.split_for_impl();
         let self_as_helper_trait = &self.self_as_helper_trait;
-        let ident = renamed_helper_item_ident(&node.ident);
 
+        let ident = renamed_helper_item_ident(&node.ident);
         let ident = if self.rename_item_idents {
             node.ident = ident;
             &node.ident
@@ -304,11 +304,11 @@ impl VisitMut for ImplItemResolver {
     fn visit_impl_item_fn_mut(&mut self, node: &mut syn::ImplItemFn) {
         let self_as_helper_trait = &self.self_as_helper_trait;
         let unsafety = node.sig.unsafety;
-        let generics = node.sig.generics.clone();
-        let inputs = node.sig.inputs.clone();
-        let variadic = node.sig.variadic.clone();
-        let ident = renamed_helper_item_ident(&node.sig.ident);
+        let generics = &node.sig.generics;
+        let inputs = &mut node.sig.inputs;
+        let variadic = &node.sig.variadic;
 
+        let ident = renamed_helper_item_ident(&node.sig.ident);
         let ident = if self.rename_item_idents {
             node.sig.ident = ident;
             &node.sig.ident
@@ -322,9 +322,20 @@ impl VisitMut for ImplItemResolver {
             _ => None,
         });
 
-        let inputs = inputs.iter().map(|input| match input {
+        let inputs = inputs.iter_mut().enumerate().map(|(i, input)| match input {
             syn::FnArg::Receiver(_) => parse_quote!(self),
-            syn::FnArg::Typed(arg) => arg.pat.clone(),
+            syn::FnArg::Typed(arg) => {
+                if let syn::Pat::Wild(pat) = &*arg.pat {
+                    let named = format_ident!("arg{i}");
+
+                    let attrs = &pat.attrs;
+                    arg.pat = parse_quote! {
+                        #(#attrs)* #named
+                    };
+                }
+
+                arg.pat.clone()
+            }
         });
 
         let block = quote! {

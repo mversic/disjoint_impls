@@ -40,31 +40,28 @@ trait Kita<const SIZE: usize> {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ1: ?Sized, const SIZE: usize> {
-        const NAME: &'static str;
+    pub trait Kita0<_TŠČ1: ?Sized, const _CŠČ0: usize>: Kita<_CŠČ0> {
+        const NAME_šč: &'static str;
     }
     impl<const N: usize> Kita0<GroupA, N> for [i32; N]
     where
         [i32; N]: Dispatch<N, Group = GroupA>,
     {
-        const NAME: &'static str = "Blanket A";
+        const NAME_šč: &'static str = "Blanket A";
     }
     impl<const N: usize> Kita0<GroupB, N> for [i32; N]
     where
         [i32; N]: Dispatch<N, Group = GroupB>,
     {
-        const NAME: &'static str = "Blanket B";
+        const NAME_šč: &'static str = "Blanket B";
     }
-
     impl<const _CŠČ0: usize> Kita<_CŠČ0> for [i32; _CŠČ0]
     where
         [i32; _CŠČ0]: Dispatch<_CŠČ0>,
         Self: Kita0<<[i32; _CŠČ0] as Dispatch<_CŠČ0>>::Group, _CŠČ0>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <[i32; _CŠČ0] as Dispatch<_CŠČ0>>::Group,
-            _CŠČ0,
-        >>::NAME;
+        const NAME: &'static str =
+            <Self as Kita0<<[i32; _CŠČ0] as Dispatch<_CŠČ0>>::Group, _CŠČ0>>::NAME_šč;
     }
 };
 */

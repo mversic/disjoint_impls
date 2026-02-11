@@ -35,13 +35,14 @@ disjoint_impls! {
     }
 
     impl<
-        #[cfg(all(not(feature = "feat_a"), feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA<Group: WithoutFeatA>> + Dispatch2<Group: WithoutFeatA>,
-        #[cfg(all(not(feature = "feat_a"), not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA<Group: WithoutFeatA>> + Dispatch2<Group: WithoutFeatA>,
-        #[cfg(all(feature = "feat_a", not(feature = "feat_b")))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group = GroupA>,
-        #[cfg(all(feature = "feat_a", feature = "feat_b"))] T: Dispatch1<Group: WithoutFeatA> + Dispatch2<Group = GroupA>,
+        #[cfg(all(not(feature = "feat_a"), feature = "feat_b"))] T: Dispatch1 + Dispatch2,
+        #[cfg(all(not(feature = "feat_a"), not(feature = "feat_b")))] T: Dispatch1 + Dispatch2,
+        #[cfg(all(feature = "feat_a", not(feature = "feat_b")))] T: Dispatch1 + Dispatch2,
+        #[cfg(all(feature = "feat_a", feature = "feat_b"))] T: Dispatch1 + Dispatch2,
     > Kita for T
     where
         T: Dispatch1<Group: WithoutFeatA>,
+        T: Dispatch2<Group = GroupA>,
     {
         #[cfg(not(feature = "feat_a"))]
         const NAME: &'static str = "Blanket A without feat_a";

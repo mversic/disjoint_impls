@@ -1,21 +1,33 @@
 error[E0119]: conflicting implementations of trait `Kita` for type `&_`
-  --> tests/ui_fail/overlapping.rs:19:5
+  --> tests/ui_fail/overlapping.rs:11:1
    |
-16 |     impl<T: Dispatch<Group = GroupA>> Kita for T {
-   |     -------------------------------------------- first implementation here
-...
-19 |     impl<T: Dispatch<Group = GroupB>> Kita for &T {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `&_`
+11 | / disjoint_impls! {
+12 | |     pub trait Kita {
+13 | |         const NAME: &'static str;
+...  |
+25 | | }
+   | | ^
+   | | |
+   | |_first implementation here
+   |   conflicting implementation for `&_`
    |
    = note: downstream crates may implement trait `Dispatch` for type `&_`
+   = note: downstream crates may implement trait `_::Kita0<<&_ as Dispatch>::Group>` for type `&_`
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0119]: conflicting implementations of trait `Kita` for type `&mut _`
-  --> tests/ui_fail/overlapping.rs:22:5
+  --> tests/ui_fail/overlapping.rs:11:1
    |
-16 |     impl<T: Dispatch<Group = GroupA>> Kita for T {
-   |     -------------------------------------------- first implementation here
-...
-22 |     impl<U: Dispatch<Group = GroupC>> Kita for &mut U {
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `&mut _`
+11 | / disjoint_impls! {
+12 | |     pub trait Kita {
+13 | |         const NAME: &'static str;
+...  |
+25 | | }
+   | | ^
+   | | |
+   | |_first implementation here
+   |   conflicting implementation for `&mut _`
    |
    = note: downstream crates may implement trait `Dispatch` for type `&mut _`
+   = note: downstream crates may implement trait `_::Kita0<<&mut _ as Dispatch>::Group>` for type `&mut _`
+   = note: this error originates in the macro `disjoint_impls` (in Nightly builds, run with -Z macro-backtrace for more info)

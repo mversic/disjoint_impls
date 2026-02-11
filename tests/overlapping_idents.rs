@@ -55,28 +55,27 @@ where
 }
 
 const _: () = {
-    pub trait U0<_TŠČ1: ?Sized, U>
+    pub trait U0<_TŠČ1: ?Sized, _TŠČ0>: U<_TŠČ0>
     where
-        U: From<u8>,
+        _TŠČ0: From<u8>,
     {
-        type U: From<U>;
-        const U: &'static str;
+        type U_šč: From<_TŠČ0>;
+        const U_šč: &'static str;
     }
     impl<K, T: Dispatch<Group = GroupA>> U0<GroupA, K> for T
     where
         K: From<u8>,
     {
-        type U = K;
-        const U: &'static str = "Blanket A";
+        type U_šč = K;
+        const U_šč: &'static str = "Blanket A";
     }
     impl<K, T: Dispatch<Group = GroupB>> U0<GroupB, K> for T
     where
         K: From<u8>,
     {
-        type U = K;
-        const U: &'static str = "Blanket B";
+        type U_šč = K;
+        const U_šč: &'static str = "Blanket B";
     }
-
     impl<_TŠČ0, _TŠČ1> U<_TŠČ0> for _TŠČ1
     where
         _TŠČ0: From<u8>,
@@ -84,8 +83,8 @@ const _: () = {
         _TŠČ1: Dispatch,
         Self: U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
-        type U = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U;
-        const U: &'static str = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U;
+        type U = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U_šč;
+        const U: &'static str = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U_šč;
     }
 };
 */

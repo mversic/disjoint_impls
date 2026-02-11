@@ -51,33 +51,29 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized> {
-        const NAME: &'static str;
-
-        fn name() -> &'static str {
+    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+        const NAME_šč: &'static str;
+        fn name_šč() -> &'static str {
             "Default blanket"
         }
     }
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
-        const NAME: &'static str = "Blanket A";
+        const NAME_šč: &'static str = "Blanket A";
     }
     impl<U: Dispatch<Group = GroupB>> Kita0<GroupB> for U {
-        const NAME: &'static str = "Blanket B";
-
-        fn name() -> &'static str {
+        const NAME_šč: &'static str = "Blanket B";
+        fn name_šč() -> &'static str {
             "Blanket B"
         }
     }
-
     impl<_TŠČ0> Kita for _TŠČ0
     where
-        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
         _TŠČ0: Dispatch,
+        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME;
-
+        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME_šč;
         fn name() -> &'static str {
-            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::name()
+            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::name_šč()
         }
     }
 };

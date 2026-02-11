@@ -93,13 +93,13 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized> {
-        type Item;
-        fn kita(&mut self) -> Self::Item;
+    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+        type Item_šč;
+        fn kita_šč(&mut self) -> Self::Item;
     }
     impl<T: Dispatch<Group = GroupA> + Counter> Kita0<GroupA> for T {
-        type Item = u32;
-        fn kita(&mut self) -> u32 {
+        type Item_šč = u32;
+        fn kita_šč(&mut self) -> u32 {
             let _value = self.decrement();
             let _value = Self::decrement(self);
             let value = T::decrement(self);
@@ -112,38 +112,36 @@ const _: () = {
         }
     }
     impl<U: Dispatch<Group = GroupB> + Default> Kita0<GroupB> for U {
-        type Item = U;
-        fn kita(&mut self) -> Self::Item {
+        type Item_šč = U;
+        fn kita_šč(&mut self) -> Self::Item {
             <U as Default>::default()
         }
     }
-
-    pub trait Kita1<_TŠČ0: ?Sized> {
-        type Item;
-        fn kita(&mut self) -> Self::Item;
+    pub trait Kita1<_TŠČ0: ?Sized>: Kita {
+        type Item_šč;
+        fn kita_šč(&mut self) -> Self::Item;
     }
     impl<T: Dispatch<Group = GroupA>> Kita1<GroupA> for (T,) {
-        type Item = u32;
-        fn kita(&mut self) -> u32 {
+        type Item_šč = u32;
+        fn kita_šč(&mut self) -> u32 {
             let a: Self::Item = <u32 as Kita>::kita(&mut 33);
             a
         }
     }
     impl<U: Dispatch<Group = GroupB> + Default> Kita1<GroupB> for (U,) {
-        type Item = U;
-        fn kita(&mut self) -> Self::Item {
+        type Item_šč = U;
+        fn kita_šč(&mut self) -> Self::Item {
             <U as Default>::default()
         }
     }
-
     impl<_TŠČ0> Kita for _TŠČ0
     where
         _TŠČ0: Dispatch,
         Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
-        type Item = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item;
+        type Item = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item_šč;
         fn kita(&mut self) -> Self::Item {
-            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::kita(self)
+            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::kita_šč(self)
         }
     }
     impl<_TŠČ0> Kita for (_TŠČ0,)
@@ -151,9 +149,9 @@ const _: () = {
         _TŠČ0: Dispatch,
         Self: Kita1<<_TŠČ0 as Dispatch>::Group>,
     {
-        type Item = <Self as Kita1<<_TŠČ0 as Dispatch>::Group>>::Item;
+        type Item = <Self as Kita1<<_TŠČ0 as Dispatch>::Group>>::Item_šč;
         fn kita(&mut self) -> Self::Item {
-            <Self as Kita1<<_TŠČ0 as Dispatch>::Group>>::kita(self)
+            <Self as Kita1<<_TŠČ0 as Dispatch>::Group>>::kita_šč(self)
         }
     }
 };

@@ -49,14 +49,14 @@ trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized> {
-        fn get_name() -> &'static str;
+    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+        fn get_name_šč() -> &'static str;
     }
     impl<'_lšč0, T> Kita0<GroupA> for &'_lšč0 (T, Vec<T>)
     where
         T: Dispatch<Group = GroupA>,
     {
-        fn get_name() -> &'static str {
+        fn get_name_šč() -> &'static str {
             "Blanket A"
         }
     }
@@ -64,19 +64,17 @@ const _: () = {
     where
         Vec<X>: Dispatch<Group = GroupB>,
     {
-        fn get_name() -> &'static str {
+        fn get_name_šč() -> &'static str {
             "Blanket B"
         }
     }
-
-    impl<'_lšč0, _TŠČ0: '_lšč0, _TŠČ1: '_lšč0> Kita
-    for &'_lšč0 (_TŠČ0, Vec<_TŠČ1>)
+    impl<'_lšč0, _TŠČ0: '_lšč0, _TŠČ1: '_lšč0> Kita for &'_lšč0 (_TŠČ0, Vec<_TŠČ1>)
     where
         _TŠČ0: Dispatch,
         Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
         fn get_name() -> &'static str {
-            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::get_name()
+            <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::get_name_šč()
         }
     }
 };

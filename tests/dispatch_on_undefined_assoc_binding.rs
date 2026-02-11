@@ -61,19 +61,17 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized> {
-        const NAME: &str;
+    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized>: Kita {
+        const NAME_šč: &str;
     }
-    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA, GroupA>
-    for T {
-        const NAME: &str = "Blanket A";
+    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA, GroupA> for T {
+        const NAME_šč: &str = "Blanket A";
     }
-    impl<
-        T: Dispatch1<Group = GroupB> + Dispatch2<Group: ToString>,
-    > Kita0<<T as Dispatch2>::Group, GroupB> for T {
-        const NAME: &'static str = "Blanket B";
+    impl<T: Dispatch1<Group = GroupB> + Dispatch2<Group = _TŠČ0>, _TŠČ0: ToString>
+        Kita0<_TŠČ0, GroupB> for T
+    {
+        const NAME_šč: &'static str = "Blanket B";
     }
-
     impl<_TŠČ0> Kita for _TŠČ0
     where
         _TŠČ0: Dispatch2,
@@ -83,7 +81,7 @@ const _: () = {
         const NAME: &str = <Self as Kita0<
             <_TŠČ0 as Dispatch2>::Group,
             <_TŠČ0 as Dispatch1>::Group,
-        >>::NAME;
+        >>::NAME_šč;
     }
 };
 */

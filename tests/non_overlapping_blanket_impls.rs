@@ -47,26 +47,61 @@ trait Kita {
 }
 
 const _: () = {
-    impl<T> Kita for (T,) {
-        const NAME: &'static str = "Blanket 1";
+    pub trait Kita0: Kita {
+        const NAME_šč: &'static str;
     }
-
-    impl Kita for Option<u32> {
-        const NAME: &'static str = "Concrete Option<u32>";
+    impl<T> Kita0 for (T,) {
+        const NAME_šč: &'static str = "Blanket 1";
     }
-
-    impl<_0, _1> Kita for (_0, _1)
+    pub trait Kita1: Kita {
+        const NAME_šč: &'static str;
+    }
+    impl Kita1 for Option<u32> {
+        const NAME_šč: &'static str = "Concrete Option<u32>";
+    }
+    pub trait Kita2<_TŠČ0: ?Sized>: Kita {
+        const NAME_šč: &'static str;
+    }
+    impl<_0, _1> Kita2<GroupA> for (_0, _1)
     where
         _0: Dispatch<Group = GroupA>,
     {
-        const NAME: &'static str = "Blanket A";
+        const NAME_šč: &'static str = "Blanket A";
     }
-
-    impl<_0> Kita for (Vec<_0>, Vec<_0>)
+    pub trait Kita3<_TŠČ0: ?Sized>: Kita {
+        const NAME_šč: &'static str;
+    }
+    impl<_0> Kita3<GroupB> for (Vec<_0>, Vec<_0>)
     where
         _0: Dispatch<Group = GroupB>,
     {
-        const NAME: &'static str = "Blanket B";
+        const NAME_šč: &'static str = "Blanket B";
+    }
+    impl<_TŠČ0> Kita for (_TŠČ0,)
+    where
+        Self: Kita0,
+    {
+        const NAME: &'static str = <Self as Kita0>::NAME_šč;
+    }
+    impl Kita for Option<u32>
+    where
+        Self: Kita1,
+    {
+        const NAME: &'static str = <Self as Kita1>::NAME_šč;
+    }
+    impl<_TŠČ0, _TŠČ1> Kita for (_TŠČ0, _TŠČ1)
+    where
+        _TŠČ0: Dispatch,
+        Self: Kita2<<_TŠČ0 as Dispatch>::Group>,
+    {
+        const NAME: &'static str = <Self as Kita2<<_TŠČ0 as Dispatch>::Group>>::NAME_šč;
+    }
+    impl<_TŠČ0> Kita for (Vec<_TŠČ0>, Vec<_TŠČ0>)
+    where
+        _TŠČ0: Dispatch,
+        Self: Kita3<<_TŠČ0 as Dispatch>::Group>,
+    {
+        const NAME: &'static str = <Self as Kita3<<_TŠČ0 as Dispatch>::Group>>::NAME_šč;
     }
 };
 */

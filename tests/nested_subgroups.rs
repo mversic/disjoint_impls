@@ -72,66 +72,53 @@ pub trait Kita<A> {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ1: ?Sized, A> {
-        const NAME: &'static str;
+    pub trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
+        const NAME_šč: &'static str;
     }
     impl<T: Dispatch1<Group = GroupB>> Kita0<GroupB, u32> for T {
-        const NAME: &'static str = "Blanket B**";
+        const NAME_šč: &'static str = "Blanket B**";
     }
-
-    pub trait Kita00<_TŠČ1: ?Sized, A> {
-        const NAME: &'static str;
+    pub trait Kita00<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
+        const NAME_šč: &'static str;
     }
-    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> Kita00<GroupB, u32>
-    for T {
-        const NAME: &'static str = "Blanket AB*";
+    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> Kita00<GroupB, u32> for T {
+        const NAME_šč: &'static str = "Blanket AB*";
     }
-
-    pub trait Kita000<_TŠČ1: ?Sized, A> {
-        const NAME: &'static str;
+    pub trait Kita000<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
+        const NAME_šč: &'static str;
     }
-    impl<
-        T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>
-            + Dispatch3<Group = GroupA>,
-    > Kita000<GroupA, u32> for T {
-        const NAME: &'static str = "Blanket AAA";
+    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA> + Dispatch3<Group = GroupA>>
+        Kita000<GroupA, u32> for T
+    {
+        const NAME_šč: &'static str = "Blanket AAA";
     }
-    impl<
-        T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>
-            + Dispatch3<Group = GroupB>,
-    > Kita000<GroupB, u32> for T {
-        const NAME: &'static str = "Blanket AAB";
+    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA> + Dispatch3<Group = GroupB>>
+        Kita000<GroupB, u32> for T
+    {
+        const NAME_šč: &'static str = "Blanket AAB";
     }
-
     impl<_TŠČ0> Kita00<GroupA, u32> for _TŠČ0
     where
         _TŠČ0: Dispatch3,
         Self: Kita000<<_TŠČ0 as Dispatch3>::Group, u32>,
     {
-        const NAME: &'static str = <Self as Kita000<
-            <_TŠČ0 as Dispatch3>::Group,
-            u32,
-        >>::NAME;
+        const NAME_šč: &'static str =
+            <Self as Kita000<<_TŠČ0 as Dispatch3>::Group, u32>>::NAME_šč;
     }
     impl<_TŠČ0> Kita0<GroupA, u32> for _TŠČ0
     where
         _TŠČ0: Dispatch2,
         Self: Kita00<<_TŠČ0 as Dispatch2>::Group, u32>,
     {
-        const NAME: &'static str = <Self as Kita00<
-            <_TŠČ0 as Dispatch2>::Group,
-            u32,
-        >>::NAME;
+        const NAME_šč: &'static str =
+            <Self as Kita00<<_TŠČ0 as Dispatch2>::Group, u32>>::NAME_šč;
     }
     impl<_TŠČ0> Kita<u32> for _TŠČ0
     where
         _TŠČ0: Dispatch1,
         Self: Kita0<<_TŠČ0 as Dispatch1>::Group, u32>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <_TŠČ0 as Dispatch1>::Group,
-            u32,
-        >>::NAME;
+        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch1>::Group, u32>>::NAME_šč;
     }
 };
 */

@@ -1,0 +1,6 @@
+error: #cfg attribute on associated type bindings is not supported
+  --> tests/ui_fail/guarded_assoc_binding.rs:16:9
+   |
+16 | /         #[cfg(feature = "feat_a")]
+17 | |         T: Dispatch<Group: Marker>,
+   | |__________________________________^

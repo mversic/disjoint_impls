@@ -45,30 +45,27 @@ pub trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized> {
-        const NAME: &'static str;
+    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+        const NAME_šč: &'static str;
     }
     impl<T> Kita0<GroupA> for T
     where
         Option<T>: Dispatch<Group = GroupA>,
     {
-        const NAME: &'static str = "Blanket A";
+        const NAME_šč: &'static str = "Blanket A";
     }
     impl<T> Kita0<GroupB> for T
     where
         Option<T>: Dispatch<Group = GroupB>,
     {
-        const NAME: &'static str = "Blanket B";
+        const NAME_šč: &'static str = "Blanket B";
     }
-
     impl<_TŠČ0> Kita for _TŠČ0
     where
         Option<_TŠČ0>: Dispatch,
         Self: Kita0<<Option<_TŠČ0> as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <Option<_TŠČ0> as Dispatch>::Group,
-        >>::NAME;
+        const NAME: &'static str = <Self as Kita0<<Option<_TŠČ0> as Dispatch>::Group>>::NAME_šč;
     }
 };
 */

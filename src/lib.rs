@@ -913,20 +913,16 @@ fn compute_inherent_args(
     impl_indices: &[usize],
     all_descs: &[ItemImplDesc],
 ) -> Vec<Vec<syn::GenericArgument>> {
-    if !builder.id.is_inherent() || impl_indices.len() <= 1 && builder.subgroups.is_empty() {
+    if !builder.id.is_inherent() {
         return Vec::new();
     }
-
-    let Some((&_, (rows, _))) = builder.trait_bounds.0.get_index(0) else {
-        return Vec::new();
-    };
 
     let group_impls = impl_indices
         .iter()
         .map(|&idx| &all_descs[idx])
         .collect::<Vec<_>>();
 
-    let nrows = rows.len().min(group_impls.len());
+    let nrows = group_impls.len();
     if nrows == 0 {
         return Vec::new();
     }
@@ -1007,7 +1003,7 @@ fn instantiate_impl_group(
         .map(|&idx| all_impls[idx].take().unwrap())
         .collect::<Vec<_>>();
 
-    let impls = if id.is_inherent() && (impl_items.len() > 1 || !subgroups.is_empty()) {
+    let impls = if id.is_inherent() {
         impl_items.into_iter().zip_eq(args).collect()
     } else {
         impl_items
@@ -1035,105 +1031,100 @@ fn build_disjoint_impl_group(
     let mut item_impls = Vec::new();
     let mut subgroup_tokens = Vec::new();
 
-    if impl_group.impls.len() > 1 || !impl_group.subgroups.is_empty() {
-        let helper_trait = helper_trait::generate(ctx, &impl_group);
-        helper_traits.push(helper_trait.clone());
+    let helper_trait = helper_trait::generate(ctx, &impl_group);
+    helper_traits.push(helper_trait.clone());
 
-        if let Some(main_impl) = main_trait::generate_impl(ctx, &impl_group) {
-            trait_impls.push(main_impl);
-        }
-
-        let mut dispatch_bindings_cnt: usize = impl_group
-            .trait_bounds
-            .0
-            .iter()
-            .map(|(_, bindings)| bindings.1.len())
-            .sum();
-
-        let mut subgroup_trait = helper_trait;
-        subgroup_trait.generics.params = subgroup_trait
-            .generics
-            .params
-            .into_iter()
-            .filter(|param| {
-                if let syn::GenericParam::Type(_) = param
-                    && dispatch_bindings_cnt > 0
-                {
-                    dispatch_bindings_cnt -= 1;
-                    return false;
-                }
-
-                true
-            })
-            .collect();
-
-        let subgroup_impls = core::mem::take(&mut impl_group.subgroups);
-        for (subgroup_idx, (mut subgroup, common_args)) in subgroup_impls.into_iter().enumerate() {
-            let subgroup_trait_ident = &subgroup_trait.ident;
-
-            let is_trait_inherent = subgroup.id.is_inherent();
-            if let Some(trait_) = &mut subgroup.id.trait_ {
-                trait_.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
-
-                subgroup.impls.iter_mut().for_each(|(impl_, _)| {
-                    impl_.trait_ = Some((None, trait_.clone(), Default::default()));
-                })
-            } else {
-                let helper_trait_args = &subgroup.params;
-
-                subgroup.id.trait_ =
-                    Some(parse_quote! { #subgroup_trait_ident<#helper_trait_args> });
-
-                for (impl_, args) in &mut subgroup.impls {
-                    traitize_inherent_impl(args, impl_, &subgroup.id.self_ty);
-                }
-            }
-
-            ctx.path.push(subgroup_idx);
-            let (tokens, mut subgroup_main_impls) = build_disjoint_impl_group(subgroup, ctx);
-            ctx.path.pop();
-
-            subgroup_tokens.push(tokens);
-            subgroup_main_impls.iter_mut().for_each(|trait_impl| {
-                let trait_path = &mut trait_impl.trait_.as_mut().unwrap().1;
-                let last_seg = trait_path.segments.last_mut().unwrap();
-
-                prepend_args(&mut last_seg.arguments, &common_args);
-
-                if is_trait_inherent {
-                    match &mut last_seg.arguments {
-                        syn::PathArguments::None => {}
-                        syn::PathArguments::AngleBracketed(bracketed) => {
-                            let replace_at = bracketed.args.len() - common_args.len();
-                            let mut args = core::mem::take(&mut bracketed.args)
-                                .into_iter()
-                                .collect::<Vec<_>>();
-
-                            args.splice(
-                                replace_at..,
-                                common_args.iter().cloned().map(syn::GenericArgument::Type),
-                            );
-
-                            bracketed.args = args.into_iter().collect();
-                        }
-                        syn::PathArguments::Parenthesized(_) => {
-                            unreachable!("Not a valid trait name")
-                        }
-                    }
-                }
-            });
-
-            subgroup_tokens.extend(
-                subgroup_main_impls
-                    .into_iter()
-                    .map(|trait_impl| quote!(#trait_impl)),
-            );
-        }
-
-        item_impls.extend(disjoint::generate(ctx, impl_group));
-    } else if let Some((main_impl, _)) = impl_group.impls.pop() {
+    if let Some(main_impl) = main_trait::generate_impl(ctx, &impl_group) {
         trait_impls.push(main_impl);
     }
+
+    let mut dispatch_bindings_cnt: usize = impl_group
+        .trait_bounds
+        .0
+        .iter()
+        .map(|(_, bindings)| bindings.1.len())
+        .sum();
+
+    let mut subgroup_trait = helper_trait;
+    subgroup_trait.generics.params = subgroup_trait
+        .generics
+        .params
+        .into_iter()
+        .filter(|param| {
+            if let syn::GenericParam::Type(_) = param
+                && dispatch_bindings_cnt > 0
+            {
+                dispatch_bindings_cnt -= 1;
+                return false;
+            }
+
+            true
+        })
+        .collect();
+
+    let subgroup_impls = core::mem::take(&mut impl_group.subgroups);
+    for (subgroup_idx, (mut subgroup, common_args)) in subgroup_impls.into_iter().enumerate() {
+        let subgroup_trait_ident = &subgroup_trait.ident;
+
+        let is_trait_inherent = subgroup.id.is_inherent();
+        if let Some(trait_) = &mut subgroup.id.trait_ {
+            trait_.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
+
+            subgroup.impls.iter_mut().for_each(|(impl_, _)| {
+                impl_.trait_ = Some((None, trait_.clone(), Default::default()));
+            })
+        } else {
+            let helper_trait_args = &subgroup.params;
+
+            subgroup.id.trait_ = Some(parse_quote! { #subgroup_trait_ident<#helper_trait_args> });
+
+            for (impl_, args) in &mut subgroup.impls {
+                traitize_inherent_impl(args, impl_, &subgroup.id.self_ty);
+            }
+        }
+
+        ctx.path.push(subgroup_idx);
+        let (tokens, mut subgroup_main_impls) = build_disjoint_impl_group(subgroup, ctx);
+        ctx.path.pop();
+
+        subgroup_tokens.push(tokens);
+        subgroup_main_impls.iter_mut().for_each(|trait_impl| {
+            let trait_path = &mut trait_impl.trait_.as_mut().unwrap().1;
+            let last_seg = trait_path.segments.last_mut().unwrap();
+
+            prepend_args(&mut last_seg.arguments, &common_args);
+
+            if is_trait_inherent {
+                match &mut last_seg.arguments {
+                    syn::PathArguments::None => {}
+                    syn::PathArguments::AngleBracketed(bracketed) => {
+                        let replace_at = bracketed.args.len() - common_args.len();
+                        let mut args = core::mem::take(&mut bracketed.args)
+                            .into_iter()
+                            .collect::<Vec<_>>();
+
+                        args.splice(
+                            replace_at..,
+                            common_args.iter().cloned().map(syn::GenericArgument::Type),
+                        );
+
+                        bracketed.args = args.into_iter().collect();
+                    }
+                    syn::PathArguments::Parenthesized(_) => {
+                        unreachable!("Not a valid trait name")
+                    }
+                }
+            }
+        });
+
+        subgroup_tokens.extend(
+            subgroup_main_impls
+                .into_iter()
+                .map(|trait_impl| quote!(#trait_impl)),
+        );
+    }
+
+    item_impls.extend(disjoint::generate(ctx, impl_group));
 
     let tokens = quote! {
         #( #helper_traits )*

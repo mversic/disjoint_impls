@@ -62,25 +62,24 @@ const _: () = {
     /// # Safety
     ///
     /// This trait is unsafe
-    pub unsafe trait Kita0<_TŠČ1: ?Sized, U>: Dispatch {
+    pub unsafe trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
         /// # Safety
         ///
         /// This function is unsafe
-        unsafe fn kita() -> &'static str {
+        unsafe fn kita_šč() -> &'static str {
             "Default blanket"
         }
     }
     unsafe impl<U, T: Dispatch<Group = GroupA>> Kita0<GroupA, U> for T {
-        unsafe fn kita() -> &'static str {
+        unsafe fn kita_šč() -> &'static str {
             "Blanket A"
         }
     }
     unsafe impl<U, T: Dispatch<Group = GroupB>> Kita0<GroupB, U> for T {
-        unsafe fn kita() -> &'static str {
+        unsafe fn kita_šč() -> &'static str {
             "Blanket B"
         }
     }
-
     unsafe impl<_TŠČ0, _TŠČ1> Kita<_TŠČ0> for _TŠČ1
     where
         Self: Dispatch,
@@ -88,7 +87,7 @@ const _: () = {
         Self: Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
         unsafe fn kita() -> &'static str {
-            unsafe { <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita() }
+            unsafe { <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita_šč() }
         }
     }
 };

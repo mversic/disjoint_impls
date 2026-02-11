@@ -49,23 +49,22 @@ where
 }
 
 const _: () = {
-    pub trait Kita0<'a, 'b: 'a, _TŠČ3: ?Sized, U: 'b>
+    pub trait Kita0<'a, 'b: 'a, _TŠČ3: ?Sized, _TŠČ0: 'b>: Kita<'a, 'b, _TŠČ0>
     where
-        U: 'a,
+        _TŠČ0: 'a,
     {
-        fn get_name(&'b self) -> &'a str;
+        fn get_name_šč(&'b self) -> &'a str;
     }
     impl<'a, 'x: 'a, T: Dispatch<Group = GroupA>> Kita0<'a, 'x, GroupA, u32> for T {
-        fn get_name(&'x self) -> &'a str {
+        fn get_name_šč(&'x self) -> &'a str {
             "Blanket A"
         }
     }
     impl<'a, 'b: 'a, T: Dispatch<Group = GroupB>> Kita0<'a, 'b, GroupB, u32> for T {
-        fn get_name(&'b self) -> &'a str {
+        fn get_name_šč(&'b self) -> &'a str {
             "Blanket B"
         }
     }
-
     impl<'_lšč0, '_lšč1, _TŠČ0> Kita<'_lšč0, '_lšč1, u32> for _TŠČ0
     where
         u32: '_lšč0,
@@ -76,12 +75,9 @@ const _: () = {
         Self: Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>,
     {
         fn get_name(&'_lšč1 self) -> &'_lšč0 str {
-            <Self as Kita0<
-                '_lšč0,
-                '_lšč1,
-                <_TŠČ0 as Dispatch>::Group,
-                u32,
-            >>::get_name(self)
+            <Self as Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>>::get_name_šč(
+                self,
+            )
         }
     }
 };

@@ -51,27 +51,24 @@ where
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ1: ?Sized, U>: Dispatch
+    pub trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0>
     where
-        U: From<u8> + From<bool>,
+        _TŠČ0: From<u8> + From<bool>,
     {
-        const NAME: &'static str;
+        const NAME_šč: &'static str;
     }
     impl<U, T: Dispatch<Group = GroupA>> Kita0<GroupA, U> for T
     where
         U: From<u8> + From<bool>,
     {
-        const NAME: &'static str = "Blanket A";
+        const NAME_šč: &'static str = "Blanket A";
     }
     impl<U, T: Dispatch<Group = GroupB>> Kita0<GroupB, U> for T
     where
         U: From<u8> + From<bool>,
     {
-        const NAME: &'static str = "Blanket B";
+        const NAME_šč: &'static str = "Blanket B";
     }
-
-    // TODO: Some of the bounds are repeated. Remove duplication
-
     impl<_TŠČ0, _TŠČ1> Kita<_TŠČ0> for _TŠČ1
     where
         _TŠČ0: From<u8> + From<bool>,
@@ -81,10 +78,8 @@ const _: () = {
         _TŠČ1: Dispatch,
         Self: Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <_TŠČ1 as Dispatch>::Group,
-            _TŠČ0,
-        >>::NAME;
+        const NAME: &'static str =
+            <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::NAME_šč;
     }
 };
 */

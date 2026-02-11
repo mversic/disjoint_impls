@@ -6,9 +6,71 @@ impl<'a> Validator<'a> {
     fn new(generics: &'a syn::Generics) -> Self {
         Self(generics.type_params().map(|param| &param.ident).collect())
     }
+
+    fn is_guard_attr(attr: &syn::Attribute) -> bool {
+        attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr")
+    }
+
+    fn has_guard_attr(attrs: &[syn::Attribute]) -> bool {
+        attrs.iter().any(Self::is_guard_attr)
+    }
+
+    fn trait_bound_has_assoc_binding(bound: &syn::TraitBound) -> bool {
+        fn args_have_assoc_bindings(args: &syn::PathArguments) -> bool {
+            let syn::PathArguments::AngleBracketed(bracketed) = args else {
+                return false;
+            };
+
+            for arg in &bracketed.args {
+                match arg {
+                    syn::GenericArgument::AssocType(_) | syn::GenericArgument::Constraint(_) => {
+                        return true;
+                    }
+                    syn::GenericArgument::Type(syn::Type::Path(type_path)) => {
+                        if type_path
+                            .path
+                            .segments
+                            .iter()
+                            .any(|seg| args_have_assoc_bindings(&seg.arguments))
+                        {
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            false
+        }
+
+        bound
+            .path
+            .segments
+            .iter()
+            .any(|seg| args_have_assoc_bindings(&seg.arguments))
+    }
 }
 
 impl Visit<'_> for Validator<'_> {
+    fn visit_type_param(&mut self, node: &syn::TypeParam) {
+        let msg = "#cfg attribute on associated type bindings is not supported";
+
+        let has_guard = Self::has_guard_attr(&node.attrs);
+        let has_assoc_binding = node.bounds.iter().any(|bound| {
+            let syn::TypeParamBound::Trait(bound) = bound else {
+                return false;
+            };
+
+            Self::trait_bound_has_assoc_binding(bound)
+        });
+
+        if has_guard && has_assoc_binding {
+            abort!(node, msg);
+        }
+
+        syn::visit::visit_type_param(self, node);
+    }
+
     fn visit_type_path(&mut self, node: &syn::TypePath) {
         let mut segments = node.path.segments.iter();
         syn::visit::visit_type_path(self, node);

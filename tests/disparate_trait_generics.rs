@@ -52,51 +52,44 @@ pub trait Kita<U> {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ1: ?Sized, U> {
-        const NAME: &'static str;
+    pub trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
+        const NAME_šč: &'static str;
     }
     impl<T, U, C> Kita0<GroupA, (U, C)> for T
     where
         (U, C): Dispatch<Group = GroupA>,
     {
-        const NAME: &'static str = "1st Blanket A";
+        const NAME_šč: &'static str = "1st Blanket A";
     }
     impl<T, U, C> Kita0<GroupB, (U, C)> for T
     where
         (U, C): Dispatch<Group = GroupB>,
     {
-        const NAME: &'static str = "1st Blanket B";
+        const NAME_šč: &'static str = "1st Blanket B";
     }
-
-    pub trait Kita1<_TŠČ1: ?Sized, U> {
-        const NAME: &'static str;
+    pub trait Kita1<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
+        const NAME_šč: &'static str;
     }
     impl<T: Dispatch<Group = GroupA>> Kita1<GroupA, (i32,)> for T {
-        const NAME: &'static str = "2nd Blanket A";
+        const NAME_šč: &'static str = "2nd Blanket A";
     }
     impl<T: Dispatch<Group = GroupB>> Kita1<GroupB, (i32,)> for T {
-        const NAME: &'static str = "2nd Blanket B";
+        const NAME_šč: &'static str = "2nd Blanket B";
     }
-
     impl<_TŠČ0, _TŠČ1, _TŠČ2> Kita<(_TŠČ0, _TŠČ1)> for _TŠČ2
     where
         (_TŠČ0, _TŠČ1): Dispatch,
         Self: Kita0<<(_TŠČ0, _TŠČ1) as Dispatch>::Group, (_TŠČ0, _TŠČ1)>,
     {
-        const NAME: &'static str = <Self as Kita0<
-            <(_TŠČ0, _TŠČ1) as Dispatch>::Group,
-            (_TŠČ0, _TŠČ1),
-        >>::NAME;
+        const NAME: &'static str =
+            <Self as Kita0<<(_TŠČ0, _TŠČ1) as Dispatch>::Group, (_TŠČ0, _TŠČ1)>>::NAME_šč;
     }
     impl<_TŠČ0> Kita<(i32,)> for _TŠČ0
     where
         _TŠČ0: Dispatch,
         Self: Kita1<<_TŠČ0 as Dispatch>::Group, (i32,)>,
     {
-        const NAME: &'static str = <Self as Kita1<
-            <_TŠČ0 as Dispatch>::Group,
-            (i32,),
-        >>::NAME;
+        const NAME: &'static str = <Self as Kita1<<_TŠČ0 as Dispatch>::Group, (i32,)>>::NAME_šč;
     }
 };
 */

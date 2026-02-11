@@ -65,38 +65,51 @@ pub trait Kita<U, V> {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ2: ?Sized, U, V> {
-        fn kita(_a: U, _b: V) -> String {
+    pub trait Kita0<_TŠČ2: ?Sized, _TŠČ0, _TŠČ1>: Kita<_TŠČ0, _TŠČ1> {
+        fn kita_šč(_a: _TŠČ0, _b: _TŠČ1) -> String {
             "Default Blanket".to_owned()
         }
     }
     impl<T: Dispatch<Group = (U, V)>, U, V> Kita0<(U, V), (U,), V> for T {
-        fn kita(_a: (U,), _b: V) -> String {
+        fn kita_šč(_a: (U,), _b: V) -> String {
             "Generic Blanket A".to_owned()
         }
     }
-    impl<T: Dispatch<Group = [(U, V); 1]>, U: ToString, V> Kita0<[(U, V); 1], (V,), U>
-    for T {
-        fn kita(_a: (V,), b: U) -> String {
+    impl<T: Dispatch<Group = [(U, V); 1]>, U: ToString, V> Kita0<[(U, V); 1], (V,), U> for T {
+        fn kita_šč(_a: (V,), b: U) -> String {
             b.to_string()
         }
     }
-
+    pub trait Kita1<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ0, _TŠČ1>: Kita<_TŠČ0, _TŠČ1> {
+        fn kita_šč(_a: _TŠČ0, _b: _TŠČ1) -> String {
+            "Default Blanket".to_owned()
+        }
+    }
+    impl<T: Dispatch<Group = (U,)>, U: Tr<A = A>, A> Kita1<(U,), A, u32, U> for T {}
     impl<_TŠČ0, _TŠČ1, _TŠČ2> Kita<(_TŠČ0,), _TŠČ1> for _TŠČ2
     where
         _TŠČ2: Dispatch,
         Self: Kita0<<_TŠČ2 as Dispatch>::Group, (_TŠČ0,), _TŠČ1>,
     {
         fn kita(_a: (_TŠČ0,), _b: _TŠČ1) -> String {
-            <Self as Kita0<
-                <_TŠČ2 as Dispatch>::Group,
-                (_TŠČ0,),
-                _TŠČ1,
-            >>::kita(_a, _b)
+            <Self as Kita0<<_TŠČ2 as Dispatch>::Group, (_TŠČ0,), _TŠČ1>>::kita_šč(_a, _b)
         }
     }
-
-    impl<T: Dispatch<Group = (U,)>, U: Tr<A = A>, A> Kita<u32, U> for T {}
+    impl<_TŠČ0, _TŠČ1> Kita<u32, _TŠČ0> for _TŠČ1
+    where
+        _TŠČ1: Dispatch,
+        _TŠČ0: Tr,
+        Self: Kita1<<_TŠČ1 as Dispatch>::Group, <_TŠČ0 as Tr>::A, u32, _TŠČ0>,
+    {
+        fn kita(_a: u32, _b: _TŠČ0) -> String {
+            <Self as Kita1<
+                <_TŠČ1 as Dispatch>::Group,
+                <_TŠČ0 as Tr>::A,
+                u32,
+                _TŠČ0,
+            >>::kita_šč(_a, _b)
+        }
+    }
 };
 */
 

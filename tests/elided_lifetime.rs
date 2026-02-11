@@ -49,21 +49,14 @@ pub trait Kita<'a, 'b, U> {
 }
 
 const _: () = {
-    pub trait Kita0<'a, 'b, _TŠČ3: ?Sized, U> {
-        fn get_name(&self) -> &str;
+    pub trait Kita0<'a, 'b, _TŠČ3: ?Sized, _TŠČ0>: Kita<'a, 'b, _TŠČ0> {
+        fn get_name_šč(&self) -> &str;
     }
-    impl<
-        '_lšč0,
-        '_lšč1,
-        '_lšč2,
-        '_lšč3,
-        T,
-        U,
-    > Kita0<'_lšč0, '_lšč1, &'_lšč3 GroupA, U> for &'_lšč2 T
+    impl<'_lšč0, '_lšč1, '_lšč2, '_lšč3, T, U> Kita0<'_lšč0, '_lšč1, &'_lšč3 GroupA, U> for &'_lšč2 T
     where
         &'_lšč2 T: Dispatch<Group = &'_lšč3 GroupA>,
     {
-        fn get_name(&self) -> &str {
+        fn get_name_šč(&self) -> &str {
             "Blanket A"
         }
     }
@@ -71,21 +64,12 @@ const _: () = {
     where
         &'c T: Dispatch<Group = &'_lšč0 GroupB>,
     {
-        fn get_name(&self) -> &str {
+        fn get_name_šč(&self) -> &str {
             "Blanket B"
         }
     }
-
-    // TODO: lifetime bounds are empty. Remove them
-
-    impl<
-        '_lšč0,
-        '_lšč1,
-        '_lšč2,
-        '_lšč3,
-        _TŠČ0,
-        _TŠČ1: '_lšč2,
-    > Kita<'_lšč0, '_lšč1, _TŠČ0> for &'_lšč2 _TŠČ1
+    impl<'_lšč0, '_lšč1, '_lšč2, '_lšč3, _TŠČ0, _TŠČ1: '_lšč2> Kita<'_lšč0, '_lšč1, _TŠČ0>
+        for &'_lšč2 _TŠČ1
     where
         '_lšč0:,
         '_lšč1:,
@@ -98,7 +82,7 @@ const _: () = {
                 '_lšč1,
                 <&'_lšč2 _TŠČ1 as Dispatch>::Group,
                 _TŠČ0,
-            >>::get_name(self)
+            >>::get_name_šč(self)
         }
     }
 };

@@ -37,21 +37,44 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    impl<T> Wrapper<T>
+    pub trait Wrapper0<_TŠČ1: ?Sized, _TŠČ0> {
+        fn kita_šč() -> &'static str;
+    }
+    impl<T> Wrapper0<GroupA, T> for Wrapper<T>
     where
         Option<T>: Dispatch<Group = GroupA>,
     {
-        fn kita() -> &'static str {
+        fn kita_šč() -> &'static str {
             "Blanket A"
         }
     }
-
-    impl<T> Wrapper<T>
+    pub trait Wrapper1<_TŠČ1: ?Sized, _TŠČ0> {
+        fn kita_šč() -> String;
+    }
+    impl<T> Wrapper1<GroupB, T> for Wrapper<T>
     where
         T: Dispatch<Group = GroupB>,
     {
-        fn kita() -> String {
+        fn kita_šč() -> String {
             "Blanket B".to_owned()
+        }
+    }
+    impl<_TŠČ0> Wrapper<_TŠČ0>
+    where
+        Option<_TŠČ0>: Dispatch,
+        Self: Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>,
+    {
+        fn kita() -> &'static str {
+            <Self as Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>>::kita_šč()
+        }
+    }
+    impl<_TŠČ0> Wrapper<_TŠČ0>
+    where
+        _TŠČ0: Dispatch,
+        Self: Wrapper1<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
+    {
+        fn kita() -> String {
+            <Self as Wrapper1<<_TŠČ0 as Dispatch>::Group, _TŠČ0>>::kita_šč()
         }
     }
 };
