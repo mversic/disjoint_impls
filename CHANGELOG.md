@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-02-12
+
+### Added
+- rename helper trait items to disambiguate from original trait
+
+### Fixed
+- don't overwrite trait args in nested subgroups
+- disallow cfg attributes on params with bounds with assoc bindings
+
 ## [1.3.6] - 2026-01-22
 ### Fixed
 - replace bindings containing unknown params with fully qualified assoc bindings
