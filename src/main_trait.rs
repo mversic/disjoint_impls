@@ -2,6 +2,8 @@
 
 use syn::{parse_quote, visit_mut::VisitMut};
 
+use crate::helper_trait::common_impl_attrs;
+
 use super::*;
 
 struct ImplItemResolver {
@@ -29,6 +31,7 @@ pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Optio
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group.id))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(impl_group));
 
+    main_trait_impl.attrs.extend(common_impl_attrs(impl_group));
     main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
     let where_clause = main_trait_impl.generics.make_where_clause();
 

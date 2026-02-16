@@ -64,7 +64,11 @@ pub struct LocalType<T>(T);
 
 disjoint_impls! {
     #[disjoint_impls(remote)]
-    pub trait ForeignKita {}
+    pub trait ForeignKita {
+        fn kita() {
+            unreachable!("method is accessed through the original trait");
+        }
+    }
 
     impl<T: Dispatch<Group = u32>> ForeignKita for LocalType<T> {}
     impl<T: Dispatch<Group = i32>> ForeignKita for LocalType<T> {}

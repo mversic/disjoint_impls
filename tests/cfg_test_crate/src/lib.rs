@@ -1,9 +1,11 @@
 use disjoint_impls::disjoint_impls;
 
+#[cfg(not(feature = "feat_a"))]
+pub struct LocalType<T>(T);
+
 pub trait Dispatch1 {
     type Group;
 }
-
 pub trait Dispatch2 {
     type Group;
 }
@@ -17,6 +19,9 @@ impl Dispatch1 for String {
 
 impl Dispatch2 for String {
     type Group = GroupA;
+}
+impl Dispatch1 for i32 {
+    type Group = GroupB;
 }
 impl Dispatch2 for i32 {
     type Group = GroupB;
@@ -35,10 +40,8 @@ disjoint_impls! {
     }
 
     impl<
-        #[cfg(all(not(feature = "feat_a"), feature = "feat_b"))] T: Dispatch1 + Dispatch2,
-        #[cfg(all(not(feature = "feat_a"), not(feature = "feat_b")))] T: Dispatch1 + Dispatch2,
-        #[cfg(all(feature = "feat_a", not(feature = "feat_b")))] T: Dispatch1 + Dispatch2,
-        #[cfg(all(feature = "feat_a", feature = "feat_b"))] T: Dispatch1 + Dispatch2,
+        #[cfg(not(feature = "feat_a"))] T: Dispatch1,
+        #[cfg(feature = "feat_a")] T: Dispatch2,
     > Kita for T
     where
         T: Dispatch1<Group: WithoutFeatA>,
@@ -51,8 +54,9 @@ disjoint_impls! {
         const NAME: &'static str = "Blanket A with feat_a";
     }
 
-    impl<T: Dispatch2<Group = GroupB>> Kita for T {
-        const NAME: &'static str = "Blanket B";
+    #[cfg(not(feature = "feat_a"))]
+    impl<T: Dispatch1<Group = GroupB>> Kita for LocalType<T> {
+        const NAME: &'static str = "Blanket B without feat_a";
     }
 }
 
@@ -64,13 +68,12 @@ mod tests {
     #[cfg(not(feature = "feat_a"))]
     fn kita_without_feat_a() {
         assert_eq!("Blanket A without feat_a", String::NAME);
-        assert_eq!("Blanket B", i32::NAME);
+        assert_eq!("Blanket B without feat_a", LocalType::<i32>::NAME);
     }
 
     #[test]
     #[cfg(feature = "feat_a")]
     fn kita_with_feat_a() {
         assert_eq!("Blanket A with feat_a", String::NAME);
-        assert_eq!("Blanket B", i32::NAME);
     }
 }

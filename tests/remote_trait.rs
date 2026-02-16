@@ -27,7 +27,7 @@ disjoint_impls! {
     #[disjoint_impls(remote)]
     pub trait ForeignKita<U> {
         fn kita() -> &'static str {
-            "Default blanket"
+            unreachable!("read from the original")
         }
     }
 
