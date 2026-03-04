@@ -397,21 +397,17 @@ pub mod param {
             }
         }
 
-        fn try_replace_type_path_with_type(&self, ty: &syn::Path) -> Option<syn::Type> {
-            let first_seg = ty.segments.first().unwrap();
-
-            if let Some(&replacement) = self.type_param_replacements.get(&first_seg.ident) {
-                return Some(crate::normalize::replace_path(ty, replacement));
-            }
-
-            None
+        fn type_replacement_for_path(&self, path: &syn::Path) -> Option<syn::Type> {
+            let first_seg = path.segments.first().unwrap();
+            let &replacement = self.type_param_replacements.get(&first_seg.ident)?;
+            Some(crate::normalize::replace_path(path, replacement))
         }
 
-        fn try_replace_expr_path_with_type(&self, path: &mut syn::Path) {
+        fn try_replace_path_with_expr_type(&self, path: &mut syn::Path) {
             let first_seg = path.segments.first_mut().unwrap();
 
-            if let Some(replacement) = self.const_param_replacements.get(&first_seg.ident) {
-                *first_seg = parse_quote!(#replacement);
+            if let Some(Expr::Ident(r)) = self.const_param_replacements.get(&first_seg.ident) {
+                *first_seg = parse_quote!(#r);
             }
         }
     }
@@ -424,33 +420,52 @@ pub mod param {
         }
 
         fn visit_type_mut(&mut self, node: &mut syn::Type) {
-            match node {
-                syn::Type::Path(ty) => {
-                    syn::visit_mut::visit_type_path_mut(self, ty);
+            syn::visit_mut::visit_type_mut(self, node);
 
-                    if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
-                        *node = new_ty;
-                    } else {
-                        self.try_replace_expr_path_with_type(&mut ty.path);
-                    }
+            if let syn::Type::Path(ty) = node {
+                if let Some(new_ty) = self.type_replacement_for_path(&ty.path) {
+                    *node = new_ty;
+                } else {
+                    self.try_replace_path_with_expr_type(&mut ty.path);
                 }
-                _ => syn::visit_mut::visit_type_mut(self, node),
             }
         }
 
         fn visit_expr_mut(&mut self, node: &mut syn::Expr) {
-            match node {
-                syn::Expr::Path(ty) => {
-                    syn::visit_mut::visit_expr_path_mut(self, ty);
+            syn::visit_mut::visit_expr_mut(self, node);
 
-                    // TODO: struct name can clash with type/const param name
-                    if let Some(new_ty) = self.try_replace_type_path_with_type(&ty.path) {
-                        *node = parse_quote!(#new_ty);
-                    } else {
-                        self.try_replace_expr_path_with_type(&mut ty.path);
-                    }
+            if let syn::Expr::Path(ty) = node {
+                // TODO: struct name can clash with type/const param name
+                if let Some(new_ty) = self.type_replacement_for_path(&ty.path) {
+                    *node = parse_quote!(#new_ty);
+                } else {
+                    self.try_replace_path_with_expr_type(&mut ty.path);
                 }
-                _ => syn::visit_mut::visit_expr_mut(self, node),
+            }
+        }
+
+        fn visit_angle_bracketed_generic_arguments_mut(
+            &mut self,
+            node: &mut syn::AngleBracketedGenericArguments,
+        ) {
+            for arg in &mut node.args {
+                syn::visit_mut::visit_generic_argument_mut(self, arg);
+
+                let path = match arg {
+                    syn::GenericArgument::Type(syn::Type::Path(path)) => &path.path,
+                    syn::GenericArgument::Const(syn::Expr::Path(path)) => &path.path,
+                    _ => continue,
+                };
+
+                let Some(ident) = path.get_ident() else {
+                    return;
+                };
+
+                if let Some(&replacement) = self.type_param_replacements.get(ident) {
+                    *arg = syn::GenericArgument::Type(replacement.clone());
+                } else if let Some(r) = self.const_param_replacements.get(ident) {
+                    *arg = syn::GenericArgument::Const(parse_quote!(#r));
+                }
             }
         }
     }
