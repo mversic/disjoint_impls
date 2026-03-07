@@ -14,7 +14,7 @@ note: required for `str` to implement `Kita0<GroupB, str, u32>`
 34 | |     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita<U, V> for T {
    | |                                                -                    ^
    | |                                                |
-   | |                                                unsatisfied trait bound introduced here
+   | |                                                unsatisfied trait bound implicitly introduced here
 ...  |
 39 | | }
    | |_^
@@ -90,7 +90,7 @@ note: required for `[u8]` to implement `Kita0<GroupB, str, u32>`
 34 | |     impl<T: Dispatch<Group = GroupB> + ?Sized, U, V> Kita<U, V> for T {
    | |                                                -                    ^
    | |                                                |
-   | |                                                unsatisfied trait bound introduced here
+   | |                                                unsatisfied trait bound implicitly introduced here
 ...  |
 39 | | }
    | |_^

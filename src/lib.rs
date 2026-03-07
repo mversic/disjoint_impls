@@ -1352,6 +1352,10 @@ impl Visit<'_> for ItemImplDescVisitor {
     }
 
     fn visit_trait_bound(&mut self, node: &syn::TraitBound) {
+        if matches!(node.modifier, syn::TraitBoundModifier::Maybe(_)) {
+            return;
+        }
+
         self.curr_trait_bound = Some(node.clone().into());
 
         let trait_bound_ident = (
