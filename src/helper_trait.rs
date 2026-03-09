@@ -47,7 +47,6 @@ pub fn generate(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> syn::ItemT
         .filter(|attr| !is_remote(attr))
         .collect();
 
-    helper_trait.vis = syn::Visibility::Public(parse_quote!(pub));
     helper_trait.attrs.extend(common_impl_attrs(impl_group));
     helper_trait.ident = ctx.gen_ident(&impl_group.id);
 
