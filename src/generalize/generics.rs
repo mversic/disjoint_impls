@@ -60,15 +60,11 @@ impl Generalize for syn::TraitBound {
             return None;
         }
 
-        let lifetimes =
-            self.lifetimes
-                .generalize(&other.lifetimes, params1, params2, substitutions)?;
         let path = self
             .path
             .generalize(&other.path, params1, params2, substitutions)?;
 
         Some(Self {
-            lifetimes,
             path,
             ..self.clone()
         })

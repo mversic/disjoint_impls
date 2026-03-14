@@ -41,20 +41,28 @@ pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Optio
         .predicates
         .extend(impl_group.trait_bounds.0.iter().map(
             |((bounded, trait_bound), (_, bindings))| -> syn::WherePredicate {
-                let mut trait_ = trait_bound.0.path.clone();
+                let original_trait_bound = &trait_bound.0;
+                let mut trait_bound = trait_bound.0.clone();
 
-                let bindings = bindings.iter().filter_map(|(ident, (payload, _))| {
-                    payload.as_ref().map(|p| quote!(#ident = #p))
-                });
+                let bindings = bindings
+                    .iter()
+                    .filter_map(|(ident, (payload, _))| {
+                        payload.as_ref().map(|p| quote!(#ident = #p))
+                    })
+                    .collect::<Vec<_>>();
 
-                trait_.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
-                match &trait_bound.0.path.segments.last().unwrap().arguments {
+                trait_bound.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
+                match &original_trait_bound.path.segments.last().unwrap().arguments {
                     syn::PathArguments::None => {
-                        parse_quote! { #bounded: #trait_ <#(#bindings),*> }
+                        if bindings.is_empty() {
+                            parse_quote! { #bounded: #trait_bound }
+                        } else {
+                            parse_quote! { #bounded: #trait_bound <#(#bindings),*> }
+                        }
                     }
                     syn::PathArguments::AngleBracketed(bracketed) => {
                         let args = bracketed.args.iter();
-                        parse_quote! { #bounded: #trait_ <#(#args,)* #(#bindings),*> }
+                        parse_quote! { #bounded: #trait_bound <#(#args,)* #(#bindings),*> }
                     }
                     syn::PathArguments::Parenthesized(_) => unreachable!("Not a valid trait name"),
                 }
@@ -62,7 +70,7 @@ pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Optio
         ));
     where_clause
         .predicates
-        .push(parse_quote! { Self: #helper_trait_bound });
+        .push(parse_quote! { Self: for<'_dšč> #helper_trait_bound });
 
     let mut impl_item_resolver =
         ImplItemResolver::new(impl_group, !ctx.is_root(), &helper_trait_ident);
@@ -74,7 +82,6 @@ pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Optio
 
     Some(main_trait_impl)
 }
-
 /// Generates main trait implementation with item values set to dummy values
 fn gen_dummy_impl_from_inherent_impl(impl_group: &ImplGroup) -> syn::ItemImpl {
     let ImplGroup {
@@ -501,10 +508,6 @@ pub mod param {
         }
 
         fn visit_item_trait(&mut self, node: &syn::ItemTrait) {
-            for supertrait in &node.supertraits {
-                self.0.push(parse_quote!(Self: #supertrait));
-            }
-
             self.visit_generics(&node.generics);
         }
     }

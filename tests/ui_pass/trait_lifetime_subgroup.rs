@@ -56,7 +56,7 @@ disjoint_impls::disjoint_impls! {
 pub trait Kita<'d, T> {
     type Wrapped;
 }
-#[allow(clippy::needless_lifetimes)]
+
 const _: () = {
     pub trait Kita0<'d, _TŠČ2: ?Sized, _TŠČ0>: Kita<'d, _TŠČ0> {
         type Wrapped_šč;
@@ -86,7 +86,8 @@ const _: () = {
     where
         '_lšč0,
         _TŠČ0: Dispatch,
-        Self: Kita00<'_lšč0, <_TŠČ0 as Dispatch>::Group, u32>,
+        Self: for<'_dšč> Kita00<'_lšč0, <_TŠČ0 as Dispatch>::Group, u32>,
+
     {
         type Wrapped_šč =
             <Self as Kita00<'_lšč0, <_TŠČ0 as Dispatch>::Group, u32>>::Wrapped_šč;
@@ -95,7 +96,8 @@ const _: () = {
     where
         '_lšč0,
         Option<_TŠČ1>: Dispatch,
-        Self: Kita0<'_lšč0, <Option<_TŠČ1> as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> Kita0<'_lšč0, <Option<_TŠČ1> as Dispatch>::Group, _TŠČ0>,
+
     {
         type Wrapped =
             <Self as Kita0<'_lšč0, <Option<_TŠČ1> as Dispatch>::Group, _TŠČ0>>::Wrapped_šč;

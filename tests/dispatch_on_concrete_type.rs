@@ -67,7 +67,8 @@ const _: () = {
     where
         u32: Dispatch<GroupA, Group = _TŠČ1>,
         _TŠČ0: Dispatch<_TŠČ1>,
-        Self: Kita0<_TŠČ1, <_TŠČ0 as Dispatch<_TŠČ1>>::Group>,
+        Self: for<'_dšč> Kita0<_TŠČ1, <_TŠČ0 as Dispatch<_TŠČ1>>::Group>,
+
     {
         const NAME: &'static str =
             <Self as Kita0<_TŠČ1, <_TŠČ0 as Dispatch<_TŠČ1>>::Group>>::NAME_šč;

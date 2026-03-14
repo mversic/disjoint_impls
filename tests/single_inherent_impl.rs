@@ -37,7 +37,8 @@ const _: () = {
     }
     impl<'_lšč0, _TŠČ0, _TŠČ1> Wrapper<'_lšč0, (_TŠČ0, _TŠČ1), 12>
     where
-        Self: Wrapper0<'_lšč0, _TŠČ0, _TŠČ1>,
+        Self: for<'_dšč> Wrapper0<'_lšč0, _TŠČ0, _TŠČ1>,
+
     {
         fn kita(_a: _TŠČ0, _b: _TŠČ1) -> &'static str
         where

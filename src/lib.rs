@@ -274,8 +274,6 @@ impl From<syn::Type> for Bounded {
 
 impl From<syn::TraitBound> for TraitBound {
     fn from(mut source: syn::TraitBound) -> Self {
-        source.lifetimes = Default::default();
-
         source
             .path
             .segments
@@ -1902,6 +1900,6 @@ fn find_common_types(
 
 fn assoc_binding_default(trait_ident: &TraitBoundIdent, ident: &syn::Ident) -> syn::Type {
     let Bounded(bounded_ty) = &trait_ident.0;
-    let TraitBound(trait_bound) = &trait_ident.1;
-    parse_quote!(<#bounded_ty as #trait_bound>::#ident)
+    let path = &trait_ident.1.0.path;
+    parse_quote!(<#bounded_ty as #path>::#ident)
 }

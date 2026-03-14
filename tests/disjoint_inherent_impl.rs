@@ -118,7 +118,8 @@ const _: () = {
     impl<'_lšč0, _TŠČ0, _TŠČ1, _TŠČ2> Wrapper<'_lšč0, (_TŠČ0, _TŠČ1), 12>
     where
         _TŠČ0: Dispatch<Group = _TŠČ2>,
-        Self: Wrapper0<'_lšč0, _TŠČ2, _TŠČ0, _TŠČ1, _TŠČ2>,
+        Self: for<'_dšč> Wrapper0<'_lšč0, _TŠČ2, _TŠČ0, _TŠČ1, _TŠČ2>,
+
     {
         fn kita(_a: _TŠČ0, _b: _TŠČ1) -> &'static str
         where

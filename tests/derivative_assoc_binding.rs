@@ -46,7 +46,7 @@ trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    trait Kita0<_TŠČ0: ?Sized>: Kita {
         type Group_šč;
         const NAME_šč: &'static str;
     }
@@ -67,7 +67,8 @@ const _: () = {
     impl<_TŠČ0> Kita for LocalType<_TŠČ0>
     where
         _TŠČ0: Kita,
-        Self: Kita0<<_TŠČ0 as Kita>::Group>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Kita>::Group>,
+
     {
         type Group = <Self as Kita0<<_TŠČ0 as Kita>::Group>>::Group_šč;
         const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Kita>::Group>>::NAME_šč;
@@ -119,7 +120,8 @@ const _: () = {
     impl<'_lšč0, _TŠČ0: '_lšč0> Kita2 for Option<&'_lšč0 _TŠČ0>
     where
         Option<_TŠČ0>: Dispatch,
-        Self: Kita20<<Option<_TŠČ0> as Dispatch>::Group>,
+        Self: for<'_dšč> Kita20<<Option<_TŠČ0> as Dispatch>::Group>,
+
     {
         const NAME: &'static str =
             <Self as Kita20<<Option<_TŠČ0> as Dispatch>::Group>>::NAME_šč;

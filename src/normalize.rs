@@ -16,6 +16,8 @@ struct ElidedLifetimeNamer {
     curr_elided_lifetime_idx: usize,
 }
 
+struct PredicateLifetimeRewriter;
+
 struct SelfReplacer<'a> {
     self_ty: &'a syn::Type,
 }
@@ -56,6 +58,24 @@ impl VisitMut for ElidedLifetimeNamer {
         }
 
         syn::visit_mut::visit_type_reference_mut(self, node);
+    }
+}
+
+impl VisitMut for PredicateLifetimeRewriter {
+    fn visit_predicate_type_mut(&mut self, node: &mut syn::PredicateType) {
+        syn::visit_mut::visit_predicate_type_mut(self, node);
+
+        let Some(lifetimes) = node.lifetimes.take() else {
+            return;
+        };
+
+        for bound in &mut node.bounds {
+            if let syn::TypeParamBound::Trait(bound) = bound
+                && bound.lifetimes.is_none()
+            {
+                bound.lifetimes = Some(lifetimes.clone());
+            }
+        }
     }
 }
 
@@ -181,6 +201,8 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
     }
     elided_lifetime_namer.visit_type_mut(&mut item_impl.self_ty);
     elided_lifetime_namer.visit_generics_mut(&mut item_impl.generics);
+
+    PredicateLifetimeRewriter.visit_item_impl_mut(&mut item_impl);
 
     let mut self_replacer = SelfReplacer {
         self_ty: &item_impl.self_ty,

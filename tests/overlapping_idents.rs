@@ -81,7 +81,8 @@ const _: () = {
         _TŠČ0: From<u8>,
         _TŠČ0: From<u8>,
         _TŠČ1: Dispatch,
-        Self: U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
+
     {
         type U = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U_šč;
         const U: &'static str = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U_šč;

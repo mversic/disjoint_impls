@@ -80,7 +80,7 @@ where
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ4: ?Sized, _TŠČ0: A<B = u32>, _TŠČ1 = u32>:
+    trait Kita0<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ4: ?Sized, _TŠČ0: A<B = u32>, _TŠČ1 = u32>:
         Kita<_TŠČ0, _TŠČ1>
     where
         (_TŠČ1, _TŠČ0): A<B = i32>,
@@ -101,7 +101,7 @@ const _: () = {
     {
         const NAME_šč: &'static str = "1st Blanket B";
     }
-    pub trait Kita1<_TŠČ2: ?Sized, _TŠČ0: A<B = u32>, _TŠČ1 = u32>: Kita<_TŠČ0, _TŠČ1>
+    trait Kita1<_TŠČ2: ?Sized, _TŠČ0: A<B = u32>, _TŠČ1 = u32>: Kita<_TŠČ0, _TŠČ1>
     where
         (_TŠČ1, _TŠČ0): A<B = i32>,
     {
@@ -120,7 +120,7 @@ const _: () = {
         (u32, (_TŠČ0, _TŠČ1)): A,
         (_TŠČ0, _TŠČ1): A,
         (_TŠČ0, _TŠČ1): Dispatch,
-        Self: Kita0<
+        Self: for<'_dšč> Kita0<
                 <(u32, (_TŠČ0, _TŠČ1)) as A>::B,
                 <(_TŠČ0, _TŠČ1) as A>::B,
                 <(_TŠČ0, _TŠČ1) as Dispatch>::Group,
@@ -141,7 +141,7 @@ const _: () = {
         (u32, (i32,)): A<B = i32>,
         (i32,): A<B = u32>,
         _TŠČ0: Dispatch,
-        Self: Kita1<<_TŠČ0 as Dispatch>::Group, (i32,), u32>,
+        Self: for<'_dšč> Kita1<<_TŠČ0 as Dispatch>::Group, (i32,), u32>,
     {
         const NAME: &'static str =
             <Self as Kita1<<_TŠČ0 as Dispatch>::Group, (i32,), u32>>::NAME_šč;

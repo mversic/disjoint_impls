@@ -84,7 +84,8 @@ const _: () = {
     where
         Self: Dispatch,
         _TŠČ1: Dispatch,
-        Self: Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
+
     {
         unsafe fn kita() -> &'static str {
             unsafe { <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita_šč() }

@@ -60,9 +60,9 @@ trait Kita {
         b
     }
 }
-#[allow(clippy::needless_lifetimes)]
+
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    trait Kita0<_TŠČ0: ?Sized>: Kita {
         type Target_šč: Kita;
         fn kita_šč(
             a: <<Self as Kita>::Target as Kita>::Target,
@@ -80,7 +80,8 @@ const _: () = {
     impl<_TŠČ0> Kita for _TŠČ0
     where
         _TŠČ0: Dispatch,
-        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
+
     {
         type Target = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Target_šč;
         fn kita(

@@ -106,21 +106,24 @@ const _: () = {
     impl<_TŠČ0, _TŠČ1> Wrapper00<GroupA, _TŠČ0, GroupA> for Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch3<Group = _TŠČ1>,
-        Self: Wrapper000<_TŠČ1, _TŠČ0, _TŠČ1>,
+        Self: for<'_dšč> Wrapper000<_TŠČ1, _TŠČ0, _TŠČ1>,
+
     {
         const NAME_šč: &'static str = <Self as Wrapper000<_TŠČ1, _TŠČ0, _TŠČ1>>::NAME_šč;
     }
     impl<_TŠČ0, _TŠČ1> Wrapper0<GroupA, _TŠČ0, GroupA> for Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch2<Group = _TŠČ1>,
-        Self: Wrapper00<_TŠČ1, _TŠČ0, _TŠČ1>,
+        Self: for<'_dšč> Wrapper00<_TŠČ1, _TŠČ0, _TŠČ1>,
+
     {
         const NAME_šč: &'static str = <Self as Wrapper00<_TŠČ1, _TŠČ0, _TŠČ1>>::NAME_šč;
     }
     impl<_TŠČ0, _TŠČ1> Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch1<Group = _TŠČ1>,
-        Self: Wrapper0<_TŠČ1, _TŠČ0, _TŠČ1>,
+        Self: for<'_dšč> Wrapper0<_TŠČ1, _TŠČ0, _TŠČ1>,
+
     {
         const NAME: &'static str = <Self as Wrapper0<_TŠČ1, _TŠČ0, _TŠČ1>>::NAME_šč;
     }

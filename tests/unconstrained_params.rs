@@ -79,7 +79,7 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
-#[allow(clippy::needless_lifetimes)]
+
 const _: () = {
     pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized, _TŠČ2: ?Sized>: Kita {
         const NAME_šč: &'static str;
@@ -124,7 +124,11 @@ const _: () = {
         _TŠČ0: Dispatch,
         _TŠČ0: Tr<A = [_TŠČ2; _CŠČ0]>,
         _TŠČ2: Dispatch,
-        Self: Kita0<<_TŠČ0 as Dispatch>::Group, [_TŠČ2; _CŠČ0], <_TŠČ2 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita0<
+                <_TŠČ0 as Dispatch>::Group,
+                [_TŠČ2; _CŠČ0],
+                <_TŠČ2 as Dispatch>::Group,
+            >,
     {
         const NAME: &'static str = <Self as Kita0<
             <_TŠČ0 as Dispatch>::Group,
@@ -137,7 +141,11 @@ const _: () = {
         _TŠČ0: Dispatch,
         _TŠČ0: Tr<A = [_TŠČ2; _CŠČ0]>,
         _TŠČ2: Dispatch,
-        Self: Kita1<<_TŠČ0 as Dispatch>::Group, [_TŠČ2; _CŠČ0], <_TŠČ2 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita1<
+                <_TŠČ0 as Dispatch>::Group,
+                [_TŠČ2; _CŠČ0],
+                <_TŠČ2 as Dispatch>::Group,
+            >,
     {
         const NAME: &'static str = <Self as Kita1<
             <_TŠČ0 as Dispatch>::Group,

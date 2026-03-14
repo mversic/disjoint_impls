@@ -100,7 +100,8 @@ const _: () = {
     impl<_TŠČ0> Kita00<GroupA, u32> for _TŠČ0
     where
         _TŠČ0: Dispatch3,
-        Self: Kita000<<_TŠČ0 as Dispatch3>::Group, u32>,
+        Self: for<'_dšč> Kita000<<_TŠČ0 as Dispatch3>::Group, u32>,
+
     {
         const NAME_šč: &'static str =
             <Self as Kita000<<_TŠČ0 as Dispatch3>::Group, u32>>::NAME_šč;
@@ -108,7 +109,8 @@ const _: () = {
     impl<_TŠČ0> Kita0<GroupA, u32> for _TŠČ0
     where
         _TŠČ0: Dispatch2,
-        Self: Kita00<<_TŠČ0 as Dispatch2>::Group, u32>,
+        Self: for<'_dšč> Kita00<<_TŠČ0 as Dispatch2>::Group, u32>,
+
     {
         const NAME_šč: &'static str =
             <Self as Kita00<<_TŠČ0 as Dispatch2>::Group, u32>>::NAME_šč;
@@ -116,7 +118,8 @@ const _: () = {
     impl<_TŠČ0> Kita<u32> for _TŠČ0
     where
         _TŠČ0: Dispatch1,
-        Self: Kita0<<_TŠČ0 as Dispatch1>::Group, u32>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch1>::Group, u32>,
+
     {
         const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch1>::Group, u32>>::NAME_šč;
     }

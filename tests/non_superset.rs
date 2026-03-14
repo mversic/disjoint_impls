@@ -49,7 +49,7 @@ trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    trait Kita0<_TŠČ0: ?Sized>: Kita {
         fn get_name_šč() -> &'static str;
     }
     impl<'_lšč0, T> Kita0<GroupA> for &'_lšč0 (T, Vec<T>)
@@ -71,7 +71,8 @@ const _: () = {
     impl<'_lšč0, _TŠČ0: '_lšč0, _TŠČ1: '_lšč0> Kita for &'_lšč0 (_TŠČ0, Vec<_TŠČ1>)
     where
         _TŠČ0: Dispatch,
-        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
+
     {
         fn get_name() -> &'static str {
             <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::get_name_šč()

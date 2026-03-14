@@ -63,7 +63,8 @@ const _: () = {
     impl<_TŠČ0, _TŠČ1> ForeignKita<_TŠČ0> for LocalType<_TŠČ1>
     where
         _TŠČ1: Dispatch,
-        Self: ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
+
     {
         fn kita() -> &'static str {
             <Self as ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita_šč()

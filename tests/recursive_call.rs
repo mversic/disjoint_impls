@@ -137,7 +137,8 @@ const _: () = {
     impl<_TŠČ0> Kita for _TŠČ0
     where
         _TŠČ0: Dispatch,
-        Self: Kita0<<_TŠČ0 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
+
     {
         type Item = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item_šč;
         fn kita(&mut self) -> Self::Item {

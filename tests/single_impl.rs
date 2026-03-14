@@ -53,7 +53,7 @@ const _: () = {
         _TŠČ0: Default,
         _TŠČ0: Default,
         _TŠČ1: std::ops::Deref,
-        Self: Kita0<<_TŠČ1 as std::ops::Deref>::Target, _TŠČ0>,
+        Self: for<'_dšč> Kita0<<_TŠČ1 as std::ops::Deref>::Target, _TŠČ0>,
     {
         type GenericAssociatedType<GAT> = <Self as Kita0<
             <_TŠČ1 as std::ops::Deref>::Target,

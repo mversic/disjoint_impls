@@ -75,7 +75,8 @@ const _: () = {
         _TŠČ0:,
         _TŠČ1:,
         _TŠČ2: Dispatch,
-        Self: Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>,
+        Self: for<'_dšč> Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>,
+
     {
         fn kita(&self) -> String {
             <Self as Kita0<<_TŠČ2 as Dispatch>::Group, _TŠČ0, _TŠČ1>>::kita_šč(self)

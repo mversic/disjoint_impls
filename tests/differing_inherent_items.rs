@@ -62,7 +62,8 @@ const _: () = {
     impl<_TŠČ0> Wrapper<_TŠČ0>
     where
         Option<_TŠČ0>: Dispatch,
-        Self: Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>,
+
     {
         fn kita() -> &'static str {
             <Self as Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>>::kita_šč()

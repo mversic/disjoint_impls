@@ -45,9 +45,7 @@ trait Kita<T, U> {
 }
 
 const _: () = {
-    pub trait Kita0<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ4: ?Sized, _TŠČ0, _TŠČ1>:
-        Kita<_TŠČ0, _TŠČ1>
-    {
+    trait Kita0<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ4: ?Sized, _TŠČ0, _TŠČ1>: Kita<_TŠČ0, _TŠČ1> {
         const NAME_šč: &'static str;
     }
     impl<B, U> Kita0<bool, u8, u8, U, U> for B
@@ -76,7 +74,7 @@ const _: () = {
         _TŠČ2: Dispatch,
         _TŠČ0: Dispatch,
         _TŠČ1: Dispatch,
-        Self: Kita0<
+        Self: for<'_dšč> Kita0<
                 <_TŠČ2 as Dispatch>::Group,
                 <_TŠČ0 as Dispatch>::Group,
                 <_TŠČ1 as Dispatch>::Group,

@@ -71,7 +71,8 @@ const _: () = {
     impl<_TŠČ0> Kita<_TŠČ0> for dyn Kara + Sync
     where
         _TŠČ0: Dispatch,
-        Self: Kita0<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
+
     {
         const NAME: &'static str =
             <Self as Kita0<<_TŠČ0 as Dispatch>::Group, _TŠČ0>>::NAME_šč;

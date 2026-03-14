@@ -79,7 +79,8 @@ const _: () = {
     impl<_TŠČ0, _TŠČ1, _TŠČ2> Kita<(_TŠČ0, _TŠČ1)> for _TŠČ2
     where
         (_TŠČ0, _TŠČ1): Dispatch,
-        Self: Kita0<<(_TŠČ0, _TŠČ1) as Dispatch>::Group, (_TŠČ0, _TŠČ1)>,
+        Self: for<'_dšč> Kita0<<(_TŠČ0, _TŠČ1) as Dispatch>::Group, (_TŠČ0, _TŠČ1)>,
+
     {
         const NAME: &'static str =
             <Self as Kita0<<(_TŠČ0, _TŠČ1) as Dispatch>::Group, (_TŠČ0, _TŠČ1)>>::NAME_šč;

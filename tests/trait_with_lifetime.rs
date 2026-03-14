@@ -72,7 +72,8 @@ const _: () = {
         '_lšč1: '_lšč0,
         u32: '_lšč1,
         _TŠČ0: Dispatch,
-        Self: Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>,
+        Self: for<'_dšč> Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>,
+
     {
         fn get_name(&'_lšč1 self) -> &'_lšč0 str {
             <Self as Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>>::get_name_šč(

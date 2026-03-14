@@ -76,7 +76,7 @@ const _: () = {
     where
         _TŠČ0: Dispatch2,
         _TŠČ0: Dispatch1,
-        Self: Kita0<<_TŠČ0 as Dispatch2>::Group, <_TŠČ0 as Dispatch1>::Group>,
+        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch2>::Group, <_TŠČ0 as Dispatch1>::Group>,
     {
         const NAME: &str = <Self as Kita0<
             <_TŠČ0 as Dispatch2>::Group,

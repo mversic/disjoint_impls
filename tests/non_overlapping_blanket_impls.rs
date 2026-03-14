@@ -47,19 +47,19 @@ trait Kita {
 }
 
 const _: () = {
-    pub trait Kita0: Kita {
+    trait Kita0: Kita {
         const NAME_šč: &'static str;
     }
     impl<T> Kita0 for (T,) {
         const NAME_šč: &'static str = "Blanket 1";
     }
-    pub trait Kita1: Kita {
+    trait Kita1: Kita {
         const NAME_šč: &'static str;
     }
     impl Kita1 for Option<u32> {
         const NAME_šč: &'static str = "Concrete Option<u32>";
     }
-    pub trait Kita2<_TŠČ0: ?Sized>: Kita {
+    trait Kita2<_TŠČ0: ?Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<_0, _1> Kita2<GroupA> for (_0, _1)
@@ -68,7 +68,7 @@ const _: () = {
     {
         const NAME_šč: &'static str = "Blanket A";
     }
-    pub trait Kita3<_TŠČ0: ?Sized>: Kita {
+    trait Kita3<_TŠČ0: ?Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<_0> Kita3<GroupB> for (Vec<_0>, Vec<_0>)
@@ -79,7 +79,7 @@ const _: () = {
     }
     impl<_TŠČ0> Kita for (_TŠČ0,)
     where
-        Self: Kita0,
+        Self: for<'_dšč> Kita0,
     {
         const NAME: &'static str = <Self as Kita0>::NAME_šč;
     }

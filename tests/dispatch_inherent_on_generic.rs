@@ -99,7 +99,8 @@ const _: () = {
     impl<_TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3> Wrapper<_TŠČ0, (_TŠČ1,), _TŠČ2>
     where
         _TŠČ0: Dispatch<Group = _TŠČ3>,
-        Self: Wrapper0<_TŠČ3, _TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3>,
+        Self: for<'_dšč> Wrapper0<_TŠČ3, _TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3>,
+
     {
         fn kita(_a: (_TŠČ1,), _b: _TŠČ2) -> String {
             <Self as Wrapper0<_TŠČ3, _TŠČ0, _TŠČ1, _TŠČ2, _TŠČ3>>::kita_šč(_a, _b)
