@@ -227,7 +227,7 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
                     .into_iter()
                     .map::<syn::GenericParam, _>(move |(attrs, bounds)| {
                         let bounds = bounds.into_iter();
-                        parse_quote!(#(#attrs)* #ty: #(#bounds)+*)
+                        parse_quote!(#(#attrs)* #ty: ?Sized + #(#bounds)+*)
                     })
             }),
     );
@@ -269,8 +269,8 @@ mod tests {
         let expected: syn::ItemImpl = parse_quote! {
             impl<
                 T: Dispatch<Group = _TŠČ0>,
-                _TŠČ0: Dispatch<Group = _TŠČ1>,
-                _TŠČ1: Dispatch<Group = GroupD>
+                _TŠČ0: ?Sized + Dispatch<Group = _TŠČ1>,
+                _TŠČ1: ?Sized + Dispatch<Group = GroupD>
             > Kita for T {}
         };
 
