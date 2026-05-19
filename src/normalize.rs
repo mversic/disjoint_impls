@@ -227,7 +227,7 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
                     .into_iter()
                     .map::<syn::GenericParam, _>(move |(attrs, bounds)| {
                         let bounds = bounds.into_iter();
-                        parse_quote!(#(#attrs)* #ty: ?Sized + #(#bounds)+*)
+                        parse_quote!(#(#attrs)* #ty: ?core::marker::Sized + #(#bounds)+*)
                     })
             }),
     );

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-07-20
+
+### Added
+- support HRTBs
+- propagate shared cfg attrs to helper trait and main trait impl
+
+### Fixed
+- use full path for `Sized` trait
+- add `?Sized` bound to synthetic params of normalized constraints
+- inherit visibility of helper traits
+- don't materialize `Sized` bound on `?Sized` type
+- correctly resolve const params in supertraits
+
 ## [1.3.7] - 2026-02-12
 
 ### Added

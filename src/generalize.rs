@@ -97,7 +97,7 @@ pub fn as_generics(params: &Params) -> impl Iterator<Item = syn::GenericParam> {
         if let GenericParam::Type(sizedness, lifetimes) = param {
             let type_param: syn::TypeParam = if *sizedness == Sizedness::Unsized {
                 let lifetimes = lifetimes.iter();
-                parse_quote! { #ident: ?Sized #(+ #lifetimes)*}
+                parse_quote! { #ident: ?core::marker::Sized #(+ #lifetimes)*}
             } else if !lifetimes.is_empty() {
                 let lifetimes = lifetimes.iter();
                 parse_quote! { #ident: #(#lifetimes) + *}

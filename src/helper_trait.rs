@@ -135,7 +135,7 @@ fn combine_generic_args(
 ) -> impl Iterator<Item = TokenStream2> {
     let mut generic_args: Vec<_> = assoc_param_bounds
         .into_iter()
-        .map(|param| quote!(#param: ?Sized))
+        .map(|param| quote!(#param: ?core::marker::Sized))
         .collect();
 
     let mut lifetimes = vec![];
