@@ -1,5 +1,8 @@
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/mversic/disjoint_impls/blob/master/LICENSE)
-[![Crates.io](https://img.shields.io/crates/v/disjoint_impls.svg)](https://crates.io/crates/disjoint_impls)
+# Disjoint Impls
+
+[<img alt="crates.io" src="https://img.shields.io/crates/v/disjoint_impls.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/disjoint_impls)
+[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-disjoint_impls-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/disjoint_impls)
+[<img alt="CI" src="https://img.shields.io/github/actions/workflow/status/mversic/disjoint_impls/main.yaml?style=for-the-badge&label=CI" height="20">](https://github.com/mversic/disjoint_impls/actions/workflows/main.yaml)
 
 Crate will be maintained (at least) until [this idiom](https://github.com/rust-lang/rust/issues/20400) is allowed by the Rust compiler directly
 
