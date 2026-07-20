@@ -1069,7 +1069,7 @@ fn build_disjoint_impl_group(
             trait_.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
 
             subgroup.impls.iter_mut().for_each(|(impl_, _)| {
-                let impl_trait = &mut impl_.trait_.as_mut().unwrap().1;
+                let impl_trait = &mut impl_.trait_.as_mut().unwrap().0;
                 impl_trait.segments.last_mut().unwrap().ident = subgroup_trait_ident.clone();
             })
         } else {
@@ -1088,7 +1088,7 @@ fn build_disjoint_impl_group(
 
         subgroup_tokens.push(tokens);
         subgroup_main_impls.iter_mut().for_each(|trait_impl| {
-            let trait_path = &mut trait_impl.trait_.as_mut().unwrap().1;
+            let trait_path = &mut trait_impl.trait_.as_mut().unwrap().0;
             let last_seg = trait_path.segments.last_mut().unwrap();
 
             prepend_args(&mut last_seg.arguments, &common_args);
@@ -1158,7 +1158,7 @@ fn prepend_args<'a>(
 
 impl ItemImplDescVisitor {
     fn find(item_impl: &ItemImpl) -> ItemImplDesc {
-        let trait_ = item_impl.trait_.as_ref().map(|(_, trait_, _)| trait_);
+        let trait_ = item_impl.trait_.as_ref().map(|(trait_, _)| trait_);
 
         let items = trait_.is_none().then(|| ImplItemsDesc {
             fns: item_impl
@@ -1187,46 +1187,44 @@ impl ItemImplDescVisitor {
                 .collect(),
         });
 
-        let mut visitor =
-            Self {
-                curr_bounded_ty: None,
-                curr_trait_bound: None,
+        let mut visitor = Self {
+            curr_bounded_ty: None,
+            curr_trait_bound: None,
 
-                impl_desc: ItemImplDesc {
-                    id: ImplGroupId {
-                        trait_: trait_.cloned(),
-                        self_ty: (*item_impl.self_ty).clone(),
-                    },
-                    params: item_impl
-                        .generics
-                        .type_params()
-                        .map(|param| {
-                            let ident = param.ident.clone();
-
-                            let sizedness = if param.bounds.iter().any(|bound| {
-                                matches!(
-                                    bound,
-                                    syn::TypeParamBound::Trait(syn::TraitBound {
-                                        modifier: syn::TraitBoundModifier::Maybe(_),
-                                        ..
-                                    })
-                                )
-                            }) {
-                                Sizedness::Unsized
-                            } else {
-                                Sizedness::Sized
-                            };
-
-                            (ident, GenericParam::Type(sizedness, IndexSet::new()))
-                        })
-                        .chain(item_impl.generics.const_params().map(|param| {
-                            (param.ident.clone(), GenericParam::Const(param.ty.clone()))
-                        }))
-                        .collect(),
-                    trait_bounds: IndexMap::new(),
-                    items,
+            impl_desc: ItemImplDesc {
+                id: ImplGroupId {
+                    trait_: trait_.cloned(),
+                    self_ty: (*item_impl.self_ty).clone(),
                 },
-            };
+                params: item_impl
+                    .generics
+                    .type_params()
+                    .map(|param| {
+                        let ident = param.ident.clone();
+
+                        let sizedness = if param.bounds.iter().any(|bound| {
+                            matches!(
+                                bound,
+                                syn::TypeParamBound::Trait(syn::TraitBound { maybe: Some(_), .. })
+                            )
+                        }) {
+                            Sizedness::Unsized
+                        } else {
+                            Sizedness::Sized
+                        };
+
+                        (ident, GenericParam::Type(sizedness, IndexSet::new()))
+                    })
+                    .chain(
+                        item_impl.generics.const_params().map(|param| {
+                            (param.ident.clone(), GenericParam::Const(param.ty.clone()))
+                        }),
+                    )
+                    .collect(),
+                trait_bounds: IndexMap::new(),
+                items,
+            },
+        };
 
         visitor.visit_generics(&item_impl.generics);
         visitor.resolve_qself_types();
@@ -1283,8 +1281,9 @@ impl VisitMut for QSelfResolver<'_> {
 
             let trait_bound = syn::TraitBound {
                 paren_token: None,
-                modifier: syn::TraitBoundModifier::None,
                 lifetimes: None,
+                modifiers: Default::default(),
+                maybe: None,
                 path: syn::Path {
                     leading_colon: node.path.leading_colon,
                     segments: trait_segments,
@@ -1350,7 +1349,7 @@ impl Visit<'_> for ItemImplDescVisitor {
     }
 
     fn visit_trait_bound(&mut self, node: &syn::TraitBound) {
-        if matches!(node.modifier, syn::TraitBoundModifier::Maybe(_)) {
+        if node.maybe.is_some() {
             return;
         }
 

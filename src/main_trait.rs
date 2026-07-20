@@ -313,7 +313,7 @@ impl VisitMut for ImplItemResolver {
 
     fn visit_impl_item_fn_mut(&mut self, node: &mut syn::ImplItemFn) {
         let self_as_helper_trait = &self.self_as_helper_trait;
-        let unsafety = node.sig.unsafety;
+        let safety = &node.sig.safety;
         let generics = &node.sig.generics;
         let inputs = &mut node.sig.inputs;
         let variadic = &node.sig.variadic;
@@ -352,12 +352,12 @@ impl VisitMut for ImplItemResolver {
             #self_as_helper_trait::#ident ::<#(#ty_generics),*>(#(#inputs,)* #variadic)
         };
 
-        node.block = if unsafety.is_none() {
+        node.block = if matches!(safety, syn::Safety::Default | syn::Safety::Safe(_)) {
             parse_quote!({
                 #block
             })
         } else {
-            parse_quote!({ #unsafety {
+            parse_quote!({ unsafe {
                 #block
             }})
         };
@@ -494,10 +494,7 @@ pub mod param {
                 let bounds = node.bounds.iter().filter(|bound| {
                     !matches!(
                         bound,
-                        syn::TypeParamBound::Trait(syn::TraitBound {
-                            modifier: syn::TraitBoundModifier::Maybe(_),
-                            ..
-                        })
+                        syn::TypeParamBound::Trait(syn::TraitBound { maybe: Some(_), .. })
                     )
                 });
 
@@ -582,10 +579,10 @@ pub mod param {
         main_trait_iter.for_each(|param| match param {
             syn::GenericParam::Lifetime(_) => {}
             syn::GenericParam::Type(param) => {
-                type_params.insert(&param.ident, param.default.as_ref().unwrap());
+                type_params.insert(&param.ident, &param.default.as_ref().unwrap().1);
             }
             syn::GenericParam::Const(param) => {
-                const_params.insert(&param.ident, Expr::Expr(param.default.as_ref().unwrap()));
+                const_params.insert(&param.ident, Expr::Expr(&param.default.as_ref().unwrap().1));
             }
         });
 

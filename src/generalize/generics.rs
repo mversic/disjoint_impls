@@ -56,7 +56,7 @@ impl Generalize for syn::TraitBound {
         params2: &Params,
         substitutions: &mut Generalizations<'a>,
     ) -> Option<Self> {
-        if self.paren_token != other.paren_token || self.modifier != other.modifier {
+        if self.paren_token != other.paren_token || self.maybe != other.maybe {
             return None;
         }
 
@@ -128,9 +128,14 @@ impl Generalize for syn::TypeParam {
             .bounds
             .generalize(&other.bounds, params1, params2, substitutions)?;
 
-        let default = self
-            .default
-            .generalize(&other.default, params1, params2, substitutions)?;
+        let default = match (&self.default, &other.default) {
+            (Some((eq, default1)), Some((_, default2))) => Some((
+                *eq,
+                default1.generalize(default2, params1, params2, substitutions)?,
+            )),
+            (None, None) => None,
+            _ => return None,
+        };
 
         Some(Self {
             attrs,
@@ -156,9 +161,14 @@ impl Generalize for syn::ConstParam {
             .ty
             .generalize(&other.ty, params1, params2, substitutions)?;
 
-        let default = self
-            .default
-            .generalize(&other.default, params1, params2, substitutions)?;
+        let default = match (&self.default, &other.default) {
+            (Some((eq, default1)), Some((_, default2))) => Some((
+                *eq,
+                default1.generalize(default2, params1, params2, substitutions)?,
+            )),
+            (None, None) => None,
+            _ => return None,
+        };
 
         Some(Self {
             attrs,

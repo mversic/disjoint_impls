@@ -10,7 +10,7 @@ impl Generalize for syn::Signature {
     ) -> Option<Self> {
         if self.asyncness != other.asyncness
             || self.constness != other.constness
-            || self.unsafety != other.unsafety
+            || self.safety != other.safety
             || self.ident != other.ident
         {
             return None;
@@ -125,22 +125,28 @@ impl Generalize for syn::Receiver {
         params2: &Params,
         subs: &mut Generalizations<'a>,
     ) -> Option<Self> {
-        if self.mutability != other.mutability || self.colon_token != other.colon_token {
-            return None;
-        }
-
         let attrs = self
             .attrs
             .generalize(&other.attrs, params1, params2, subs)?;
-        let reference = self
-            .reference
-            .generalize(&other.reference, params1, params2, subs)?;
-        let ty = self.ty.generalize(&other.ty, params1, params2, subs)?;
+        let kind = match (&self.kind, &other.kind) {
+            (syn::ReceiverKind::Value, syn::ReceiverKind::Value) => self.kind.clone(),
+            (
+                syn::ReceiverKind::Reference(and_token, lifetime1, mutability1),
+                syn::ReceiverKind::Reference(_, lifetime2, mutability2),
+            ) if mutability1 == mutability2 => {
+                let lifetime = lifetime1.generalize(lifetime2, params1, params2, subs)?;
+                syn::ReceiverKind::Reference(*and_token, lifetime, *mutability1)
+            }
+            (syn::ReceiverKind::Typed(colon_token, ty1), syn::ReceiverKind::Typed(_, ty2)) => {
+                let ty = ty1.generalize(ty2, params1, params2, subs)?;
+                syn::ReceiverKind::Typed(*colon_token, ty)
+            }
+            _ => return None,
+        };
 
         Some(Self {
             attrs,
-            reference,
-            ty,
+            kind,
             ..self.clone()
         })
     }

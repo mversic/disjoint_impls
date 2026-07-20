@@ -119,7 +119,7 @@ pub fn validate_trait_impls<'a, I: IntoIterator<Item = &'a ItemImpl>>(
     let nparams = trait_.generics.params.len();
 
     for item_impl in item_impls.clone() {
-        if let Some((_, trait_path, _)) = &item_impl.trait_ {
+        if let Some((trait_path, _)) = &item_impl.trait_ {
             let last_seg = trait_path.segments.last().unwrap();
 
             match &last_seg.arguments {
@@ -158,7 +158,7 @@ where
     let item_impls = item_impls.into_iter();
 
     for item_impl in item_impls.clone() {
-        if let Some((_, item_impl_trait, _)) = &item_impl.trait_ {
+        if let Some((item_impl_trait, _)) = &item_impl.trait_ {
             abort!(item_impl_trait, "Expected inherent impl but found trait");
         }
     }
