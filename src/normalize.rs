@@ -269,8 +269,8 @@ mod tests {
         let expected: syn::ItemImpl = parse_quote! {
             impl<
                 T: Dispatch<Group = _TŠČ0>,
-                _TŠČ0: ?Sized + Dispatch<Group = _TŠČ1>,
-                _TŠČ1: ?Sized + Dispatch<Group = GroupD>
+                _TŠČ0: ?core::marker::Sized + Dispatch<Group = _TŠČ1>,
+                _TŠČ1: ?core::marker::Sized + Dispatch<Group = GroupD>
             > Kita for T {}
         };
 
