@@ -26,15 +26,14 @@ impl<'a> Validator<'a> {
                     syn::GenericArgument::AssocType(_) | syn::GenericArgument::Constraint(_) => {
                         return true;
                     }
-                    syn::GenericArgument::Type(syn::Type::Path(type_path)) => {
+                    syn::GenericArgument::Type(syn::Type::Path(type_path))
                         if type_path
                             .path
                             .segments
                             .iter()
-                            .any(|seg| args_have_assoc_bindings(&seg.arguments))
-                        {
-                            return true;
-                        }
+                            .any(|seg| args_have_assoc_bindings(&seg.arguments)) =>
+                    {
+                        return true;
                     }
                     _ => {}
                 }

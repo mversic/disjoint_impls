@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
@@ -13,22 +16,26 @@ concurrency:
 jobs:
   static-analysis:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
     - uses: actions/checkout@v7
     - uses: dtolnay/rust-toolchain@stable
       with:
-        components: "rustfmt, clippy"
+        components: rustfmt, clippy
     - uses: Swatinem/rust-cache@v2
 
-    - name: Rust Format + Check + Lint
-      run: |
-        cargo fmt --all --check
-        cargo clippy --workspace --benches --tests --examples --quiet
+    - name: Check formatting
+      run: cargo fmt --all --check
+
+    - name: Check workspace
+      run: cargo check --workspace
+
+    - name: Lint workspace
+      run: cargo clippy --workspace --benches --tests --examples -- --deny warnings
 
   test:
     runs-on: ubuntu-latest
-    needs: static-analysis
 
     steps:
     - uses: actions/checkout@v7
@@ -40,7 +47,6 @@ jobs:
 
   test-cfg-features:
     runs-on: ubuntu-latest
-    needs: static-analysis
 
     steps:
     - uses: actions/checkout@v7
