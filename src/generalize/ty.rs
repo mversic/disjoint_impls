@@ -14,9 +14,9 @@ impl Generalize for syn::Type {
             (Array(x1), Array(x2)) => x1
                 .generalize(x2, params1, params2, substitutions)
                 .map(Array),
-            (BareFn(x1), BareFn(x2)) => x1
+            (FnPtr(x1), FnPtr(x2)) => x1
                 .generalize(x2, params1, params2, substitutions)
-                .map(BareFn),
+                .map(FnPtr),
             (Group(x1), Group(x2)) => x1
                 .generalize(x2, params1, params2, substitutions)
                 .map(Group),
@@ -89,7 +89,7 @@ impl Generalize for syn::TypeArray {
     }
 }
 
-impl Generalize for syn::TypeBareFn {
+impl Generalize for syn::TypeFnPtr {
     fn generalize<'a>(
         &'a self,
         other: &'a Self,
@@ -181,7 +181,10 @@ impl Generalize for syn::TypeMacro {
         let mac = self
             .mac
             .generalize(&other.mac, params1, params2, substitutions)?;
-        Some(Self { mac })
+        Some(Self {
+            mac,
+            ..self.clone()
+        })
     }
 }
 
@@ -212,7 +215,11 @@ impl Generalize for syn::TypePath {
             .path
             .generalize(&other.path, params1, params2, substitutions)?;
 
-        Some(syn::TypePath { path, qself })
+        Some(syn::TypePath {
+            path,
+            qself,
+            ..self.clone()
+        })
     }
 }
 
@@ -224,7 +231,7 @@ impl Generalize for syn::TypePtr {
         params2: &Params,
         substitutions: &mut Generalizations<'a>,
     ) -> Option<Self> {
-        if self.const_token != other.const_token || self.mutability != other.mutability {
+        if self.mutability != other.mutability {
             return None;
         }
 
@@ -393,7 +400,7 @@ impl Generalize for syn::ReturnType {
     }
 }
 
-impl Generalize for syn::BareFnArg {
+impl Generalize for syn::NamedArg {
     fn generalize<'a>(
         &'a self,
         other: &'a Self,

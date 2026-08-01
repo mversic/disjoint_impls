@@ -85,7 +85,7 @@ pub fn generate(
     impl_group.impls.iter_mut().for_each(|(impl_, _)| {
         let assoc_bindings = impl_assoc_bindings.iter_mut().map(|x| x.next().unwrap());
 
-        let trait_ = &mut impl_.trait_.as_mut().unwrap().1;
+        let trait_ = &mut impl_.trait_.as_mut().unwrap().0;
         let path = trait_.segments.last_mut().unwrap();
 
         prepend_args(&mut path.arguments, &assoc_bindings.collect::<Vec<_>>());
@@ -120,7 +120,7 @@ pub fn traitize_inherent_impl(
         *vis = syn::Visibility::Inherited;
     });
 
-    impl_.trait_ = Some((None, trait_, Default::default()));
+    impl_.trait_ = Some((trait_, Default::default()));
 }
 
 fn rename_impl_item_idents(item_impl: &mut syn::ItemImpl) {

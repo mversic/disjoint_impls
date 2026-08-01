@@ -196,7 +196,7 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
     let mut elided_lifetime_namer = ElidedLifetimeNamer {
         curr_elided_lifetime_idx: 0,
     };
-    if let Some((_, trait_, _)) = &mut item_impl.trait_ {
+    if let Some((trait_, _)) = &mut item_impl.trait_ {
         elided_lifetime_namer.visit_path_mut(trait_);
     }
     elided_lifetime_namer.visit_type_mut(&mut item_impl.self_ty);
@@ -207,7 +207,7 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
     let mut self_replacer = SelfReplacer {
         self_ty: &item_impl.self_ty,
     };
-    if let Some((_, trait_, _)) = &mut item_impl.trait_ {
+    if let Some((trait_, _)) = &mut item_impl.trait_ {
         self_replacer.visit_path_mut(trait_);
     }
     self_replacer.visit_generics_mut(&mut item_impl.generics);
@@ -237,7 +237,7 @@ pub fn normalize(mut item_impl: syn::ItemImpl) -> syn::ItemImpl {
         .params
         .extend(
             (0..elided_lifetime_namer.curr_elided_lifetime_idx).map(|idx| {
-                syn::GenericParam::from(syn::LifetimeParam::new(syn::Lifetime::new(
+                syn::GenericParam::Lifetime(syn::LifetimeParam::new(syn::Lifetime::new(
                     &format!("'_lšč{idx}"),
                     Span::call_site(),
                 )))

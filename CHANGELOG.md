@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-08-01
+
+### Changed
+- bump dependencies and replace proc-macro-error2 with manyhow
+
 ## [1.3.8] - 2026-07-20
 
 ### Added

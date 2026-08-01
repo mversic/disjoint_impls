@@ -367,7 +367,7 @@ impl Generalize for syn::ExprClosure {
         substitutions: &mut Generalizations<'a>,
     ) -> Option<Self> {
         if self.constness != other.constness
-            || self.movability != other.movability
+            || self.modifiers != other.modifiers
             || self.asyncness != other.asyncness
             || self.capture != other.capture
         {
@@ -1134,14 +1134,9 @@ impl Generalize for syn::Arm {
         let body = self
             .body
             .generalize(&other.body, params1, params2, substitutions)?;
-        let guard = self
-            .guard
-            .generalize(&other.guard, params1, params2, substitutions)?;
-
         Some(Self {
             attrs,
             pat,
-            guard,
             body,
             ..self.clone()
         })
