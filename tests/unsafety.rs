@@ -57,12 +57,11 @@ pub unsafe trait Kita<U>: Dispatch {
         "Default blanket"
     }
 }
-
 const _: () = {
     /// # Safety
     ///
     /// This trait is unsafe
-    pub unsafe trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0> {
+    pub unsafe trait Kita0<_TŠČ1: ?core::marker::Sized, _TŠČ0>: Kita<_TŠČ0> {
         /// # Safety
         ///
         /// This function is unsafe
@@ -82,13 +81,13 @@ const _: () = {
     }
     unsafe impl<_TŠČ0, _TŠČ1> Kita<_TŠČ0> for _TŠČ1
     where
-        Self: Dispatch,
         _TŠČ1: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
-
     {
         unsafe fn kita() -> &'static str {
-            unsafe { <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita_šč() }
+            unsafe {
+                <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita_šč()
+            }
         }
     }
 };

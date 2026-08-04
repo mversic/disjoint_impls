@@ -54,35 +54,23 @@ disjoint_impls! {
 pub trait Kita {
     type Item<'a> where Self: 'a;
     type Other<'a, K> where Self: 'a;
-
     fn kita<'a>(&'a mut self) -> Self::Item<'a>;
     fn pita<'a, K: 'a>() -> &'static str {
         "Default Blanket"
     }
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
-        type Item_šč<'a>
-        where
-            Self: 'a;
-        type Other_šč<'a, K>
-        where
-            Self: 'a;
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
+        type Item_šč<'a> where Self: 'a;
+        type Other_šč<'a, K> where Self: 'a;
         fn kita_šč<'a>(&'a mut self) -> Self::Item<'a>;
         fn pita_šč<'a, K: 'a>() -> &'static str {
             "Default Blanket"
         }
     }
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
-        type Item_šč<'a>
-            = &'a u32
-        where
-            Self: 'a;
-        type Other_šč<'a, K>
-            = K
-        where
-            Self: 'a;
+        type Item_šč<'a> = &'a u32 where Self: 'a;
+        type Other_šč<'a, K> = K where Self: 'a;
         fn kita_šč<'a>(&'a mut self) -> &'a u32 {
             &1
         }
@@ -91,14 +79,8 @@ const _: () = {
     where
         &'a U: Dispatch<Group = GroupB>,
     {
-        type Item_šč<'u>
-            = &'u U
-        where
-            Self: 'u;
-        type Other_šč<'u, K>
-            = K
-        where
-            Self: 'u;
+        type Item_šč<'u> = &'u U where Self: 'u;
+        type Other_šč<'u, K> = K where Self: 'u;
         fn kita_šč<'u>(&'u mut self) -> Self::Item<'u> {
             self
         }
@@ -107,14 +89,13 @@ const _: () = {
     where
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
-
     {
-        type Item<'a>
-            = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item_šč<'a>
+        type Item<'a> = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item_šč<'a>
         where
             Self: 'a;
-        type Other<'a, K>
-            = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Other_šč<'a, K>
+        type Other<'a, K> = <Self as Kita0<
+            <_TŠČ0 as Dispatch>::Group,
+        >>::Other_šč<'a, K>
         where
             Self: 'a;
         fn kita<'a>(&'a mut self) -> Self::Item<'a> {

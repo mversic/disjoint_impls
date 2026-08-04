@@ -1798,10 +1798,16 @@ fn split_overlapping_impls(
                 continue;
             }
 
-            if subs
-                .is_disjoint(&desc_i.params, &desc_j.params)
-                .is_none_or(|disjoint| !disjoint)
-            {
+            let id_disjointness = subs.is_disjoint(&desc_i.params, &desc_j.params);
+            if id_disjointness.is_none_or(|disjoint| !disjoint) {
+                // A soft self-type overlap such as `R` with `[R]` still needs a
+                // subgroup when intersecting the pair discovers another dispatch bound.
+                let soft_overlap_has_stronger_intersection = ImplGroupBuilder::new(desc_i)
+                    .intersection(desc_j)
+                    .is_some_and(|intersection| {
+                        intersection.trait_bounds.0.len() > builder.trait_bounds.0.len()
+                    });
+
                 let assoc_bindings = builder
                     .trait_bounds
                     .0
@@ -1820,7 +1826,12 @@ fn split_overlapping_impls(
                             return false;
                         }
 
-                        subs.is_disjoint(&desc_i.params, &desc_j.params) == Some(false)
+                        match subs.is_disjoint(&desc_i.params, &desc_j.params) {
+                            Some(disjoint) => !disjoint,
+                            None => {
+                                id_disjointness.is_none() && soft_overlap_has_stronger_intersection
+                            }
+                        }
                     });
 
                 if is_overlapping {

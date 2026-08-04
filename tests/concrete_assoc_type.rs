@@ -46,12 +46,10 @@ disjoint_impls! {
 /*
 pub trait Kita {
     type Item;
-
     fn kita() -> Self::Item;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         type Item_šč;
         fn kita_šč() -> Self::Item;
     }
@@ -71,7 +69,6 @@ const _: () = {
     where
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
-
     {
         type Item = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item_šč;
         fn kita() -> Self::Item {

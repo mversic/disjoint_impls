@@ -30,9 +30,8 @@ where
     type GenericAssociatedType<GAT>;
     fn kita<GAT>(_: Self::GenericAssociatedType<GAT>) -> &'static str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0>
+    pub trait Kita0<_TŠČ1: ?core::marker::Sized, _TŠČ0>: Kita<_TŠČ0>
     where
         _TŠČ0: Default,
     {
@@ -60,7 +59,10 @@ const _: () = {
             _TŠČ0,
         >>::GenericAssociatedType_šč<GAT>;
         fn kita<GAT>(arg0: Self::GenericAssociatedType<GAT>) -> &'static str {
-            <Self as Kita0<<_TŠČ1 as std::ops::Deref>::Target, _TŠČ0>>::kita_šč::<GAT>(arg0)
+            <Self as Kita0<
+                <_TŠČ1 as std::ops::Deref>::Target,
+                _TŠČ0,
+            >>::kita_šč::<GAT>(arg0)
         }
     }
 };

@@ -64,9 +64,8 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized, _TŠČ1: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA, GroupA> for Option<T>

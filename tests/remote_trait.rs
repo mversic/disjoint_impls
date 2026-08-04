@@ -45,9 +45,12 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    pub trait ForeignKita0<_TŠČ1: ?Sized, _TŠČ0>: ForeignKita<_TŠČ0> {
+    pub trait ForeignKita0<
+        _TŠČ1: ?core::marker::Sized,
+        _TŠČ0,
+    >: ForeignKita<_TŠČ0> {
         fn kita_šč() -> &'static str {
-            "Default blanket"
+            unreachable!("read from the original")
         }
     }
     impl<U, T: Dispatch<Group = GroupA>> ForeignKita0<GroupA, U> for LocalType<T> {
@@ -64,7 +67,6 @@ const _: () = {
     where
         _TŠČ1: Dispatch,
         Self: for<'_dšč> ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
-
     {
         fn kita() -> &'static str {
             <Self as ForeignKita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::kita_šč()

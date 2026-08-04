@@ -47,9 +47,8 @@ disjoint_impls! {
 trait Kita {
     fn get_name() -> &'static str;
 }
-
 const _: () = {
-    trait Kita0<_TŠČ0: ?Sized>: Kita {
+    trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         fn get_name_šč() -> &'static str;
     }
     impl<'_lšč0, T> Kita0<GroupA> for &'_lšč0 (T, Vec<T>)
@@ -68,11 +67,11 @@ const _: () = {
             "Blanket B"
         }
     }
-    impl<'_lšč0, _TŠČ0: '_lšč0, _TŠČ1: '_lšč0> Kita for &'_lšč0 (_TŠČ0, Vec<_TŠČ1>)
+    impl<'_lšč0, _TŠČ0: '_lšč0, _TŠČ1: '_lšč0> Kita
+    for &'_lšč0 (_TŠČ0, Vec<_TŠČ1>)
     where
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
-
     {
         fn get_name() -> &'static str {
             <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::get_name_šč()

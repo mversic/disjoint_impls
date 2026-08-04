@@ -46,9 +46,8 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<T> Kita0<GroupA> for T
@@ -63,7 +62,7 @@ const _: () = {
     {
         const NAME_šč: &'static str = "Blanket B";
     }
-    pub trait Kita1<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita1<_TŠČ0: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<T> Kita1<GroupA> for Option<T>
@@ -76,16 +75,19 @@ const _: () = {
     where
         Option<_TŠČ0>: Dispatch,
         Self: for<'_dšč> Kita0<<Option<_TŠČ0> as Dispatch>::Group>,
-
     {
-        const NAME: &'static str = <Self as Kita0<<Option<_TŠČ0> as Dispatch>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita0<
+            <Option<_TŠČ0> as Dispatch>::Group,
+        >>::NAME_šč;
     }
     impl<_TŠČ0> Kita for Option<_TŠČ0>
     where
         Option<_TŠČ0>: Dispatch,
-        Self: Kita1<<Option<_TŠČ0> as Dispatch>::Group>,
+        Self: for<'_dšč> Kita1<<Option<_TŠČ0> as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita1<<Option<_TŠČ0> as Dispatch>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita1<
+            <Option<_TŠČ0> as Dispatch>::Group,
+        >>::NAME_šč;
     }
 };
 */

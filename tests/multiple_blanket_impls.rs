@@ -51,9 +51,8 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<T: Dispatch<Group = GroupA>> Kita0<GroupA> for T {
@@ -62,10 +61,11 @@ const _: () = {
     impl<U: Dispatch<Group = GroupB>> Kita0<GroupB> for U {
         const NAME_šč: &'static str = "Blanket B";
     }
-    pub trait Kita1<_TŠČ0: ?Sized, _TŠČ1: ?Sized>: Kita {
+    pub trait Kita1<_TŠČ0: ?core::marker::Sized, _TŠČ1: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
-    impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> Kita1<GroupA, GroupA> for (T, U) {
+    impl<T: Dispatch<Group = GroupA>, U: Dispatch<Group = GroupA>> Kita1<GroupA, GroupA>
+    for (T, U) {
         const NAME_šč: &'static str = "Blanket AA";
     }
     impl<U, T> Kita1<GroupA, GroupB> for (U, T)
@@ -75,7 +75,8 @@ const _: () = {
     {
         const NAME_šč: &'static str = "Blanket AB";
     }
-    impl<T: Dispatch<Group = GroupB>, U: Dispatch> Kita1<GroupB, <U as Dispatch>::Group> for (T, U) {
+    impl<T: Dispatch<Group = GroupB>, U: Dispatch> Kita1<GroupB, <U as Dispatch>::Group>
+    for (T, U) {
         const NAME_šč: &'static str = "Blanket B*";
     }
     impl<_TŠČ0> Kita for _TŠČ0
@@ -83,16 +84,23 @@ const _: () = {
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
     {
-        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita0<
+            <_TŠČ0 as Dispatch>::Group,
+        >>::NAME_šč;
     }
     impl<_TŠČ0, _TŠČ1> Kita for (_TŠČ0, _TŠČ1)
     where
         _TŠČ0: Dispatch,
         _TŠČ1: Dispatch,
-        Self: for<'_dšč> Kita1<<_TŠČ0 as Dispatch>::Group, <_TŠČ1 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita1<
+            <_TŠČ0 as Dispatch>::Group,
+            <_TŠČ1 as Dispatch>::Group,
+        >,
     {
-        const NAME: &'static str =
-            <Self as Kita1<<_TŠČ0 as Dispatch>::Group, <_TŠČ1 as Dispatch>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita1<
+            <_TŠČ0 as Dispatch>::Group,
+            <_TŠČ1 as Dispatch>::Group,
+        >>::NAME_šč;
     }
 };
 */

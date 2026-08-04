@@ -47,12 +47,23 @@ disjoint_impls! {
 pub trait Kita<'a, 'b, U> {
     fn get_name(&self) -> &str;
 }
-
 const _: () = {
-    pub trait Kita0<'a, 'b, _TŠČ3: ?Sized, _TŠČ0>: Kita<'a, 'b, _TŠČ0> {
+    pub trait Kita0<
+        'a,
+        'b,
+        _TŠČ3: ?core::marker::Sized,
+        _TŠČ0,
+    >: Kita<'a, 'b, _TŠČ0> {
         fn get_name_šč(&self) -> &str;
     }
-    impl<'_lšč0, '_lšč1, '_lšč2, '_lšč3, T, U> Kita0<'_lšč0, '_lšč1, &'_lšč3 GroupA, U> for &'_lšč2 T
+    impl<
+        '_lšč0,
+        '_lšč1,
+        '_lšč2,
+        '_lšč3,
+        T,
+        U,
+    > Kita0<'_lšč0, '_lšč1, &'_lšč3 GroupA, U> for &'_lšč2 T
     where
         &'_lšč2 T: Dispatch<Group = &'_lšč3 GroupA>,
     {
@@ -68,13 +79,24 @@ const _: () = {
             "Blanket B"
         }
     }
-    impl<'_lšč0, '_lšč1, '_lšč2, '_lšč3, _TŠČ0, _TŠČ1: '_lšč2> Kita<'_lšč0, '_lšč1, _TŠČ0>
-        for &'_lšč2 _TŠČ1
-    where
+    impl<
         '_lšč0,
         '_lšč1,
+        '_lšč2,
+        '_lšč3,
+        _TŠČ0,
+        _TŠČ1: '_lšč2,
+    > Kita<'_lšč0, '_lšč1, _TŠČ0> for &'_lšč2 _TŠČ1
+    where
+        '_lšč0:,
+        '_lšč1:,
         &'_lšč2 _TŠČ1: Dispatch,
-        Self: for<'_dšč> Kita0<'_lšč0, '_lšč1, <&'_lšč2 _TŠČ1 as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> Kita0<
+            '_lšč0,
+            '_lšč1,
+            <&'_lšč2 _TŠČ1 as Dispatch>::Group,
+            _TŠČ0,
+        >,
     {
         fn get_name(&self) -> &str {
             <Self as Kita0<

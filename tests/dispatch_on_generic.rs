@@ -63,9 +63,12 @@ pub trait Kita<U, V> {
         "Default Blanket".to_owned()
     }
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ2: ?Sized, _TŠČ0, _TŠČ1>: Kita<_TŠČ0, _TŠČ1> {
+    pub trait Kita0<
+        _TŠČ2: ?core::marker::Sized,
+        _TŠČ0,
+        _TŠČ1,
+    >: Kita<_TŠČ0, _TŠČ1> {
         fn kita_šč(_a: _TŠČ0, _b: _TŠČ1) -> String {
             "Default Blanket".to_owned()
         }
@@ -75,12 +78,18 @@ const _: () = {
             "Generic Blanket A".to_owned()
         }
     }
-    impl<T: Dispatch<Group = [(U, V); 1]>, U: ToString, V> Kita0<[(U, V); 1], (V,), U> for T {
+    impl<T: Dispatch<Group = [(U, V); 1]>, U: ToString, V> Kita0<[(U, V); 1], (V,), U>
+    for T {
         fn kita_šč(_a: (V,), b: U) -> String {
             b.to_string()
         }
     }
-    pub trait Kita1<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ0, _TŠČ1>: Kita<_TŠČ0, _TŠČ1> {
+    pub trait Kita1<
+        _TŠČ2: ?core::marker::Sized,
+        _TŠČ3: ?core::marker::Sized,
+        _TŠČ0,
+        _TŠČ1,
+    >: Kita<_TŠČ0, _TŠČ1> {
         fn kita_šč(_a: _TŠČ0, _b: _TŠČ1) -> String {
             "Default Blanket".to_owned()
         }
@@ -90,17 +99,25 @@ const _: () = {
     where
         _TŠČ2: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ2 as Dispatch>::Group, (_TŠČ0,), _TŠČ1>,
-
     {
         fn kita(_a: (_TŠČ0,), _b: _TŠČ1) -> String {
-            <Self as Kita0<<_TŠČ2 as Dispatch>::Group, (_TŠČ0,), _TŠČ1>>::kita_šč(_a, _b)
+            <Self as Kita0<
+                <_TŠČ2 as Dispatch>::Group,
+                (_TŠČ0,),
+                _TŠČ1,
+            >>::kita_šč(_a, _b)
         }
     }
     impl<_TŠČ0, _TŠČ1> Kita<u32, _TŠČ0> for _TŠČ1
     where
         _TŠČ1: Dispatch,
         _TŠČ0: Tr,
-        Self: Kita1<<_TŠČ1 as Dispatch>::Group, <_TŠČ0 as Tr>::A, u32, _TŠČ0>,
+        Self: for<'_dšč> Kita1<
+            <_TŠČ1 as Dispatch>::Group,
+            <_TŠČ0 as Tr>::A,
+            u32,
+            _TŠČ0,
+        >,
     {
         fn kita(_a: u32, _b: _TŠČ0) -> String {
             <Self as Kita1<

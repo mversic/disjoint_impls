@@ -28,7 +28,7 @@ disjoint_impls! {
 trait Kita: Sized {}
 
 const _: () = {
-    trait Kita0<_TŠČ0: ?Sized>: Kita {}
+    trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {}
     impl Kita0<GroupA> for str
     where
         str: for<'a> Sized + Dispatch<Group = GroupA>,

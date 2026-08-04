@@ -53,9 +53,8 @@ where
     type U: From<U>;
     const U: &'static str;
 }
-
 const _: () = {
-    pub trait U0<_TŠČ1: ?Sized, _TŠČ0>: U<_TŠČ0>
+    pub trait U0<_TŠČ1: ?core::marker::Sized, _TŠČ0>: U<_TŠČ0>
     where
         _TŠČ0: From<u8>,
     {
@@ -82,10 +81,12 @@ const _: () = {
         _TŠČ0: From<u8>,
         _TŠČ1: Dispatch,
         Self: for<'_dšč> U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
-
     {
         type U = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U_šč;
-        const U: &'static str = <Self as U0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::U_šč;
+        const U: &'static str = <Self as U0<
+            <_TŠČ1 as Dispatch>::Group,
+            _TŠČ0,
+        >>::U_šč;
     }
 };
 */

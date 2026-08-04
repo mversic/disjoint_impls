@@ -44,9 +44,8 @@ trait Kita {
     type Group;
     const NAME: &'static str;
 }
-
 const _: () = {
-    trait Kita0<_TŠČ0: ?Sized>: Kita {
+    trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         type Group_šč;
         const NAME_šč: &'static str;
     }
@@ -68,7 +67,6 @@ const _: () = {
     where
         _TŠČ0: Kita,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Kita>::Group>,
-
     {
         type Group = <Self as Kita0<<_TŠČ0 as Kita>::Group>>::Group_šč;
         const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Kita>::Group>>::NAME_šč;
@@ -100,9 +98,8 @@ disjoint_impls! {
 pub trait Kita2 {
     const NAME: &'static str;
 }
-
 const _: () = {
-    pub trait Kita20<_TŠČ0: ?Sized>: Kita2 {
+    pub trait Kita20<_TŠČ0: ?core::marker::Sized>: Kita2 {
         const NAME_šč: &'static str;
     }
     impl<'a, R: Kita2> Kita20<*const R> for Option<&'a R>
@@ -121,10 +118,10 @@ const _: () = {
     where
         Option<_TŠČ0>: Dispatch,
         Self: for<'_dšč> Kita20<<Option<_TŠČ0> as Dispatch>::Group>,
-
     {
-        const NAME: &'static str =
-            <Self as Kita20<<Option<_TŠČ0> as Dispatch>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita20<
+            <Option<_TŠČ0> as Dispatch>::Group,
+        >>::NAME_šč;
     }
 };
 */

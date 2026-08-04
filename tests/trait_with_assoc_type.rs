@@ -78,10 +78,14 @@ where
 {
     const NAME: &'static str;
 }
-
 const _: () = {
-    trait Kita0<_TŠČ2: ?Sized, _TŠČ3: ?Sized, _TŠČ4: ?Sized, _TŠČ0: A<B = u32>, _TŠČ1 = u32>:
-        Kita<_TŠČ0, _TŠČ1>
+    trait Kita0<
+        _TŠČ2: ?core::marker::Sized,
+        _TŠČ3: ?core::marker::Sized,
+        _TŠČ4: ?core::marker::Sized,
+        _TŠČ0: A<B = u32>,
+        _TŠČ1 = u32,
+    >: Kita<_TŠČ0, _TŠČ1>
     where
         (_TŠČ1, _TŠČ0): A<B = i32>,
     {
@@ -101,7 +105,11 @@ const _: () = {
     {
         const NAME_šč: &'static str = "1st Blanket B";
     }
-    trait Kita1<_TŠČ2: ?Sized, _TŠČ0: A<B = u32>, _TŠČ1 = u32>: Kita<_TŠČ0, _TŠČ1>
+    trait Kita1<
+        _TŠČ2: ?core::marker::Sized,
+        _TŠČ0: A<B = u32>,
+        _TŠČ1 = u32,
+    >: Kita<_TŠČ0, _TŠČ1>
     where
         (_TŠČ1, _TŠČ0): A<B = i32>,
     {
@@ -121,12 +129,12 @@ const _: () = {
         (_TŠČ0, _TŠČ1): A,
         (_TŠČ0, _TŠČ1): Dispatch,
         Self: for<'_dšč> Kita0<
-                <(u32, (_TŠČ0, _TŠČ1)) as A>::B,
-                <(_TŠČ0, _TŠČ1) as A>::B,
-                <(_TŠČ0, _TŠČ1) as Dispatch>::Group,
-                (_TŠČ0, _TŠČ1),
-                u32,
-            >,
+            <(u32, (_TŠČ0, _TŠČ1)) as A>::B,
+            <(_TŠČ0, _TŠČ1) as A>::B,
+            <(_TŠČ0, _TŠČ1) as Dispatch>::Group,
+            (_TŠČ0, _TŠČ1),
+            u32,
+        >,
     {
         const NAME: &'static str = <Self as Kita0<
             <(u32, (_TŠČ0, _TŠČ1)) as A>::B,
@@ -143,8 +151,11 @@ const _: () = {
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita1<<_TŠČ0 as Dispatch>::Group, (i32,), u32>,
     {
-        const NAME: &'static str =
-            <Self as Kita1<<_TŠČ0 as Dispatch>::Group, (i32,), u32>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita1<
+            <_TŠČ0 as Dispatch>::Group,
+            (i32,),
+            u32,
+        >>::NAME_šč;
     }
 };
 */

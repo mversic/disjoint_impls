@@ -91,9 +91,8 @@ pub trait Kita {
     type Item;
     fn kita(&mut self) -> Self::Item;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         type Item_šč;
         fn kita_šč(&mut self) -> Self::Item;
     }
@@ -117,7 +116,7 @@ const _: () = {
             <U as Default>::default()
         }
     }
-    pub trait Kita1<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita1<_TŠČ0: ?core::marker::Sized>: Kita {
         type Item_šč;
         fn kita_šč(&mut self) -> Self::Item;
     }
@@ -138,7 +137,6 @@ const _: () = {
     where
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
-
     {
         type Item = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::Item_šč;
         fn kita(&mut self) -> Self::Item {
@@ -148,7 +146,7 @@ const _: () = {
     impl<_TŠČ0> Kita for (_TŠČ0,)
     where
         _TŠČ0: Dispatch,
-        Self: Kita1<<_TŠČ0 as Dispatch>::Group>,
+        Self: for<'_dšč> Kita1<<_TŠČ0 as Dispatch>::Group>,
     {
         type Item = <Self as Kita1<<_TŠČ0 as Dispatch>::Group>>::Item_šč;
         fn kita(&mut self) -> Self::Item {

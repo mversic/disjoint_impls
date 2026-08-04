@@ -62,7 +62,7 @@ trait Kita {
 }
 
 const _: () = {
-    trait Kita0<_TŠČ0: ?Sized>: Kita {
+    trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         type Target_šč: Kita;
         fn kita_šč(
             a: <<Self as Kita>::Target as Kita>::Target,

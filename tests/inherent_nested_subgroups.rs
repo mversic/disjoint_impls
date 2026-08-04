@@ -76,56 +76,67 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    pub trait Wrapper0<_TŠČ2: ?Sized, _TŠČ0, _TŠČ1> {
+    trait Wrapper0<_TŠČ2: ?core::marker::Sized, _TŠČ0, _TŠČ1> {
         const NAME_šč: &'static str;
     }
     impl<T: Dispatch1<Group = GroupB>> Wrapper0<GroupB, T, GroupB> for Wrapper<T> {
         const NAME_šč: &'static str = "Blanket B**";
     }
-    pub trait Wrapper00<_TŠČ2: ?Sized, _TŠČ0, _TŠČ1> {
+    trait Wrapper00<_TŠČ2: ?core::marker::Sized, _TŠČ0, _TŠČ1> {
         const NAME_šč: &'static str;
     }
-    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>> Wrapper00<GroupB, T, GroupB>
-        for Wrapper<T>
-    {
+    impl<
+        T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupB>,
+    > Wrapper00<GroupB, T, GroupB> for Wrapper<T> {
         const NAME_šč: &'static str = "Blanket AB*";
     }
-    pub trait Wrapper000<_TŠČ2: ?Sized, _TŠČ0, _TŠČ1> {
+    trait Wrapper000<_TŠČ2: ?core::marker::Sized, _TŠČ0, _TŠČ1> {
         const NAME_šč: &'static str;
     }
-    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA> + Dispatch3<Group = GroupA>>
-        Wrapper000<GroupA, T, GroupA> for Wrapper<T>
-    {
+    impl<
+        T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>
+            + Dispatch3<Group = GroupA>,
+    > Wrapper000<GroupA, T, GroupA> for Wrapper<T> {
         const NAME_šč: &'static str = "Blanket AAA";
     }
-    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA> + Dispatch3<Group = GroupB>>
-        Wrapper000<GroupB, T, GroupB> for Wrapper<T>
-    {
+    impl<
+        T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>
+            + Dispatch3<Group = GroupB>,
+    > Wrapper000<GroupB, T, GroupB> for Wrapper<T> {
         const NAME_šč: &'static str = "Blanket AAB";
     }
     impl<_TŠČ0, _TŠČ1> Wrapper00<GroupA, _TŠČ0, GroupA> for Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch3<Group = _TŠČ1>,
         Self: for<'_dšč> Wrapper000<_TŠČ1, _TŠČ0, _TŠČ1>,
-
     {
-        const NAME_šč: &'static str = <Self as Wrapper000<_TŠČ1, _TŠČ0, _TŠČ1>>::NAME_šč;
+        const NAME_šč: &'static str = <Self as Wrapper000<
+            _TŠČ1,
+            _TŠČ0,
+            _TŠČ1,
+        >>::NAME_šč;
     }
     impl<_TŠČ0, _TŠČ1> Wrapper0<GroupA, _TŠČ0, GroupA> for Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch2<Group = _TŠČ1>,
         Self: for<'_dšč> Wrapper00<_TŠČ1, _TŠČ0, _TŠČ1>,
-
     {
-        const NAME_šč: &'static str = <Self as Wrapper00<_TŠČ1, _TŠČ0, _TŠČ1>>::NAME_šč;
+        const NAME_šč: &'static str = <Self as Wrapper00<
+            _TŠČ1,
+            _TŠČ0,
+            _TŠČ1,
+        >>::NAME_šč;
     }
     impl<_TŠČ0, _TŠČ1> Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch1<Group = _TŠČ1>,
         Self: for<'_dšč> Wrapper0<_TŠČ1, _TŠČ0, _TŠČ1>,
-
     {
-        const NAME: &'static str = <Self as Wrapper0<_TŠČ1, _TŠČ0, _TŠČ1>>::NAME_šč;
+        const NAME: &'static str = <Self as Wrapper0<
+            _TŠČ1,
+            _TŠČ0,
+            _TŠČ1,
+        >>::NAME_šč;
     }
 };
 */

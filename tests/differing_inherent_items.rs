@@ -37,7 +37,7 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    pub trait Wrapper0<_TŠČ1: ?Sized, _TŠČ0> {
+    trait Wrapper0<_TŠČ1: ?core::marker::Sized, _TŠČ0> {
         fn kita_šč() -> &'static str;
     }
     impl<T> Wrapper0<GroupA, T> for Wrapper<T>
@@ -48,7 +48,7 @@ const _: () = {
             "Blanket A"
         }
     }
-    pub trait Wrapper1<_TŠČ1: ?Sized, _TŠČ0> {
+    trait Wrapper1<_TŠČ1: ?core::marker::Sized, _TŠČ0> {
         fn kita_šč() -> String;
     }
     impl<T> Wrapper1<GroupB, T> for Wrapper<T>
@@ -63,16 +63,18 @@ const _: () = {
     where
         Option<_TŠČ0>: Dispatch,
         Self: for<'_dšč> Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>,
-
     {
         fn kita() -> &'static str {
-            <Self as Wrapper0<<Option<_TŠČ0> as Dispatch>::Group, _TŠČ0>>::kita_šč()
+            <Self as Wrapper0<
+                <Option<_TŠČ0> as Dispatch>::Group,
+                _TŠČ0,
+            >>::kita_šč()
         }
     }
     impl<_TŠČ0> Wrapper<_TŠČ0>
     where
         _TŠČ0: Dispatch,
-        Self: Wrapper1<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
+        Self: for<'_dšč> Wrapper1<<_TŠČ0 as Dispatch>::Group, _TŠČ0>,
     {
         fn kita() -> String {
             <Self as Wrapper1<<_TŠČ0 as Dispatch>::Group, _TŠČ0>>::kita_šč()

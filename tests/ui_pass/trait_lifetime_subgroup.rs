@@ -58,7 +58,7 @@ pub trait Kita<'d, T> {
 }
 
 const _: () = {
-    pub trait Kita0<'d, _TŠČ2: ?Sized, _TŠČ0>: Kita<'d, _TŠČ0> {
+    pub trait Kita0<'d, _TŠČ2: ?core::marker::Sized, _TŠČ0>: Kita<'d, _TŠČ0> {
         type Wrapped_šč;
     }
     impl<'d, R: Kita<'d, T>, T> Kita0<'d, Option<GroupB>, T> for Option<(R, T)>
@@ -67,7 +67,7 @@ const _: () = {
     {
         type Wrapped_šč = Option<R::Wrapped>;
     }
-    pub trait Kita00<'d, _TŠČ2: ?Sized, _TŠČ0>: Kita<'d, _TŠČ0> {
+    pub trait Kita00<'d, _TŠČ2: ?core::marker::Sized, _TŠČ0>: Kita<'d, _TŠČ0> {
         type Wrapped_šč;
     }
     impl<'d, R: Dispatch<Group = GroupA> + 'd> Kita00<'d, GroupA, u32> for Option<R>

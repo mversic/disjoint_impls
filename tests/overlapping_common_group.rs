@@ -68,9 +68,8 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &'static str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<U> Kita0<GroupB> for (U,)
@@ -79,7 +78,7 @@ const _: () = {
     {
         const NAME_šč: &'static str = "Blanket C";
     }
-    pub trait Kita00<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita00<_TŠČ0: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
     }
     impl<T: Dispatch<Group = GroupA>> Kita00<GroupA> for T
@@ -98,17 +97,19 @@ const _: () = {
     where
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita00<<_TŠČ0 as Dispatch>::Group>,
-
     {
-        const NAME_šč: &'static str = <Self as Kita00<<_TŠČ0 as Dispatch>::Group>>::NAME_šč;
+        const NAME_šč: &'static str = <Self as Kita00<
+            <_TŠČ0 as Dispatch>::Group,
+        >>::NAME_šč;
     }
     impl<_TŠČ0> Kita for _TŠČ0
     where
         _TŠČ0: Dispatch2,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch2>::Group>,
-
     {
-        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch2>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita0<
+            <_TŠČ0 as Dispatch2>::Group,
+        >>::NAME_šč;
     }
 };
 */

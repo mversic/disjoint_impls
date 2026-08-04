@@ -49,9 +49,8 @@ where
 {
     const NAME: &'static str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ1: ?Sized, _TŠČ0>: Kita<_TŠČ0>
+    pub trait Kita0<_TŠČ1: ?core::marker::Sized, _TŠČ0>: Kita<_TŠČ0>
     where
         _TŠČ0: From<u8> + From<bool>,
     {
@@ -72,15 +71,15 @@ const _: () = {
     impl<_TŠČ0, _TŠČ1> Kita<_TŠČ0> for _TŠČ1
     where
         _TŠČ0: From<u8> + From<bool>,
-        Self: Dispatch,
         _TŠČ0: From<bool>,
         _TŠČ0: From<u8>,
         _TŠČ1: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>,
-
     {
-        const NAME: &'static str =
-            <Self as Kita0<<_TŠČ1 as Dispatch>::Group, _TŠČ0>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita0<
+            <_TŠČ1 as Dispatch>::Group,
+            _TŠČ0,
+        >>::NAME_šč;
     }
 };
 */

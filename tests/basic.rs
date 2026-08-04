@@ -44,14 +44,12 @@ disjoint_impls! {
 /*
 pub trait Kita {
     const NAME: &'static str;
-
     fn name() -> &'static str {
         "Default blanket"
     }
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized>: Kita {
         const NAME_šč: &'static str;
         fn name_šč() -> &'static str {
             "Default blanket"
@@ -70,9 +68,10 @@ const _: () = {
     where
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch>::Group>,
-
     {
-        const NAME: &'static str = <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::NAME_šč;
+        const NAME: &'static str = <Self as Kita0<
+            <_TŠČ0 as Dispatch>::Group,
+        >>::NAME_šč;
         fn name() -> &'static str {
             <Self as Kita0<<_TŠČ0 as Dispatch>::Group>>::name_šč()
         }

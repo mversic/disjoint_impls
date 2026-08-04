@@ -59,24 +59,28 @@ disjoint_impls! {
 pub trait Kita {
     const NAME: &str;
 }
-
 const _: () = {
-    pub trait Kita0<_TŠČ0: ?Sized, _TŠČ1: ?Sized>: Kita {
+    pub trait Kita0<_TŠČ0: ?core::marker::Sized, _TŠČ1: ?core::marker::Sized>: Kita {
         const NAME_šč: &str;
     }
-    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA, GroupA> for T {
+    impl<T: Dispatch1<Group = GroupA> + Dispatch2<Group = GroupA>> Kita0<GroupA, GroupA>
+    for T {
         const NAME_šč: &str = "Blanket A";
     }
-    impl<T: Dispatch1<Group = GroupB> + Dispatch2<Group = _TŠČ0>, _TŠČ0: ToString>
-        Kita0<_TŠČ0, GroupB> for T
-    {
+    impl<
+        T: Dispatch1<Group = GroupB> + Dispatch2<Group = _TŠČ0>,
+        _TŠČ0: ?core::marker::Sized + ToString,
+    > Kita0<_TŠČ0, GroupB> for T {
         const NAME_šč: &'static str = "Blanket B";
     }
     impl<_TŠČ0> Kita for _TŠČ0
     where
         _TŠČ0: Dispatch2,
         _TŠČ0: Dispatch1,
-        Self: for<'_dšč> Kita0<<_TŠČ0 as Dispatch2>::Group, <_TŠČ0 as Dispatch1>::Group>,
+        Self: for<'_dšč> Kita0<
+            <_TŠČ0 as Dispatch2>::Group,
+            <_TŠČ0 as Dispatch1>::Group,
+        >,
     {
         const NAME: &str = <Self as Kita0<
             <_TŠČ0 as Dispatch2>::Group,

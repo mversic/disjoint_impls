@@ -47,9 +47,13 @@ where
 {
     fn get_name(&'b self) -> &'a str;
 }
-
 const _: () = {
-    pub trait Kita0<'a, 'b: 'a, _TŠČ3: ?Sized, _TŠČ0: 'b>: Kita<'a, 'b, _TŠČ0>
+    pub trait Kita0<
+        'a,
+        'b: 'a,
+        _TŠČ3: ?core::marker::Sized,
+        _TŠČ0: 'b,
+    >: Kita<'a, 'b, _TŠČ0>
     where
         _TŠČ0: 'a,
     {
@@ -73,12 +77,14 @@ const _: () = {
         u32: '_lšč1,
         _TŠČ0: Dispatch,
         Self: for<'_dšč> Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>,
-
     {
         fn get_name(&'_lšč1 self) -> &'_lšč0 str {
-            <Self as Kita0<'_lšč0, '_lšč1, <_TŠČ0 as Dispatch>::Group, u32>>::get_name_šč(
-                self,
-            )
+            <Self as Kita0<
+                '_lšč0,
+                '_lšč1,
+                <_TŠČ0 as Dispatch>::Group,
+                u32,
+            >>::get_name_šč(self)
         }
     }
 };

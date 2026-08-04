@@ -18,7 +18,7 @@ disjoint_impls! {
 
 /*
 const _: () = {
-    pub trait Wrapper0<'_lšč0, _TŠČ0, _TŠČ1> {
+    trait Wrapper0<'_lšč0, _TŠČ0, _TŠČ1> {
         const NAME_šč: &'static str;
         fn kita_šč(_a: _TŠČ0, _b: _TŠČ1) -> &'static str
         where
@@ -38,7 +38,6 @@ const _: () = {
     impl<'_lšč0, _TŠČ0, _TŠČ1> Wrapper<'_lšč0, (_TŠČ0, _TŠČ1), 12>
     where
         Self: for<'_dšč> Wrapper0<'_lšč0, _TŠČ0, _TŠČ1>,
-
     {
         fn kita(_a: _TŠČ0, _b: _TŠČ1) -> &'static str
         where
@@ -47,7 +46,11 @@ const _: () = {
         {
             <Self as Wrapper0<'_lšč0, _TŠČ0, _TŠČ1>>::kita_šč(_a, _b)
         }
-        const NAME: &'static str = <Self as Wrapper0<'_lšč0, _TŠČ0, _TŠČ1>>::NAME_šč;
+        const NAME: &'static str = <Self as Wrapper0<
+            '_lšč0,
+            _TŠČ0,
+            _TŠČ1,
+        >>::NAME_šč;
     }
 };
 */
