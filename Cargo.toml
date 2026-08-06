@@ -19,7 +19,7 @@ syn = {version = "3.0.2", features = ["full", "extra-traits", "visit", "visit-mu
 proc-macro2 = "1.0.107"
 itertools = "0.15.0"
 indexmap = "2.14.0"
-manyhow = "0.12.0"
+manyhow = "0.13.0"
 quote = "1.0.47"
 
 [dev-dependencies]
