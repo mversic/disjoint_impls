@@ -2,6 +2,7 @@
 name = "cfg_test_crate"
 version = "0.1.0"
 edition = "2024"
+publish = false
 
 [dependencies]
 disjoint_impls = { path = "../.." }
