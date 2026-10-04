@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-04
+
+### Fixed
+
+- preserve nested projections in associated type bindings
+
 ## [1.4.1] - 2026-09-21
 
 ## [1.4.0] - 2026-08-04

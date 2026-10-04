@@ -1243,9 +1243,19 @@ impl ItemImplDescVisitor {
             qself_resolver.visit_type_mut(&mut bounded.0);
             qself_resolver.visit_trait_bound_mut(&mut bounds.0);
 
-            bindings
-                .values_mut()
-                .for_each(|binding| qself_resolver.visit_type_mut(binding));
+            bindings.values_mut().for_each(|binding| {
+                // Keep nested projections in concrete binding payloads so their
+                // outer types can distinguish helper impls.
+                let has_type_arguments = matches!(
+                    binding,
+                    syn::Type::Path(syn::TypePath { qself: None, path, .. })
+                        if path.segments.last().is_some_and(|segment|
+                            !matches!(segment.arguments, syn::PathArguments::None))
+                );
+                if !has_type_arguments {
+                    qself_resolver.visit_type_mut(binding);
+                }
+            });
 
             qself_resolver
                 .trait_bounds

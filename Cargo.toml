@@ -3,7 +3,7 @@ members = [".", "tests/cfg_test_crate"]
 
 [package]
 name = "disjoint_impls"
-version = "1.4.1"
+version = "1.4.2"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["Marin Veršić <marin.versic101@gmail.com>"]
@@ -24,4 +24,5 @@ quote = "1.0.47"
 
 [dev-dependencies]
 remote_trait = { path = "tests/remote_trait" }
+
 trybuild = "1.0.121"
