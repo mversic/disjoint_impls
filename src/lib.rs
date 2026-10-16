@@ -43,6 +43,7 @@ use generalize::Generalizations;
 use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools as _;
 use manyhow::{Result, manyhow};
+use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
@@ -1558,7 +1559,41 @@ impl Visit<'_> for ItemImplDescVisitor {
 /// Other, much more complex examples, can be found in tests.
 #[manyhow]
 #[proc_macro]
-pub fn disjoint_impls(input: ImplGroups) -> Result<TokenStream2> {
+pub fn disjoint_impls(input: TokenStream) -> Result<TokenStream2> {
+    let input: TopLevelImpls = syn::parse(input)?;
+    let variants = input.cfg_variants()?;
+    let mut expansions = Vec::new();
+
+    for variant in variants {
+        let mut tokens = TokenStream2::new();
+        if let Some(trait_) = variant.schema_trait {
+            tokens.extend(quote!(#trait_));
+        }
+        for item_impl in variant.impls {
+            tokens.extend(quote!(#item_impl));
+        }
+
+        let grouped: ImplGroups = syn::parse2(tokens)?;
+        let (trait_, generated_impls) = generate_expansion(grouped)?;
+        let trait_ = variant.emit_trait.then_some(trait_).flatten();
+        let cfg_attrs = variant
+            .cfgs
+            .iter()
+            .map(|cfg| quote!(#[cfg(#cfg)]))
+            .collect::<Vec<_>>();
+        expansions.push(quote! {
+            #(#cfg_attrs)*
+            #trait_
+
+            #(#cfg_attrs)*
+            #generated_impls
+        });
+    }
+
+    Ok(quote!(#(#expansions)*))
+}
+
+fn generate_expansion(input: ImplGroups) -> syn::Result<(Option<ItemTrait>, TokenStream2)> {
     let ImplGroups {
         trait_,
         impl_groups,
@@ -1585,15 +1620,379 @@ pub fn disjoint_impls(input: ImplGroups) -> Result<TokenStream2> {
         .map(|trait_impl| quote!(#trait_impl))
         .collect::<Vec<_>>();
 
-    Ok(quote! {
-        #trait_
-
-        #[allow(clippy::needless_lifetimes)]
-        const _: () = {
+    Ok((
+        trait_,
+        quote! {
+            #[allow(clippy::needless_lifetimes)]
+            const _: () = {
             #groups
             #( #trait_impls )*
+            };
+        },
+    ))
+}
+
+struct TopLevelImpls {
+    trait_: Option<ItemTrait>,
+    impls: Vec<ItemImpl>,
+}
+
+struct TopLevelVariant {
+    cfgs: Vec<TokenStream2>,
+    schema_trait: Option<ItemTrait>,
+    emit_trait: bool,
+    impls: Vec<ItemImpl>,
+}
+
+impl TopLevelImpls {
+    fn cfg_variants(self) -> syn::Result<Vec<TopLevelVariant>> {
+        let mut atoms = IndexMap::<String, TokenStream2>::new();
+        if let Some(trait_) = &self.trait_ {
+            collect_attrs_atoms(&trait_.attrs, &mut atoms)?;
+            for item in &trait_.items {
+                if let Some(attrs) = trait_item_attrs(item) {
+                    collect_attrs_atoms(attrs, &mut atoms)?;
+                }
+            }
+        }
+        for item_impl in &self.impls {
+            collect_attrs_atoms(&item_impl.attrs, &mut atoms)?;
+            for item in &item_impl.items {
+                if let Some(attrs) = impl_item_attrs(item) {
+                    collect_attrs_atoms(attrs, &mut atoms)?;
+                }
+            }
+        }
+
+        let variant_count = 1usize.checked_shl(atoms.len() as u32).ok_or_else(|| {
+            syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Too many independent cfg conditions",
+            )
+        })?;
+        let atoms = atoms.into_iter().collect::<Vec<_>>();
+        let mut variants = Vec::with_capacity(variant_count);
+
+        for bits in 0..variant_count {
+            let assignment = atoms
+                .iter()
+                .enumerate()
+                .map(|(idx, (key, _))| (key.clone(), bits & (1 << idx) != 0))
+                .collect::<IndexMap<_, _>>();
+            let cfgs = atoms
+                .iter()
+                .enumerate()
+                .map(|(idx, (_, atom))| {
+                    if bits & (1 << idx) != 0 {
+                        atom.clone()
+                    } else {
+                        quote!(not(#atom))
+                    }
+                })
+                .collect();
+
+            let schema_trait = self
+                .trait_
+                .clone()
+                .map(|trait_| filter_trait_items(trait_, &assignment))
+                .transpose()?;
+            let emit_trait = self
+                .trait_
+                .as_ref()
+                .map(|trait_| attrs_are_active(&trait_.attrs, &assignment))
+                .transpose()?
+                .unwrap_or(false);
+
+            let mut impls = Vec::new();
+            for item_impl in &self.impls {
+                if attrs_are_active(&item_impl.attrs, &assignment)? {
+                    impls.push(filter_impl_items(item_impl.clone(), &assignment)?);
+                }
+            }
+
+            variants.push(TopLevelVariant {
+                cfgs,
+                schema_trait,
+                emit_trait,
+                impls,
+            });
+        }
+
+        Ok(variants)
+    }
+}
+
+#[derive(Clone)]
+enum CfgExpr {
+    Atom(String),
+    All(Vec<Self>),
+    Any(Vec<Self>),
+    Not(Box<Self>),
+}
+
+impl CfgExpr {
+    fn parse(tokens: TokenStream2) -> syn::Result<Self> {
+        let meta: syn::Meta = syn::parse2(tokens)?;
+        Self::from_meta(&meta)
+    }
+
+    fn from_meta(meta: &syn::Meta) -> syn::Result<Self> {
+        let syn::Meta::List(list) = meta else {
+            return Ok(Self::Atom(quote!(#meta).to_string()));
         };
-    })
+
+        let args = list.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)?;
+        match list.path.get_ident().map(ToString::to_string).as_deref() {
+            Some("all") => Ok(Self::All(
+                args.iter()
+                    .map(Self::from_meta)
+                    .collect::<syn::Result<_>>()?,
+            )),
+            Some("any") => Ok(Self::Any(
+                args.iter()
+                    .map(Self::from_meta)
+                    .collect::<syn::Result<_>>()?,
+            )),
+            Some("not") if args.len() == 1 => {
+                Ok(Self::Not(Box::new(Self::from_meta(args.first().unwrap())?)))
+            }
+            _ => Ok(Self::Atom(quote!(#meta).to_string())),
+        }
+    }
+
+    fn collect_atoms(&self, atoms: &mut IndexMap<String, TokenStream2>) {
+        match self {
+            Self::Atom(key) => {
+                let meta: syn::Meta = syn::parse_str(key).expect("cfg atom was parsed earlier");
+                atoms.entry(key.clone()).or_insert_with(|| quote!(#meta));
+            }
+            Self::All(items) | Self::Any(items) => {
+                items.iter().for_each(|item| item.collect_atoms(atoms));
+            }
+            Self::Not(item) => item.collect_atoms(atoms),
+        }
+    }
+
+    fn eval(&self, assignment: &IndexMap<String, bool>) -> bool {
+        match self {
+            Self::Atom(key) => *assignment.get(key).unwrap_or(&false),
+            Self::All(items) => items.iter().all(|item| item.eval(assignment)),
+            Self::Any(items) => items.iter().any(|item| item.eval(assignment)),
+            Self::Not(item) => !item.eval(assignment),
+        }
+    }
+}
+
+fn attr_condition(attr: &syn::Attribute) -> syn::Result<Option<CfgExpr>> {
+    if attr.path().is_ident("cfg") {
+        return Ok(Some(CfgExpr::parse(cfg_predicate(attr)?)?));
+    }
+    if attr.path().is_ident("cfg_attr") {
+        return cfg_attr_condition(attr)?.map(CfgExpr::parse).transpose();
+    }
+    Ok(None)
+}
+
+fn attrs_condition(attrs: &[syn::Attribute]) -> syn::Result<CfgExpr> {
+    let mut conditions = Vec::new();
+    for attr in attrs {
+        if let Some(condition) = attr_condition(attr)? {
+            conditions.push(condition);
+        }
+    }
+    Ok(CfgExpr::All(conditions))
+}
+
+fn collect_attrs_atoms(
+    attrs: &[syn::Attribute],
+    atoms: &mut IndexMap<String, TokenStream2>,
+) -> syn::Result<()> {
+    attrs_condition(attrs)?.collect_atoms(atoms);
+    Ok(())
+}
+
+fn attrs_are_active(
+    attrs: &[syn::Attribute],
+    assignment: &IndexMap<String, bool>,
+) -> syn::Result<bool> {
+    Ok(attrs_condition(attrs)?.eval(assignment))
+}
+
+fn trait_item_attrs(item: &syn::TraitItem) -> Option<&Vec<syn::Attribute>> {
+    match item {
+        syn::TraitItem::Const(item) => Some(&item.attrs),
+        syn::TraitItem::Fn(item) => Some(&item.attrs),
+        syn::TraitItem::Type(item) => Some(&item.attrs),
+        syn::TraitItem::Macro(item) => Some(&item.attrs),
+        _ => None,
+    }
+}
+
+fn trait_item_attrs_mut(item: &mut syn::TraitItem) -> Option<&mut Vec<syn::Attribute>> {
+    match item {
+        syn::TraitItem::Const(item) => Some(&mut item.attrs),
+        syn::TraitItem::Fn(item) => Some(&mut item.attrs),
+        syn::TraitItem::Type(item) => Some(&mut item.attrs),
+        syn::TraitItem::Macro(item) => Some(&mut item.attrs),
+        _ => None,
+    }
+}
+
+fn impl_item_attrs(item: &syn::ImplItem) -> Option<&Vec<syn::Attribute>> {
+    match item {
+        syn::ImplItem::Const(item) => Some(&item.attrs),
+        syn::ImplItem::Fn(item) => Some(&item.attrs),
+        syn::ImplItem::Type(item) => Some(&item.attrs),
+        syn::ImplItem::Macro(item) => Some(&item.attrs),
+        _ => None,
+    }
+}
+
+fn impl_item_attrs_mut(item: &mut syn::ImplItem) -> Option<&mut Vec<syn::Attribute>> {
+    match item {
+        syn::ImplItem::Const(item) => Some(&mut item.attrs),
+        syn::ImplItem::Fn(item) => Some(&mut item.attrs),
+        syn::ImplItem::Type(item) => Some(&mut item.attrs),
+        syn::ImplItem::Macro(item) => Some(&mut item.attrs),
+        _ => None,
+    }
+}
+
+fn filter_trait_items(
+    mut trait_: ItemTrait,
+    assignment: &IndexMap<String, bool>,
+) -> syn::Result<ItemTrait> {
+    let mut items = Vec::new();
+    for mut item in core::mem::take(&mut trait_.items) {
+        if let Some(attrs) = trait_item_attrs_mut(&mut item) {
+            if !attrs_are_active(attrs, assignment)? {
+                continue;
+            }
+            strip_item_cfg_gates(attrs)?;
+        }
+        items.push(item);
+    }
+    trait_.items = items;
+    Ok(trait_)
+}
+
+fn filter_impl_items(
+    mut item_impl: ItemImpl,
+    assignment: &IndexMap<String, bool>,
+) -> syn::Result<ItemImpl> {
+    let mut items = Vec::new();
+    for mut item in core::mem::take(&mut item_impl.items) {
+        if let Some(attrs) = impl_item_attrs_mut(&mut item) {
+            if !attrs_are_active(attrs, assignment)? {
+                continue;
+            }
+            strip_item_cfg_gates(attrs)?;
+        }
+        items.push(item);
+    }
+    item_impl.items = items;
+    Ok(item_impl)
+}
+
+fn strip_item_cfg_gates(attrs: &mut Vec<syn::Attribute>) -> syn::Result<()> {
+    let mut retained = Vec::new();
+    for attr in core::mem::take(attrs) {
+        if attr.path().is_ident("cfg") {
+            continue;
+        }
+        if attr.path().is_ident("cfg_attr") && cfg_attr_condition(&attr)?.is_some() {
+            if let Some(meta) = strip_cfg_gate_meta(&attr.meta)? {
+                retained.push(parse_quote!(#[#meta]));
+            }
+        } else {
+            retained.push(attr);
+        }
+    }
+    *attrs = retained;
+    Ok(())
+}
+
+fn strip_cfg_gate_meta(meta: &syn::Meta) -> syn::Result<Option<syn::Meta>> {
+    let syn::Meta::List(list) = meta else {
+        return Ok(Some(meta.clone()));
+    };
+    if list.path.is_ident("cfg") {
+        return Ok(None);
+    }
+    if !list.path.is_ident("cfg_attr") {
+        return Ok(Some(meta.clone()));
+    }
+    let args = list.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)?;
+    let Some(predicate) = args.first() else {
+        return Ok(Some(meta.clone()));
+    };
+    let mut nested = Vec::new();
+    for item in args.iter().skip(1) {
+        if let Some(item) = strip_cfg_gate_meta(item)? {
+            nested.push(item);
+        }
+    }
+    if nested.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(parse_quote!(cfg_attr(#predicate, #(#nested),*))))
+    }
+}
+
+fn cfg_predicate(attr: &syn::Attribute) -> syn::Result<TokenStream2> {
+    let syn::Meta::List(list) = &attr.meta else {
+        return Err(syn::Error::new_spanned(attr, "expected cfg predicate"));
+    };
+    Ok(list.tokens.clone())
+}
+
+fn cfg_attr_condition(attr: &syn::Attribute) -> syn::Result<Option<TokenStream2>> {
+    cfg_attr_condition_meta(&attr.meta)
+}
+
+fn cfg_attr_condition_meta(meta: &syn::Meta) -> syn::Result<Option<TokenStream2>> {
+    let syn::Meta::List(list) = meta else {
+        return Ok(None);
+    };
+    if !list.path.is_ident("cfg_attr") {
+        return Ok(None);
+    }
+    let args = list.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)?;
+    let args = args.iter().collect::<Vec<_>>();
+    let Some((predicate, nested)) = args.split_first() else {
+        return Ok(None);
+    };
+    let mut nested_conditions = Vec::new();
+    for meta in nested {
+        match meta {
+            syn::Meta::List(list) if list.path.is_ident("cfg") => {
+                nested_conditions.push(list.tokens.clone());
+            }
+            syn::Meta::List(list) if list.path.is_ident("cfg_attr") => {
+                if let Some(condition) = cfg_attr_condition_meta(meta)? {
+                    nested_conditions.push(condition);
+                }
+            }
+            _ => {}
+        }
+    }
+    if nested_conditions.is_empty() {
+        return Ok(None);
+    }
+    let predicate = quote!(#predicate);
+    let nested = quote!(all(#(#nested_conditions),*));
+    Ok(Some(quote!(any(not(#predicate), #nested))))
+}
+
+impl Parse for TopLevelImpls {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let trait_ = input.parse::<ItemTrait>().ok();
+        let mut impls = Vec::new();
+        while !input.is_empty() {
+            impls.push(input.parse::<ItemImpl>()?);
+        }
+        Ok(Self { trait_, impls })
+    }
 }
 
 impl Parse for ImplGroups {

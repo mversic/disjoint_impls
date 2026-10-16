@@ -28,7 +28,7 @@ pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Optio
 
     let mut main_trait_impl = ctx
         .root_trait
-        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, &impl_group.id))
+        .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, impl_group))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(impl_group));
 
     main_trait_impl.attrs.extend(common_impl_attrs(impl_group));
@@ -129,12 +129,12 @@ fn gen_dummy_impl_from_inherent_impl(impl_group: &ImplGroup) -> syn::ItemImpl {
 /// Generates main trait implementation with item values set to dummy values
 fn gen_dummy_impl_from_trait_definition(
     main_trait: &ItemTrait,
-    impl_group_id: &ImplGroupId,
+    impl_group: &ImplGroup,
 ) -> syn::ItemImpl {
     let mut main_trait = main_trait.clone();
 
-    let self_ty = &impl_group_id.self_ty;
-    let trait_ = impl_group_id.trait_.as_ref().unwrap();
+    let self_ty = &impl_group.id.self_ty;
+    let trait_ = impl_group.id.trait_.as_ref().unwrap();
     param::resolve_main_trait_params(&mut main_trait, trait_);
 
     let ItemTrait {
@@ -147,6 +147,7 @@ fn gen_dummy_impl_from_trait_definition(
     let items = items.iter().map(|item| {
         let item: syn::ImplItem = match item {
             syn::TraitItem::Const(item) => {
+                let attrs = generated_item_attrs(impl_group, &item.ident, ImplItemKind::Const);
                 let syn::TraitItemConst {
                     generics,
                     ident,
@@ -157,10 +158,12 @@ fn gen_dummy_impl_from_trait_definition(
                 let (_, ty_generics, where_clause) = generics.split_for_impl();
 
                 parse_quote! {
+                    #(#attrs)*
                     const #ident #ty_generics: #ty = DUMMY #where_clause;
                 }
             }
             syn::TraitItem::Type(item) => {
+                let attrs = generated_item_attrs(impl_group, &item.ident, ImplItemKind::Type);
                 let syn::TraitItemType {
                     generics, ident, ..
                 } = item;
@@ -168,13 +171,16 @@ fn gen_dummy_impl_from_trait_definition(
                 let (_, ty_generics, where_clause) = generics.split_for_impl();
 
                 parse_quote! {
+                    #(#attrs)*
                     type #ident #ty_generics = DUMMY #where_clause;
                 }
             }
             syn::TraitItem::Fn(item) => {
+                let attrs = generated_item_attrs(impl_group, &item.sig.ident, ImplItemKind::Fn);
                 let sig = &item.sig;
 
                 parse_quote! {
+                    #(#attrs)*
                     #sig { /* DUMMY */ }
                 }
             }
@@ -190,6 +196,104 @@ fn gen_dummy_impl_from_trait_definition(
         #unsafety impl #impl_generics #trait_ for #self_ty #where_clause {
             #(#items)*
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ImplItemKind {
+    Const,
+    Type,
+    Fn,
+}
+
+fn generated_item_attrs(
+    impl_group: &ImplGroup,
+    ident: &syn::Ident,
+    kind: ImplItemKind,
+) -> Vec<syn::Attribute> {
+    let impl_item_attrs = impl_group
+        .impls
+        .iter()
+        .map(|(impl_, _)| {
+            impl_.items.iter().find_map(|item| match (kind, item) {
+                (ImplItemKind::Const, syn::ImplItem::Const(item)) if item.ident == *ident => {
+                    Some(item.attrs.as_slice())
+                }
+                (ImplItemKind::Type, syn::ImplItem::Type(item)) if item.ident == *ident => {
+                    Some(item.attrs.as_slice())
+                }
+                (ImplItemKind::Fn, syn::ImplItem::Fn(item)) if item.sig.ident == *ident => {
+                    Some(item.attrs.as_slice())
+                }
+                _ => None,
+            })
+        })
+        .map(|attrs| attrs.unwrap_or_default())
+        .collect::<Vec<_>>();
+
+    intersect_impl_item_attrs(&impl_item_attrs)
+}
+
+fn intersect_impl_item_attrs(attr_lists: &[&[syn::Attribute]]) -> Vec<syn::Attribute> {
+    use quote::ToTokens;
+
+    let Some((first, rest)) = attr_lists.split_first() else {
+        return Vec::new();
+    };
+
+    first
+        .iter()
+        .filter(|attr| {
+            !attr.path().is_ident("cfg")
+                && !attr.path().is_ident("cfg_attr")
+                && rest.iter().all(|other_attrs| {
+                    other_attrs.iter().any(|other| {
+                        other.to_token_stream().to_string() == attr.to_token_stream().to_string()
+                    })
+                })
+        })
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intersects_impl_item_attrs() {
+        let first: syn::ImplItemFn = parse_quote! {
+            #[allow(dead_code)]
+            #[inline]
+            fn item(&self) {}
+        };
+        let second: syn::ImplItemFn = parse_quote! {
+            #[inline]
+            #[must_use]
+            fn item(&self) {}
+        };
+
+        let attrs = intersect_impl_item_attrs(&[&first.attrs, &second.attrs]);
+        assert_eq!(attrs, vec![parse_quote!(#[inline])]);
+    }
+
+    #[test]
+    fn excludes_cfg_attrs_from_impl_intersection() {
+        let first: syn::ImplItemFn = parse_quote! {
+            #[cfg(feature = "one")]
+            #[cfg_attr(feature = "two", inline)]
+            #[inline]
+            fn item(&self) {}
+        };
+        let second: syn::ImplItemFn = parse_quote! {
+            #[cfg(feature = "one")]
+            #[cfg_attr(feature = "two", inline)]
+            #[inline]
+            fn item(&self) {}
+        };
+
+        let attrs = intersect_impl_item_attrs(&[&first.attrs, &second.attrs]);
+        assert_eq!(attrs, vec![parse_quote!(#[inline])]);
     }
 }
 
@@ -333,7 +437,10 @@ impl VisitMut for ImplItemResolver {
         });
 
         let inputs = inputs.iter_mut().enumerate().map(|(i, input)| match input {
-            syn::FnArg::Receiver(_) => parse_quote!(self),
+            syn::FnArg::Receiver(receiver) => {
+                let cfg_attrs = forwarding_cfg_attrs(&receiver.attrs);
+                quote!(#(#cfg_attrs)* self)
+            }
             syn::FnArg::Typed(arg) => {
                 if let syn::Pat::Wild(pat) = &*arg.pat {
                     let named = format_ident!("arg{i}");
@@ -344,7 +451,9 @@ impl VisitMut for ImplItemResolver {
                     };
                 }
 
-                arg.pat.clone()
+                let cfg_attrs = forwarding_cfg_attrs(&arg.attrs);
+                let pat = &arg.pat;
+                quote!(#(#cfg_attrs)* #pat)
             }
         });
 
@@ -361,6 +470,25 @@ impl VisitMut for ImplItemResolver {
                 #block
             }})
         };
+    }
+}
+
+fn forwarding_cfg_attrs(attrs: &[syn::Attribute]) -> Vec<TokenStream2> {
+    let conditions = attrs.iter().filter_map(|attr| {
+        if attr.path().is_ident("cfg") {
+            super::cfg_predicate(attr).ok()
+        } else if attr.path().is_ident("cfg_attr") {
+            super::cfg_attr_condition(attr).ok().flatten()
+        } else {
+            None
+        }
+    });
+    let conditions = conditions.collect::<Vec<_>>();
+
+    if conditions.is_empty() {
+        Vec::new()
+    } else {
+        vec![quote!(#[cfg(all(#(#conditions),*))])]
     }
 }
 
