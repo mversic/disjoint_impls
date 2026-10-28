@@ -214,6 +214,7 @@ struct ImplGroups {
 struct DisjointImplCtx<'a> {
     root_trait: Option<&'a ItemTrait>,
     path: Vec<usize>,
+    cfg_names: Option<&'a IndexMap<Vec<usize>, usize>>,
 }
 
 impl<'a> DisjointImplCtx<'a> {
@@ -221,11 +222,15 @@ impl<'a> DisjointImplCtx<'a> {
         Self {
             root_trait,
             path: vec![idx],
+            cfg_names: None,
         }
     }
 
     fn gen_ident(&self, group_id: &ImplGroupId) -> syn::Ident {
-        let suffix = self.path.iter().map(ToString::to_string).join("");
+        let suffix = self.cfg_names.map_or_else(
+            || self.path.iter().map(ToString::to_string).join(""),
+            |names| format!("_cfg{}", names[&self.path]),
+        );
 
         let base = if let Some(root_trait) = self.root_trait {
             Some(&root_trait.ident)
@@ -1572,6 +1577,13 @@ pub fn disjoint_impls(input: TokenStream) -> Result<TokenStream2> {
 }
 
 fn generate_expansion(input: ImplGroups) -> syn::Result<(Option<ItemTrait>, TokenStream2)> {
+    generate_expansion_named(input, None)
+}
+
+fn generate_expansion_named(
+    input: ImplGroups,
+    cfg_names: Option<&IndexMap<Vec<usize>, usize>>,
+) -> syn::Result<(Option<ItemTrait>, TokenStream2)> {
     let ImplGroups {
         trait_,
         impl_groups,
@@ -1584,6 +1596,7 @@ fn generate_expansion(input: ImplGroups) -> syn::Result<(Option<ItemTrait>, Toke
         .enumerate()
         .map(|(idx, impl_group)| {
             let mut ctx = DisjointImplCtx::new(trait_.as_ref(), idx);
+            ctx.cfg_names = cfg_names;
             let (tokens, trait_impls) = build_disjoint_impl_group(impl_group, &mut ctx);
             trait_impls_tokens.extend(trait_impls);
             tokens

@@ -207,12 +207,17 @@ fn expand_single_condition(input: &TopLevelImpls) -> syn::Result<Option<TokenStr
             }
         }
     }
+    let mut shared_names = IndexMap::new();
     let mut outputs = variants
         .into_iter()
         .map(|variant| {
             let result = variant.and_then(|TopLevelImpls { trait_, impls }| {
-                let grouped = syn::parse2(quote!(#trait_ #(#impls)*))?;
-                generate_expansion(grouped)
+                let mut grouped: ImplGroups = syn::parse2(quote!(#trait_ #(#impls)*))?;
+                let mut names = IndexMap::new();
+                for (index, group) in grouped.impl_groups.iter_mut().enumerate() {
+                    align_dispatch(group, &mut vec![index], None, &mut shared_names, &mut names);
+                }
+                generate_expansion_named(grouped, Some(&names))
             });
             match result {
                 Ok((trait_, body)) => {
@@ -251,6 +256,73 @@ fn expand_single_condition(input: &TopLevelImpls) -> syn::Result<Option<TokenStr
         #[allow(clippy::needless_lifetimes)]
         const _: () = { #body };
     }))
+}
+
+// CFG selection and disjointness analysis have already finished. Normalize
+// only the generated interface: reorder dispatch columns together with their
+// subgroup arguments, and name equivalent interfaces consistently. Leaf rows
+// and the partition into dispatch groups are never changed here.
+fn align_dispatch(
+    group: &mut ImplGroup,
+    path: &mut Vec<usize>,
+    parent: Option<usize>,
+    shared: &mut IndexMap<String, Vec<usize>>,
+    names: &mut IndexMap<Vec<usize>, usize>,
+) {
+    let old_columns = group
+        .trait_bounds
+        .generalized_idents()
+        .map(|(bound, ident)| (bound.clone(), ident.clone()))
+        .collect::<Vec<_>>();
+    if group
+        .subgroups
+        .iter()
+        .all(|(_, args)| args.len() == old_columns.len())
+    {
+        group
+            .trait_bounds
+            .0
+            .sort_by_cached_key(|(bounded, bound), _| quote!(#bounded #bound).to_string());
+        for (_, bindings) in group.trait_bounds.0.values_mut() {
+            bindings.sort_by_cached_key(|ident, _| ident.to_string());
+        }
+        let order = group
+            .trait_bounds
+            .generalized_idents()
+            .map(|(bound, ident)| {
+                old_columns
+                    .iter()
+                    .position(|(old_bound, old_ident)| old_bound == bound && old_ident == ident)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        for (_, args) in &mut group.subgroups {
+            *args = order.iter().map(|&index| args[index].clone()).collect();
+        }
+    }
+    let id = &group.id;
+    let params = &group.params;
+    let columns = group
+        .trait_bounds
+        .generalized_idents()
+        .map(|((bounded, bound), ident)| quote!(#bounded #bound #ident));
+    let key = format!("{parent:?}:{}", quote!(#id #params #(#columns)*));
+    let next = shared.values().map(Vec::len).sum();
+    let candidates = shared.entry(key).or_default();
+    let name = candidates
+        .iter()
+        .find(|candidate| !names.values().any(|used| used == *candidate))
+        .copied()
+        .unwrap_or_else(|| {
+            candidates.push(next);
+            next
+        });
+    names.insert(path.clone(), name);
+    for (index, (subgroup, _)) in group.subgroups.iter_mut().enumerate() {
+        path.push(index);
+        align_dispatch(subgroup, path, Some(name), shared, names);
+        path.pop();
+    }
 }
 
 fn factor_declarations(
@@ -352,6 +424,40 @@ fn expand_with_path(input: &TopLevelImpls, path: TokenStream2) -> syn::Result<To
 mod tests {
     use super::*;
 
+    // Exercise the entry point, not just the single-condition helper: one
+    // predicate must never accidentally fall through to macro duplication.
+    fn single_condition_expansion(input: &TopLevelImpls) -> TokenStream2 {
+        let expansion = expand(input).unwrap().unwrap();
+        assert!(!expansion.to_string().contains("disjoint_impls !"));
+        syn::parse2::<syn::File>(expansion.clone()).unwrap();
+        expansion
+    }
+
+    #[test]
+    fn unchanged_dispatch_is_not_duplicated_by_conditional_groups_or_columns() {
+        for tokens in [
+            quote! {
+                trait Trait {}
+                #[cfg(P)] impl Trait for FeatureOnly {}
+                impl<T: Dispatch<Group = A>> Trait for Wrapper<T> {}
+                impl<T: Dispatch<Group = B>> Trait for Wrapper<T> {}
+            },
+            quote! {
+                trait Trait {}
+                impl<T> Trait for &T where Self: Dispatch<Layout = Stable>, T: Dispatch<Layout = Stable, Size = Thin> {}
+                impl<T> Trait for &T where Self: Dispatch<Layout = Unstable>, T: Dispatch<Layout = Stable, Size = Slice> {}
+                #[cfg(P)]
+                impl<T> Trait for &T where Self: Dispatch<Layout = Unstable>, T: Dispatch<Layout = Unstable, Size = Slice> {}
+                impl<T> Trait for &T where Self: Dispatch<Layout = Unstable>, T: Dispatch<Layout = Unstable, Size = Owned> {}
+            },
+        ] {
+            let input = syn::parse2(tokens).unwrap();
+            let output = single_condition_expansion(&input).to_string();
+            assert!(!output.contains("compile_error"));
+            assert!(!output.contains("cfg (not ("), "{output}");
+        }
+    }
+
     #[test]
     fn single_condition_gates_errors_and_handles_signature_changes() {
         for tokens in [
@@ -373,9 +479,7 @@ mod tests {
             },
         ] {
             let input = syn::parse2(tokens).unwrap();
-            let expansion = expand_single_condition(&input).unwrap().unwrap();
-            assert!(!expansion.to_string().contains("disjoint_impls !"));
-            syn::parse2::<syn::File>(expansion).unwrap();
+            single_condition_expansion(&input);
         }
         let input = syn::parse2(quote! {
             trait Trait {}
@@ -405,11 +509,7 @@ mod tests {
             }
         })
         .unwrap();
-        let expansion = expand_single_condition(&input)
-            .unwrap()
-            .unwrap()
-            .to_string();
-        assert!(!expansion.contains("disjoint_impls !"));
+        let expansion = single_condition_expansion(&input).to_string();
         assert!(!expansion.contains("compile_error"));
         for tokens in [
             quote! { trait Trait { #[cfg(P)] fn f(); } impl Trait for u8 { fn f() {} } },
@@ -417,7 +517,7 @@ mod tests {
             quote! { trait Trait { #[cfg(P)] fn f<T>(); } impl Trait for u8 { #[cfg(P)] fn f<T>() {} } },
         ] {
             let input = syn::parse2(tokens).unwrap();
-            assert!(expand_single_condition(&input).unwrap().is_some());
+            single_condition_expansion(&input);
         }
     }
 
@@ -429,12 +529,11 @@ mod tests {
             #[cfg(opaque => tokens)] impl Trait for FeatureType {}
         })
         .unwrap();
-        let expansion = expand_single_condition(&input).unwrap().unwrap();
+        let expansion = single_condition_expansion(&input);
         let file: syn::File = syn::parse2(expansion.clone()).unwrap();
         assert_eq!(file.items.len(), 2);
         assert!(expansion.to_string().contains("cfg (opaque => tokens)"));
         assert!(!expansion.to_string().contains("not ("));
-        assert!(!expansion.to_string().contains("disjoint_impls !"));
     }
 
     #[test]
@@ -446,7 +545,7 @@ mod tests {
             impl<T: Dispatch<Group = B>> Trait for T {}
         })
         .unwrap();
-        let expansion = expand_single_condition(&input).unwrap().unwrap();
+        let expansion = single_condition_expansion(&input);
         let file: syn::File = syn::parse2(expansion).unwrap();
         let syn::Item::Const(scope) = &file.items[1] else {
             panic!()
