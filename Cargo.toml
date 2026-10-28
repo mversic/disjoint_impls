@@ -3,7 +3,7 @@ members = [".", "tests/cfg_test_crate"]
 
 [package]
 name = "disjoint_impls"
-version = "1.4.3"
+version = "1.4.4"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["Marin Veršić <marin.versic101@gmail.com>"]
@@ -16,8 +16,8 @@ proc-macro = true
 
 [dependencies]
 syn = {version = "3.0.9", features = ["full", "extra-traits", "visit", "visit-mut"]}
-proc-macro2 = "1.0.107"
 proc-macro-crate = "3.5.0"
+proc-macro2 = "1.0.107"
 itertools = "0.15.0"
 indexmap = "2.14.2"
 manyhow = "0.14.1"
