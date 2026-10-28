@@ -17,6 +17,7 @@ proc-macro = true
 [dependencies]
 syn = {version = "3.0.9", features = ["full", "extra-traits", "visit", "visit-mut"]}
 proc-macro2 = "1.0.107"
+proc-macro-crate = "3.5.0"
 itertools = "0.15.0"
 indexmap = "2.14.2"
 manyhow = "0.14.1"

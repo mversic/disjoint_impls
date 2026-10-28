@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use disjoint_impls::disjoint_impls;
 
 trait Dispatch {

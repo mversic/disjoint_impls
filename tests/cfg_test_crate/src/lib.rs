@@ -1,4 +1,4 @@
-use disjoint_impls::disjoint_impls;
+use dispatch_macros::disjoint_impls;
 
 #[cfg(not(feature = "feat_a"))]
 pub struct LocalType<T>(T);
@@ -232,9 +232,89 @@ disjoint_impls! {
     }
 }
 
+disjoint_impls! {
+    pub trait AdditiveCfg { const GROUP: &'static str; }
+    impl<T: Dispatch1<Group = GroupA>> AdditiveCfg for T {
+        const GROUP: &'static str = "A";
+    }
+    #[cfg(feature = "feat_a")]
+    impl<T: Dispatch1<Group = GroupB>> AdditiveCfg for T {
+        const GROUP: &'static str = "B";
+    }
+}
+
+#[cfg(feature = "feat_a")]
+pub struct FeatureOnlyType;
+#[cfg(feature = "feat_a")]
+pub enum FeatureOnlyGroup {}
+#[cfg(feature = "feat_a")]
+impl Dispatch1 for FeatureOnlyType {
+    type Group = FeatureOnlyGroup;
+}
+
+disjoint_impls! {
+    pub trait SingletonGate { const VALUE: u8; }
+    impl SingletonGate for u8 { const VALUE: u8 = 1; }
+    #[cfg(feature = "feat_a")]
+    impl SingletonGate for FeatureOnlyType { const VALUE: u8 = 2; }
+}
+
+disjoint_impls! {
+    pub trait SharedGate { const VALUE: u8; }
+    impl<T: Dispatch1<Group = GroupA>> SharedGate for T { const VALUE: u8 = 3; }
+    #[cfg(feature = "feat_a")]
+    impl<T: Dispatch1<Group = FeatureOnlyGroup>> SharedGate for T { const VALUE: u8 = 4; }
+}
+
+// All members of this group share a gate. Its entire generated scope must be
+// gated, including references to a feature-only dispatch trait.
+#[cfg(feature = "feat_a")]
+pub trait FeatureDispatch {
+    type Group;
+}
+#[cfg(feature = "feat_a")]
+impl FeatureDispatch for FeatureOnlyType {
+    type Group = GroupA;
+}
+disjoint_impls! {
+    pub trait WholeGroupGate { const VALUE: u8; }
+    #[cfg(feature = "feat_a")]
+    impl<T: FeatureDispatch<Group = GroupA>> WholeGroupGate for T { const VALUE: u8 = 5; }
+    #[cfg(feature = "feat_a")]
+    impl<T: FeatureDispatch<Group = GroupB>> WholeGroupGate for T { const VALUE: u8 = 6; }
+}
+
+#[cfg(test)]
+mod body;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optimized_gates_keep_unconditional_impls() {
+        assert_eq!(<u8 as SingletonGate>::VALUE, 1);
+        assert_eq!(<String as SharedGate>::VALUE, 3);
+    }
+
+    #[test]
+    #[cfg(feature = "feat_a")]
+    fn optimized_gates_enable_feature_only_types() {
+        assert_eq!(<FeatureOnlyType as SingletonGate>::VALUE, 2);
+        assert_eq!(<FeatureOnlyType as SharedGate>::VALUE, 4);
+        assert_eq!(<FeatureOnlyType as WholeGroupGate>::VALUE, 5);
+    }
+
+    #[test]
+    fn additive_cfg_keeps_base_impl() {
+        assert_eq!(<String as AdditiveCfg>::GROUP, "A");
+    }
+
+    #[test]
+    #[cfg(feature = "feat_a")]
+    fn additive_cfg_adds_feature_impl() {
+        assert_eq!(<i32 as AdditiveCfg>::GROUP, "B");
+    }
 
     #[test]
     #[cfg(not(feature = "feat_a"))]
@@ -312,3 +392,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod single_condition;

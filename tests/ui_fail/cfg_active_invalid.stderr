@@ -1,0 +1,5 @@
+error: Missing in one of the impls
+ --> tests/ui_fail/cfg_active_invalid.rs:4:19
+  |
+4 |     trait Trait { fn required(); }
+  |                   ^^^^^^^^^^^^^^

@@ -2,8 +2,6 @@
 
 use syn::{parse_quote, visit_mut::VisitMut};
 
-use crate::helper_trait::common_impl_attrs;
-
 use super::*;
 
 struct ImplItemResolver {
@@ -31,7 +29,6 @@ pub fn generate_impl(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> Optio
         .map(|main_trait| gen_dummy_impl_from_trait_definition(main_trait, impl_group))
         .unwrap_or_else(|| gen_dummy_impl_from_inherent_impl(impl_group));
 
-    main_trait_impl.attrs.extend(common_impl_attrs(impl_group));
     main_trait_impl.generics.params = impl_group.params.iter().cloned().collect();
     let where_clause = main_trait_impl.generics.make_where_clause();
 
@@ -437,10 +434,7 @@ impl VisitMut for ImplItemResolver {
         });
 
         let inputs = inputs.iter_mut().enumerate().map(|(i, input)| match input {
-            syn::FnArg::Receiver(receiver) => {
-                let cfg_attrs = forwarding_cfg_attrs(&receiver.attrs);
-                quote!(#(#cfg_attrs)* self)
-            }
+            syn::FnArg::Receiver(_) => quote!(self),
             syn::FnArg::Typed(arg) => {
                 if let syn::Pat::Wild(pat) = &*arg.pat {
                     let named = format_ident!("arg{i}");
@@ -451,9 +445,8 @@ impl VisitMut for ImplItemResolver {
                     };
                 }
 
-                let cfg_attrs = forwarding_cfg_attrs(&arg.attrs);
                 let pat = &arg.pat;
-                quote!(#(#cfg_attrs)* #pat)
+                quote!(#pat)
             }
         });
 
@@ -470,25 +463,6 @@ impl VisitMut for ImplItemResolver {
                 #block
             }})
         };
-    }
-}
-
-fn forwarding_cfg_attrs(attrs: &[syn::Attribute]) -> Vec<TokenStream2> {
-    let conditions = attrs.iter().filter_map(|attr| {
-        if attr.path().is_ident("cfg") {
-            super::cfg_predicate(attr).ok()
-        } else if attr.path().is_ident("cfg_attr") {
-            super::cfg_attr_condition(attr).ok().flatten()
-        } else {
-            None
-        }
-    });
-    let conditions = conditions.collect::<Vec<_>>();
-
-    if conditions.is_empty() {
-        Vec::new()
-    } else {
-        vec![quote!(#[cfg(all(#(#conditions),*))])]
     }
 }
 

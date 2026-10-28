@@ -47,7 +47,6 @@ pub fn generate(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> syn::ItemT
         .filter(|attr| !is_remote(attr))
         .collect();
 
-    helper_trait.attrs.extend(common_impl_attrs(impl_group));
     helper_trait.ident = ctx.gen_ident(&impl_group.id);
 
     let start_idx = helper_trait.generics.params.len();
@@ -59,28 +58,6 @@ pub fn generate(ctx: &DisjointImplCtx<'_>, impl_group: &ImplGroup) -> syn::ItemT
     .collect();
 
     helper_trait
-}
-
-pub(crate) fn common_impl_attrs(impl_group: &ImplGroup) -> Vec<syn::Attribute> {
-    let Some((first_impl, _)) = impl_group.impls.first() else {
-        return Vec::new();
-    };
-
-    first_impl
-        .attrs
-        .iter()
-        .filter(|attr| {
-            let path = attr.path();
-            path.is_ident("cfg") || path.is_ident("cfg_attr")
-        })
-        .filter(|attr| {
-            impl_group
-                .impls
-                .iter()
-                .all(|(item_impl, _)| item_impl.attrs.iter().any(|a| a == *attr))
-        })
-        .cloned()
-        .collect()
 }
 
 fn rename_trait_generic_params(trait_: &mut syn::ItemTrait) {
